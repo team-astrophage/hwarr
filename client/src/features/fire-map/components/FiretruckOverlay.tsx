@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from 'react'
-import { Marker, useMap } from 'react-leaflet'
+import { Marker } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { GRID_SIZE } from '../../../lib/config'

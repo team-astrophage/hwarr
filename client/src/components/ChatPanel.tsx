@@ -86,9 +86,15 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
     <div className="absolute bottom-0 left-0 right-0 z-[1100] flex flex-col max-h-[55vh]">
       {/* 바텀시트 */}
       <div className="bg-[var(--color-bg-surface)] rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden flex-1">
-        {/* 드래그 핸들 */}
-        <div className="flex justify-center pt-2.5 pb-1.5">
+        {/* 드래그 핸들 + 닫기 */}
+        <div className="flex justify-center pt-2.5 pb-1.5 relative">
           <div className="w-9 h-1 bg-[#444] rounded-[2px]" />
+          <button
+            onClick={onClose}
+            className="absolute right-3 top-1.5 w-7 h-7 flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text-base)]"
+          >
+            ✕
+          </button>
         </div>
 
         {/* 헤더 */}
