@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 import { useStats } from '../api/useStats'
+import { NewsFeed } from './NewsFeed'
 
 export function LandingPage() {
   const { data: stats } = useStats()
@@ -11,9 +12,9 @@ export function LandingPage() {
       <Header />
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col justify-center px-5 gap-3">
+      <main className="flex-1 flex flex-col justify-center gap-3">
         {/* Hero text */}
-        <div className="mb-6">
+        <div className="mb-6 px-5">
           <h2
             className="text-[1.5rem] font-bold text-[var(--color-text-base)] leading-tight"
             style={{ textWrap: 'balance' }}
@@ -28,7 +29,7 @@ export function LandingPage() {
         </div>
 
         {/* Stat widgets — rounded card style like reference */}
-        <div className="bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-medium)] p-5">
+        <div className="bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-medium)] p-5 mx-5">
           <div className="flex items-center gap-4">
             {/* 실시간 방화범 */}
             <div className="flex-1">
@@ -66,6 +67,9 @@ export function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* AI 뉴스 피드 */}
+        <NewsFeed />
       </main>
 
       {/* Footer — CTA */}
