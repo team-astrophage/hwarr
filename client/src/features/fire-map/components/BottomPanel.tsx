@@ -1,20 +1,67 @@
+import { useRef, useCallback } from 'react'
 import { useFireStore } from '../stores/fireStore'
+
+/** long press 판정 기준 (ms) */
+const LONG_PRESS_MS = 500
 
 interface BottomPanelProps {
   gridId: string | null
   onFire: () => void
+  onLongPressFire: () => void
+  onLongPressEnd: () => void
   disabled: boolean
 }
 
 export function BottomPanel({
   gridId,
   onFire,
+  onLongPressFire,
+  onLongPressEnd,
   disabled,
 }: BottomPanelProps) {
   const fires = useFireStore((s) => s.fires)
   const onlineUsers = useFireStore((s) => s.onlineUsers)
 
   const activeGrids = fires.size
+
+  // tap vs long press 분기
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLongRef = useRef(false)
+
+  const handlePointerDown = useCallback(() => {
+    if (disabled) return
+    isLongRef.current = false
+    timerRef.current = setTimeout(() => {
+      isLongRef.current = true
+      onLongPressFire()
+    }, LONG_PRESS_MS)
+  }, [disabled, onLongPressFire])
+
+  const handlePointerUp = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (isLongRef.current) {
+      // long press 종료
+      onLongPressEnd()
+      isLongRef.current = false
+    } else {
+      // tap → 성냥 던지기
+      onFire()
+    }
+  }, [onFire, onLongPressEnd])
+
+  const handlePointerLeave = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (isLongRef.current) {
+      onLongPressEnd()
+      isLongRef.current = false
+    }
+  }, [onLongPressEnd])
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-[1000] p-4 pb-8">
@@ -63,11 +110,14 @@ export function BottomPanel({
           </div>
         </div>
 
-        {/* Fire button — no cooldown */}
+        {/* Fire button — tap: 성냥, long press: 화염방사기 */}
         <button
           disabled={disabled}
-          onClick={onFire}
-          className="w-full h-12 bg-[var(--color-accent)] disabled:opacity-30 disabled:cursor-not-allowed rounded-[14px] flex items-center justify-center gap-2 text-[#000000] font-bold text-[0.875rem] uppercase tracking-[2px] transition-[transform] duration-150 active:scale-[0.96]"
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerLeave}
+          onContextMenu={(e) => e.preventDefault()}
+          className="w-full h-12 bg-[var(--color-accent)] disabled:opacity-30 disabled:cursor-not-allowed rounded-[14px] flex items-center justify-center gap-2 text-[#000000] font-bold text-[0.875rem] uppercase tracking-[2px] transition-[transform] duration-150 active:scale-[0.96] select-none touch-none"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#000000">
             <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />

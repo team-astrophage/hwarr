@@ -1,10 +1,11 @@
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import L from 'leaflet'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useFireSocket } from '../hooks/useFireSocket'
 import { useFire } from '../hooks/useFire'
 import { getGridId } from '../utils/grid'
+import { useAnimationStore } from '../stores/animationStore'
 import { MapControls } from './MapControls'
 import { BottomPanel } from './BottomPanel'
 import { FireOverlay } from './FireOverlay'
@@ -57,11 +58,38 @@ export function MapPage() {
   useFireSocket()
   const { fire } = useFire()
 
-  const handleFire = () => {
-    if (lat && lng) {
+  const throwMatch = useAnimationStore((s) => s.throwMatch)
+  const startFlamethrower = useAnimationStore((s) => s.startFlamethrower)
+  const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower)
+  const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // tap → 성냥 던지기 + 불 이벤트
+  const handleFire = useCallback(() => {
+    if (lat && lng && gridId) {
+      throwMatch(gridId)
       fire(lat, lng)
     }
-  }
+  }, [lat, lng, gridId, throwMatch, fire])
+
+  // long press 시작 → 화염방사기 + 연속 불 이벤트
+  const handleLongPressFire = useCallback(() => {
+    if (!lat || !lng || !gridId) return
+    startFlamethrower(gridId)
+    fire(lat, lng)
+    // 200ms 간격으로 연속 발사
+    flamethrowerIntervalRef.current = setInterval(() => {
+      fire(lat, lng)
+    }, 200)
+  }, [lat, lng, gridId, startFlamethrower, fire])
+
+  // long press 종료
+  const handleLongPressEnd = useCallback(() => {
+    stopFlamethrower()
+    if (flamethrowerIntervalRef.current) {
+      clearInterval(flamethrowerIntervalRef.current)
+      flamethrowerIntervalRef.current = null
+    }
+  }, [stopFlamethrower])
 
   return (
     <div className="relative h-svh w-full">
@@ -102,6 +130,8 @@ export function MapPage() {
       <BottomPanel
         gridId={gridId}
         onFire={handleFire}
+        onLongPressFire={handleLongPressFire}
+        onLongPressEnd={handleLongPressEnd}
         disabled={!lat || !lng}
       />
     </div>
