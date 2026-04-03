@@ -1,7 +1,10 @@
 import { Link } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
+import { useStats } from '../api/useStats'
 
 export function LandingPage() {
+  const { data: stats } = useStats()
+
   return (
     <div className="flex flex-col min-h-svh bg-[var(--color-bg-base)]">
       {/* Shared header */}
@@ -36,7 +39,7 @@ export function LandingPage() {
                 className="text-[2rem] font-bold text-[var(--color-accent)] leading-none"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                --
+                {stats?.onlineUsers?.toLocaleString() ?? '--'}
                 <span className="text-[0.875rem] font-normal text-[var(--color-text-secondary)] ml-1">
                   명
                 </span>
@@ -55,7 +58,7 @@ export function LandingPage() {
                 className="text-[2rem] font-bold text-[var(--color-accent)] leading-none"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                --
+                {stats?.totalFires?.toLocaleString() ?? '--'}
                 <span className="text-[0.875rem] font-normal text-[var(--color-text-secondary)] ml-1">
                   건
                 </span>
