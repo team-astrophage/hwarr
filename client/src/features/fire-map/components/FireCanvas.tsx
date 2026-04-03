@@ -18,6 +18,7 @@ import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
 import { GRID_SIZE } from '../../../lib/config'
+import { fetchBuildings, type BuildingPolygon } from '../utils/buildings'
 
 // 화염 파티클
 interface Flame {
@@ -118,6 +119,9 @@ interface StreamParticle {
 
 const STREAM_COLORS = ['#ff4500', '#ff6b35', '#ffaa00', '#ffdd00', '#ffffff']
 
+/** 건물 LOD 줌 임계값 */
+const BUILDING_ZOOM_THRESHOLD = 16
+
 function spawnFlame(cfg: (typeof STAGE)[1]): Flame {
   if (!cfg) return {} as Flame
   return {
@@ -171,6 +175,8 @@ export function FireCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
   const streamRef = useRef<StreamParticle[]>([])
+  const buildingsRef = useRef<BuildingPolygon[]>([])
+  const buildingFetchKeyRef = useRef('')
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
@@ -235,8 +241,22 @@ export function FireCanvas() {
 
       const zoom = map.getZoom()
       const showAnim = zoom >= ANIM_ZOOM_THRESHOLD
+      const showBuildings = zoom >= BUILDING_ZOOM_THRESHOLD
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
+
+      // 건물 LOD: 줌 >= 16일 때 건물 데이터 fetch
+      if (showBuildings && time % 60 === 0) {
+        const bounds = map.getBounds()
+        const key = `${bounds.getSouth().toFixed(3)},${bounds.getWest().toFixed(3)},${bounds.getNorth().toFixed(3)},${bounds.getEast().toFixed(3)}`
+        if (key !== buildingFetchKeyRef.current) {
+          buildingFetchKeyRef.current = key
+          fetchBuildings(
+            bounds.getSouth(), bounds.getWest(),
+            bounds.getNorth(), bounds.getEast(),
+          ).then((b) => { buildingsRef.current = b })
+        }
+      }
 
       // 불 없는 격자의 파티클 제거
       for (const gid of allFlames.keys()) {
@@ -293,10 +313,46 @@ export function FireCanvas() {
             flames.push(f)
           }
 
-          // 격자 영역으로 clip — 불꽃이 절대 밖으로 안 나감
+          // clip 영역 결정: 건물 LOD 또는 격자
           ctx.save()
           ctx.beginPath()
-          ctx.rect(left, top, w, h)
+
+          let usedBuildingClip = false
+          if (showBuildings && buildingsRef.current.length > 0) {
+            // 이 격자에 겹치는 건물 폴리곤 찾기
+            const gLat0 = Number(latStr) * GRID_SIZE
+            const gLng0 = Number(lngStr) * GRID_SIZE
+            const gLat1 = gLat0 + GRID_SIZE
+            const gLng1 = gLng0 + GRID_SIZE
+
+            for (const bldg of buildingsRef.current) {
+              // 건물 바운딩 박스가 격자와 겹치는지 체크
+              let overlaps = false
+              for (const [bLat, bLng] of bldg.coords) {
+                if (bLat >= gLat0 && bLat <= gLat1 && bLng >= gLng0 && bLng <= gLng1) {
+                  overlaps = true
+                  break
+                }
+              }
+              if (!overlaps) continue
+
+              usedBuildingClip = true
+              // 건물 폴리곤을 clip 경로에 추가
+              for (let ci = 0; ci < bldg.coords.length; ci++) {
+                const pt = map.latLngToContainerPoint(
+                  L.latLng(bldg.coords[ci][0], bldg.coords[ci][1]),
+                )
+                if (ci === 0) ctx.moveTo(pt.x, pt.y)
+                else ctx.lineTo(pt.x, pt.y)
+              }
+              ctx.closePath()
+            }
+          }
+
+          // 건물 clip이 없으면 기존 격자 clip 사용 (fallback)
+          if (!usedBuildingClip) {
+            ctx.rect(left, top, w, h)
+          }
           ctx.clip()
 
           // 하단 글로우 (바닥에서 불이 타는 느낌)
