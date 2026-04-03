@@ -81,3 +81,15 @@ body {
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(2.5); opacity: 0; }
 }
+
+/* 소방차 흔들림 */
+@keyframes truck-wobble {
+  0% { transform: rotate(-3deg); }
+  100% { transform: rotate(3deg); }
+}
+
+/* 소방차 경광등 점멸 */
+@keyframes siren {
+  0% { color: #ff0000; background: #ff0000; }
+  100% { color: #0066ff; background: #0066ff; }
+}

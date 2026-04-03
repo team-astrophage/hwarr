@@ -9,6 +9,7 @@ import { useAnimationStore } from '../stores/animationStore'
 import { MapControls } from './MapControls'
 import { BottomPanel } from './BottomPanel'
 import { FireOverlay } from './FireOverlay'
+import { FiretruckOverlay } from './FiretruckOverlay'
 import { Header } from '../../../components/Header'
 import 'leaflet/dist/leaflet.css'
 
@@ -108,6 +109,7 @@ export function MapPage() {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FireOverlay />
+        <FiretruckOverlay />
         {lat && lng && (
           <>
             <FlyToUser lat={lat} lng={lng} />

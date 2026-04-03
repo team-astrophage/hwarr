@@ -9,6 +9,7 @@
  */
 
 import { create } from 'zustand'
+import { useAnimationStore } from './animationStore'
 
 export interface FireCell {
   gridId: string
@@ -34,6 +35,10 @@ export const useFireStore = create<FireState>((set) => ({
       const next = new Map(state.fires)
       if (cell.activeCount > 0) {
         next.set(cell.gridId, cell)
+        // 5단계(전소) 최초 도달 시 폭발 트리거
+        if (cell.stage >= 5) {
+          useAnimationStore.getState().triggerExplosion(cell.gridId)
+        }
       } else {
         next.delete(cell.gridId)
       }

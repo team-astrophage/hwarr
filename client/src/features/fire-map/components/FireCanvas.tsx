@@ -191,6 +191,13 @@ export function FireCanvas() {
   const targetGridRef = useRef(targetGridId)
   targetGridRef.current = targetGridId
 
+  const explosions = useAnimationStore((s) => s.explosions)
+  const explosionsRef = useRef(explosions)
+  explosionsRef.current = explosions
+  const removeExplosion = useAnimationStore((s) => s.removeExplosion)
+  const removeExplosionRef = useRef(removeExplosion)
+  removeExplosionRef.current = removeExplosion
+
   useEffect(() => {
     const container = map.getContainer()
     const canvas = document.createElement('canvas')
@@ -474,6 +481,67 @@ export function FireCanvas() {
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size * lifeRatio, 0, Math.PI * 2)
         ctx.fill()
+      }
+
+      // ── 전소 폭발 이펙트 (5단계) ──
+      const EXPLOSION_DURATION = 2000
+
+      for (const exp of explosionsRef.current) {
+        const elapsed = now - exp.startTime
+        const progress = Math.min(elapsed / EXPLOSION_DURATION, 1)
+
+        // 폭발 중심 좌표
+        const [eLat, eLng] = exp.gridId.split(':')
+        const eCenterLat = Number(eLat) * GRID_SIZE + GRID_SIZE / 2
+        const eCenterLng = Number(eLng) * GRID_SIZE + GRID_SIZE / 2
+        const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
+
+        ctx.globalCompositeOperation = 'lighter'
+
+        // 방사형 파티클 (원형으로 퍼져나감)
+        const particleCount = 24
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (i / particleCount) * Math.PI * 2
+          const maxRadius = 120 * progress
+          const radius = maxRadius * (0.5 + Math.random() * 0.5)
+          const px = ePt.x + Math.cos(angle) * radius
+          const py = ePt.y + Math.sin(angle) * radius
+          const pSize = (1 - progress) * (4 + Math.random() * 6)
+
+          const colorChoices = ['#ff0000', '#ff4500', '#ffaa00', '#ffdd00', '#ffffff']
+          ctx.fillStyle = colorChoices[i % colorChoices.length]
+          ctx.globalAlpha = (1 - progress) * 0.8
+          ctx.beginPath()
+          ctx.arc(px, py, pSize, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // 중앙 플래시 글로우
+        if (progress < 0.5) {
+          const flashAlpha = (1 - progress * 2) * 0.4
+          const flashRadius = 80 + progress * 200
+          const flashGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, flashRadius)
+          flashGrad.addColorStop(0, `rgba(255, 255, 200, ${flashAlpha})`)
+          flashGrad.addColorStop(0.4, `rgba(255, 100, 0, ${flashAlpha * 0.5})`)
+          flashGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = flashGrad
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, flashRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // 화면 전체 플래시 (처음 0.3초)
+        if (progress < 0.15) {
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.globalAlpha = (1 - progress / 0.15) * 0.25
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, sw, sh)
+        }
+
+        if (progress >= 1) {
+          removeExplosionRef.current(exp.id)
+        }
       }
 
       ctx.restore()
