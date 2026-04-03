@@ -1,5 +1,5 @@
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
-import { useEffect, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useFireSocket } from '../hooks/useFireSocket'
@@ -10,6 +10,7 @@ import { MapControls } from './MapControls'
 import { BottomPanel } from './BottomPanel'
 import { FireOverlay } from './FireOverlay'
 import { FiretruckOverlay } from './FiretruckOverlay'
+import { ChatPanel } from '../../../components/ChatPanel'
 import { Header } from '../../../components/Header'
 import 'leaflet/dist/leaflet.css'
 
@@ -63,6 +64,7 @@ export function MapPage() {
   const startFlamethrower = useAnimationStore((s) => s.startFlamethrower)
   const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower)
   const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
 
   // tap → 성냥 던지기 + 불 이벤트
   const handleFire = useCallback(() => {
@@ -128,6 +130,20 @@ export function MapPage() {
           </div>
         </div>
       )}
+
+      {/* 채팅 토글 버튼 */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="absolute bottom-[180px] right-4 z-[1000] w-12 h-12 bg-[var(--color-bg-surface)] rounded-full shadow-[var(--shadow-heavy)] flex items-center justify-center transition-transform active:scale-90"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </button>
+      )}
+
+      <ChatPanel visible={chatOpen} onClose={() => setChatOpen(false)} />
 
       <BottomPanel
         gridId={gridId}
