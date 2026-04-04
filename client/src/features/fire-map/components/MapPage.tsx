@@ -131,7 +131,7 @@ export function MapPage() {
       {parts && (
         <div className='absolute top-14 left-4 z-[1000]'>
           {parts.city && (
-            <p className='text-[48px] font-extrabold text-white leading-tight'>
+            <p className='text-4xl font-extrabold text-white leading-tight'>
               {parts.city}
             </p>
           )}
