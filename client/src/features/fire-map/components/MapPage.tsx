@@ -6,6 +6,7 @@ import { useFireSocket } from '../hooks/useFireSocket'
 import { useFire } from '../hooks/useFire'
 import { getGridId } from '../utils/grid'
 import { useAnimationStore } from '../stores/animationStore'
+import { useReverseGeocode } from '../hooks/useReverseGeocode'
 import { MapControls } from './MapControls'
 import { BottomPanel } from './BottomPanel'
 import { FireOverlay } from './FireOverlay'
@@ -65,6 +66,7 @@ export function MapPage() {
   const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower)
   const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const { address } = useReverseGeocode(lat, lng)
 
   // tap → 성냥 던지기 + 불 이벤트
   const handleFire = useCallback(() => {
@@ -122,6 +124,18 @@ export function MapPage() {
       </MapContainer>
 
       <Header />
+
+      {/* 현재 위치 도로명 주소 */}
+      {address && (
+        <div className="absolute top-14 left-4 z-[1000]">
+          <div className="bg-[var(--color-bg-surface)]/80 backdrop-blur-sm rounded-[10px] px-3 py-1.5 shadow-[var(--shadow-medium)]">
+            <p className="text-[0.6875rem] text-[var(--color-text-secondary)]">
+              <span className="text-[var(--color-accent)] mr-1">&#x2022;</span>
+              {address}
+            </p>
+          </div>
+        </div>
+      )}
 
       {!loading && error && (
         <div className="absolute top-16 left-4 right-4 z-[1000]">
