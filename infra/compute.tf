@@ -1,4 +1,63 @@
 ############################
+# IAM — GitHub Actions CI/CD Role
+############################
+
+data "aws_iam_role" "github_actions" {
+  name = "astrophage-github-actions"
+}
+
+resource "aws_iam_role_policy" "github_actions_ecr" {
+  name = "${local.name_prefix}-gha-ecr"
+  role = data.aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ECRAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ECRPush"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+        ]
+        Resource = aws_ecr_repository.backend.arn
+      },
+      {
+        Sid    = "ECSDeploy"
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:UpdateService",
+          "ecs:DescribeServices",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "PassRole"
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.ecs_execution.arn,
+          aws_iam_role.ecs_task.arn,
+        ]
+      },
+    ]
+  })
+}
+
+############################
 # ECR Repository
 ############################
 
