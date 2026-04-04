@@ -567,19 +567,19 @@ export function FireCanvas() {
         ctx.rotate(rotation)
 
         ctx.fillStyle = '#8B6914'
-        ctx.fillRect(-2, -10, 4, 16)
+        ctx.fillRect(-4, -18, 8, 30)
         ctx.fillStyle = '#ff4444'
         ctx.beginPath()
-        ctx.arc(0, -10, 4, 0, Math.PI * 2)
+        ctx.arc(0, -18, 7, 0, Math.PI * 2)
         ctx.fill()
 
         if (t < 0.8) {
           ctx.fillStyle = '#ffaa00'
           ctx.globalAlpha = 0.8 - t
           ctx.beginPath()
-          ctx.moveTo(0, -16)
-          ctx.bezierCurveTo(-3, -20, -2, -24, 0, -22)
-          ctx.bezierCurveTo(2, -24, 3, -20, 0, -16)
+          ctx.moveTo(0, -28)
+          ctx.bezierCurveTo(-5, -34, -4, -40, 0, -37)
+          ctx.bezierCurveTo(4, -40, 5, -34, 0, -28)
           ctx.fill()
         }
 
