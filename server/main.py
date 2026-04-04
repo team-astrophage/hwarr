@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.demo import router as demo_router
 from routes.fire import router as fire_router
 from routes.map_config import router as map_config_router
+from routes.news import router as news_router
 from routes.qr import router as qr_router
 from routes.reset import router as reset_router
 from routes.stats import router as stats_router
@@ -82,6 +83,7 @@ app.add_middleware(
 # REST API routers
 # ---------------------------------------------------------------------------
 app.include_router(fire_router)
+app.include_router(news_router)
 app.include_router(qr_router)
 app.include_router(map_config_router)
 app.include_router(demo_router)
