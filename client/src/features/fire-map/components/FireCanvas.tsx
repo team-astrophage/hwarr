@@ -68,24 +68,24 @@ interface StageCfg {
 
 const STAGES: (StageCfg | null)[] = [
   null, // 0: 없음
-  { // 1: 불씨 — 작은 잔불, 은은한 빛
-    particleCount: 10,
-    maxHeight: 0.35,
-    baseSpeed: 0.005,
-    spreadX: 0.1,
-    turbulence: 0.001,
-    baseSize: 0.14,
+  { // 1: 불씨 — 잔불 (가시성 위해 파티클·글로우 강화)
+    particleCount: 26,
+    maxHeight: 0.48,
+    baseSpeed: 0.0065,
+    spreadX: 0.16,
+    turbulence: 0.0022,
+    baseSize: 0.2,
     colorStops: [
-      [255, 180, 60, 0.7],   // 바닥: 노란빛
-      [200, 80, 10, 0.4],    // 중간: 주황
-      [120, 30, 0, 0.1],     // 상단: 어두운 빨강
-      [60, 10, 0, 0],        // 꼭대기: 투명
+      [255, 210, 90, 0.92],   // 바닥: 밝은 노랑 코어
+      [255, 100, 35, 0.65],   // 중간: 주황
+      [220, 45, 12, 0.35],    // 상단: 붉은 기운
+      [100, 20, 0, 0],
     ],
-    coreAlpha: 0.2,
-    glowRadius: 0.3,
-    dotColor: '#ff6b35',
-    dotSize: 6,
-    dotPulse: 0.02,
+    coreAlpha: 0.34,
+    glowRadius: 0.44,
+    dotColor: '#ff7a45',
+    dotSize: 9,
+    dotPulse: 0.028,
     smokeCount: 0,
     smokeMaxHeight: 0,
     smokeAlpha: 0,

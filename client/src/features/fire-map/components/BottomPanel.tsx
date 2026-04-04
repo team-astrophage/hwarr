@@ -117,9 +117,9 @@ export function BottomPanel({
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
           onContextMenu={(e) => e.preventDefault()}
-          className="w-full h-12 bg-[var(--color-accent)] disabled:opacity-30 disabled:cursor-not-allowed rounded-[14px] flex items-center justify-center gap-2 text-[#000000] font-bold text-[0.875rem] uppercase tracking-[2px] transition-[transform] duration-150 active:scale-[0.96] select-none touch-none"
+          className="flex h-12 w-full select-none touch-none items-center justify-center gap-2 rounded-[14px] bg-gradient-to-b from-[#ff5c3d] via-[#ff3b1f] to-[#c41e12] font-bold uppercase tracking-[2px] text-[0.875rem] text-white shadow-[0_4px_22px_rgba(255,55,30,0.45)] ring-1 ring-inset ring-white/20 transition-[transform,filter] duration-150 active:scale-[0.96] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="#000000">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-[#fff5e6] drop-shadow-[0_0_6px_rgba(255,200,120,0.9)]">
             <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />
           </svg>
           {gridId ? '불 지르기' : '위치 감지 중...'}
