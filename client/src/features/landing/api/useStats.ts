@@ -11,6 +11,8 @@ import { API_URL } from '@/lib/config'
 interface StatsData {
   activeGrids: number
   totalFires: number
+  cumulativeFires: number
+  dailyFires: number
   onlineUsers: number
 }
 

@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 import { useStats } from '../api/useStats'
 import { NewsFeed } from './NewsFeed'
+import { StatCard } from './StatCard'
 
 export function LandingPage() {
   const { data: stats } = useStats()
@@ -36,39 +37,31 @@ export function LandingPage() {
           <h2 className="text-[1rem] font-bold leading-none tracking-tight text-[var(--color-text-base)]">
             상황판
           </h2>
-          <div className="flex gap-2.5">
-            <div className="min-w-0 flex-1 rounded-[12px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-medium)]">
-              <p className="mb-3 text-[0.8125rem] font-medium leading-snug text-[var(--color-text-base)]">
-                실시간 화재 구역
-              </p>
-              <p
-                className="flex flex-wrap items-baseline gap-x-1 leading-none"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                <span className="text-[1.875rem] font-bold text-[var(--color-accent)]">
-                  {stats?.activeGrids?.toLocaleString() ?? '--'}
-                </span>
-                <span className="text-[0.8125rem] font-medium text-[var(--color-text-base)]">
-                  곳
-                </span>
-              </p>
-            </div>
-            <div className="min-w-0 flex-1 rounded-[12px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-medium)]">
-              <p className="mb-3 text-[0.8125rem] font-medium leading-snug text-[var(--color-text-base)]">
-                지금까지 방화 건수
-              </p>
-              <p
-                className="flex flex-wrap items-baseline gap-x-1 leading-none"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                <span className="text-[1.875rem] font-bold text-[var(--color-warning)]">
-                  {stats?.totalFires?.toLocaleString() ?? '--'}
-                </span>
-                <span className="text-[0.8125rem] font-medium text-[var(--color-text-base)]">
-                  건
-                </span>
-              </p>
-            </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <StatCard
+              label="실시간 화재 구역"
+              value={stats?.activeGrids}
+              unit="곳"
+              tone="accent"
+            />
+            <StatCard
+              label="실시간 불타는 건수"
+              value={stats?.totalFires}
+              unit="건"
+              tone="warning"
+            />
+            <StatCard
+              label="오늘 방화 건수"
+              value={stats?.dailyFires}
+              unit="건"
+              tone="negative"
+            />
+            <StatCard
+              label="누적 총 방화 건수"
+              value={stats?.cumulativeFires}
+              unit="건"
+              tone="base"
+            />
           </div>
         </section>
 

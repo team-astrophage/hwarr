@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
-from config import STATS_TOTAL_FIRES_KEY
+from config import KST, STATS_DAILY_FIRES_PREFIX, STATS_TOTAL_FIRES_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +59,15 @@ async def get_stats() -> dict:
     cumulative_raw = await redis.get(STATS_TOTAL_FIRES_KEY)
     cumulative_fires = int(cumulative_raw) if cumulative_raw else 0
 
+    # Today's fire count (KST-based daily key)
+    today_key = f"{STATS_DAILY_FIRES_PREFIX}{datetime.now(KST).strftime('%Y-%m-%d')}"
+    daily_raw = await redis.get(today_key)
+    daily_fires = int(daily_raw) if daily_raw else 0
+
     return {
         "activeGrids": active_grids,
         "totalFires": total_fires,
         "cumulativeFires": cumulative_fires,
+        "dailyFires": daily_fires,
         "onlineUsers": mgr.active_count,
     }

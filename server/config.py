@@ -4,6 +4,9 @@ All tunable constants in one place, with environment variable overrides.
 """
 
 import os
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 # ---------------------------------------------------------------------------
 # TTL settings (seconds)
@@ -18,3 +21,5 @@ NEWS_TTL_SEC = int(os.getenv("NEWS_TTL_SEC", 86400))              # 1 day
 # ---------------------------------------------------------------------------
 
 STATS_TOTAL_FIRES_KEY = "stats:total_fires"
+STATS_DAILY_FIRES_PREFIX = "stats:daily_fires:"
+STATS_DAILY_FIRES_TTL_SEC = 60 * 60 * 48  # 48h TTL (KST 자정 경계 여유)

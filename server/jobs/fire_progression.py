@@ -20,9 +20,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
-from config import STATS_TOTAL_FIRES_KEY
+from config import (
+    KST,
+    STATS_DAILY_FIRES_PREFIX,
+    STATS_DAILY_FIRES_TTL_SEC,
+    STATS_TOTAL_FIRES_KEY,
+)
 from models.fire import (
     FireStage,
     build_grid_state,
@@ -630,6 +636,11 @@ class FireProgressionEngine:
 
         # Increment cumulative fire counter
         await self._redis.incr(STATS_TOTAL_FIRES_KEY)
+
+        # Increment today's fire counter (KST-based key, 48h TTL for safe rollover)
+        today_key = f"{STATS_DAILY_FIRES_PREFIX}{datetime.now(KST).strftime('%Y-%m-%d')}"
+        await self._redis.incr(today_key)
+        await self._redis.expire(today_key, STATS_DAILY_FIRES_TTL_SEC)
 
         # Get current active count
         active_count = await self._redis.zcount(key, now, "+inf")
