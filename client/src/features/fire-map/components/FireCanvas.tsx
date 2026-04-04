@@ -226,7 +226,61 @@ export function FireCanvas() {
     map.on('resize', resize)
     map.on('zoom', resize)
 
+    // 건물 LOD: 뷰포트 변경 시 건물 데이터 fetch
+    const fetchBuildingsForViewport = () => {
+      const zoom = map.getZoom()
+      if (zoom < BUILDING_ZOOM_THRESHOLD) {
+        buildingsRef.current = []
+        buildingFetchKeyRef.current = ''
+        return
+      }
+      const bounds = map.getBounds()
+      const key = `${bounds.getSouth().toFixed(3)},${bounds.getWest().toFixed(3)},${bounds.getNorth().toFixed(3)},${bounds.getEast().toFixed(3)}`
+      if (key !== buildingFetchKeyRef.current) {
+        buildingFetchKeyRef.current = key
+        fetchBuildings(
+          bounds.getSouth(), bounds.getWest(),
+          bounds.getNorth(), bounds.getEast(),
+        ).then((b) => { buildingsRef.current = b })
+      }
+    }
+    // 즉시 + 이동/줌 시 fetch
+    fetchBuildingsForViewport()
+    map.on('moveend', fetchBuildingsForViewport)
+    map.on('zoomend', fetchBuildingsForViewport)
+
     let time = 0
+
+    // 건물 폴리곤 경로를 ctx에 추가하는 헬퍼
+    const traceBuildingPath = (
+      ctx: CanvasRenderingContext2D,
+      bldg: BuildingPolygon,
+    ) => {
+      for (let ci = 0; ci < bldg.coords.length; ci++) {
+        const pt = map.latLngToContainerPoint(
+          L.latLng(bldg.coords[ci][0], bldg.coords[ci][1]),
+        )
+        if (ci === 0) ctx.moveTo(pt.x, pt.y)
+        else ctx.lineTo(pt.x, pt.y)
+      }
+      ctx.closePath()
+    }
+
+    // 격자에 겹치는 건물들 찾기
+    const findOverlappingBuildings = (
+      gLat0: number, gLng0: number, gLat1: number, gLng1: number,
+    ): BuildingPolygon[] => {
+      const result: BuildingPolygon[] = []
+      for (const bldg of buildingsRef.current) {
+        for (const [bLat, bLng] of bldg.coords) {
+          if (bLat >= gLat0 && bLat <= gLat1 && bLng >= gLng0 && bLng <= gLng1) {
+            result.push(bldg)
+            break
+          }
+        }
+      }
+      return result
+    }
 
     const animate = () => {
       const ctx = canvas.getContext('2d')
@@ -241,22 +295,9 @@ export function FireCanvas() {
 
       const zoom = map.getZoom()
       const showAnim = zoom >= ANIM_ZOOM_THRESHOLD
-      const showBuildings = zoom >= BUILDING_ZOOM_THRESHOLD
+      const showBuildings = zoom >= BUILDING_ZOOM_THRESHOLD && buildingsRef.current.length > 0
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
-
-      // 건물 LOD: 줌 >= 16일 때 건물 데이터 fetch
-      if (showBuildings && time % 60 === 0) {
-        const bounds = map.getBounds()
-        const key = `${bounds.getSouth().toFixed(3)},${bounds.getWest().toFixed(3)},${bounds.getNorth().toFixed(3)},${bounds.getEast().toFixed(3)}`
-        if (key !== buildingFetchKeyRef.current) {
-          buildingFetchKeyRef.current = key
-          fetchBuildings(
-            bounds.getSouth(), bounds.getWest(),
-            bounds.getNorth(), bounds.getEast(),
-          ).then((b) => { buildingsRef.current = b })
-        }
-      }
 
       // 불 없는 격자의 파티클 제거
       for (const gid of allFlames.keys()) {
@@ -285,18 +326,37 @@ export function FireCanvas() {
         const sh = canvas.height / dpr
         if (left + w < 0 || left > sw || top + h < 0 || top > sh) continue
 
-        // ── 항상 그리는 것: 채우기 + 테두리 ──
+        // 건물 모드: 이 격자에 겹치는 건물 찾기
+        const gLat0 = Number(latStr) * GRID_SIZE
+        const gLng0 = Number(lngStr) * GRID_SIZE
+        const overlapping = showBuildings
+          ? findOverlappingBuildings(gLat0, gLng0, gLat0 + GRID_SIZE, gLng0 + GRID_SIZE)
+          : []
+        const useBuildingMode = overlapping.length > 0
+
+        // ── 배경 채우기 + 테두리 ──
         ctx.globalAlpha = 1
         ctx.globalCompositeOperation = 'source-over'
 
-        // 격자 배경 채우기
-        ctx.fillStyle = cfg.fill
-        ctx.fillRect(left, top, w, h)
-
-        // 빨간 테두리
-        ctx.strokeStyle = cfg.border
-        ctx.lineWidth = zoom >= 14 ? 2 : 1
-        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
+        if (useBuildingMode) {
+          // 건물 폴리곤 모양으로 배경 + 테두리
+          for (const bldg of overlapping) {
+            ctx.beginPath()
+            traceBuildingPath(ctx, bldg)
+            ctx.fillStyle = cfg.fill
+            ctx.fill()
+            ctx.strokeStyle = cfg.border
+            ctx.lineWidth = 2
+            ctx.stroke()
+          }
+        } else {
+          // 기존 격자 사각형
+          ctx.fillStyle = cfg.fill
+          ctx.fillRect(left, top, w, h)
+          ctx.strokeStyle = cfg.border
+          ctx.lineWidth = zoom >= 14 ? 2 : 1
+          ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
+        }
 
         // ── 확대 시에만: 화염 애니메이션 ──
         if (showAnim && w > 8) {
@@ -307,50 +367,19 @@ export function FireCanvas() {
           // 부족한 파티클 보충
           while (flames.length < cfg.flameCount) {
             const f = spawnFlame(cfg)
-            // 첫 생성 시 랜덤 높이로 흩뿌림 (시작부터 자연스럽게)
             f.ry = Math.random() * cfg.maxFlameH
             f.life = Math.random() * f.maxLife
             flames.push(f)
           }
 
-          // clip 영역 결정: 건물 LOD 또는 격자
+          // clip 영역: 건물 or 격자
           ctx.save()
           ctx.beginPath()
-
-          let usedBuildingClip = false
-          if (showBuildings && buildingsRef.current.length > 0) {
-            // 이 격자에 겹치는 건물 폴리곤 찾기
-            const gLat0 = Number(latStr) * GRID_SIZE
-            const gLng0 = Number(lngStr) * GRID_SIZE
-            const gLat1 = gLat0 + GRID_SIZE
-            const gLng1 = gLng0 + GRID_SIZE
-
-            for (const bldg of buildingsRef.current) {
-              // 건물 바운딩 박스가 격자와 겹치는지 체크
-              let overlaps = false
-              for (const [bLat, bLng] of bldg.coords) {
-                if (bLat >= gLat0 && bLat <= gLat1 && bLng >= gLng0 && bLng <= gLng1) {
-                  overlaps = true
-                  break
-                }
-              }
-              if (!overlaps) continue
-
-              usedBuildingClip = true
-              // 건물 폴리곤을 clip 경로에 추가
-              for (let ci = 0; ci < bldg.coords.length; ci++) {
-                const pt = map.latLngToContainerPoint(
-                  L.latLng(bldg.coords[ci][0], bldg.coords[ci][1]),
-                )
-                if (ci === 0) ctx.moveTo(pt.x, pt.y)
-                else ctx.lineTo(pt.x, pt.y)
-              }
-              ctx.closePath()
+          if (useBuildingMode) {
+            for (const bldg of overlapping) {
+              traceBuildingPath(ctx, bldg)
             }
-          }
-
-          // 건물 clip이 없으면 기존 격자 clip 사용 (fallback)
-          if (!usedBuildingClip) {
+          } else {
             ctx.rect(left, top, w, h)
           }
           ctx.clip()
@@ -609,6 +638,8 @@ export function FireCanvas() {
       cancelAnimationFrame(animRef.current)
       map.off('resize', resize)
       map.off('zoom', resize)
+      map.off('moveend', fetchBuildingsForViewport)
+      map.off('zoomend', fetchBuildingsForViewport)
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas)
     }
   }, [map])
