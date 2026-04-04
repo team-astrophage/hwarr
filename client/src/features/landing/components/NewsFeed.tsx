@@ -29,76 +29,72 @@ function Headline({ parts }: { parts: HeadlinePart[] }) {
   )
 }
 
+function SectionHeader() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <h2 className="text-[1rem] font-bold leading-none tracking-tight text-[var(--color-text-base)]">
+        속보
+      </h2>
+      <span className="rounded-[var(--radius-pill)] bg-[rgba(255,68,68,0.12)] px-2.5 py-1 text-[0.6875rem] font-bold uppercase leading-none tracking-wide text-[#ff4444]">
+        Live
+      </span>
+    </div>
+  )
+}
+
 export function NewsFeed() {
   const { data: items, isLoading } = useNews()
 
   if (isLoading) {
     return (
-      <div className="px-5 mb-5">
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-[0.8125rem] font-bold text-[var(--color-text-base)]">속보</h2>
-          <span className="text-[0.5625rem] font-bold text-[#ff4444] bg-[rgba(255,68,68,0.12)] px-2 py-0.5 rounded-[var(--radius-pill)] uppercase tracking-[0.5px]">
-            Live
-          </span>
-        </div>
-        <div className="flex flex-col gap-2">
+      <section className="flex flex-col gap-4">
+        <SectionHeader />
+        <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-[72px] bg-[var(--color-bg-surface)] rounded-[12px] animate-pulse"
+              className="h-[72px] animate-pulse rounded-[12px] bg-[var(--color-bg-surface)]"
             />
           ))}
         </div>
-      </div>
+      </section>
     )
   }
 
   if (!items || items.length === 0) {
     return (
-      <div className="px-5 mb-5">
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-[0.8125rem] font-bold text-[var(--color-text-base)]">속보</h2>
-          <span className="text-[0.5625rem] font-bold text-[#ff4444] bg-[rgba(255,68,68,0.12)] px-2 py-0.5 rounded-[var(--radius-pill)] uppercase tracking-[0.5px]">
-            Live
-          </span>
-        </div>
-        <div className="bg-[var(--color-bg-surface)] rounded-[12px] p-4 text-center">
+      <section className="flex flex-col gap-4">
+        <SectionHeader />
+        <div className="rounded-[12px] bg-[var(--color-bg-surface)] p-4 text-center">
           <p className="text-[0.8125rem] text-[var(--color-text-secondary)]">
             현재 활성 화재가 없습니다
           </p>
         </div>
-      </div>
+      </section>
     )
   }
 
   return (
-    <section>
-      {/* 섹션 헤더 */}
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-[0.8125rem] font-bold text-[var(--color-text-base)]">속보</h2>
-        <span className="text-[0.5625rem] font-bold text-[#ff4444] bg-[rgba(255,68,68,0.12)] px-2 py-0.5 rounded-[var(--radius-pill)] uppercase tracking-[0.5px]">
-          Live
-        </span>
-      </div>
+    <section className="flex flex-col gap-4">
+      <SectionHeader />
 
-      {/* 뉴스 리스트 */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         {items.map((item) => (
           <div
             key={item.id}
-            className="flex gap-3 items-start bg-[var(--color-bg-surface)] rounded-[12px] p-3 transition-colors duration-150 hover:bg-[var(--color-bg-elevated)]"
+            className="flex gap-3 items-start rounded-[12px] bg-[var(--color-bg-surface)] p-4 transition-colors duration-150 hover:bg-[var(--color-bg-elevated)]"
           >
             <div
-              className="w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 text-[0.875rem]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[0.875rem]"
               style={{ background: item.icon_bg }}
             >
               {item.icon}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[0.8125rem] font-medium leading-[1.5] text-[var(--color-text-base)]">
                 <Headline parts={item.headline_parts} />
               </p>
-              <div className="flex gap-1.5 items-center mt-1.5 text-[0.6875rem] text-[var(--color-text-secondary)]">
+              <div className="mt-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[var(--color-text-secondary)]">
                 <span>{item.time}</span>
                 <span className="text-[var(--color-border)]">·</span>
                 <span>{item.detail}</span>

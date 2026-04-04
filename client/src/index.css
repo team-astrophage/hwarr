@@ -43,12 +43,7 @@
   --radius-pill: 9999px;
 }
 
-/* Global Styles */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/* Global — no unlayered * { margin/padding } here: it would override Tailwind @layer utilities (p-4, px-5, …). Preflight already resets in @layer base. */
 
 html, body, #root {
   height: 100%;

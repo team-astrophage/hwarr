@@ -11,22 +11,19 @@ export function Header() {
         ${isMap ? 'absolute top-0 left-0 right-0 z-[1000]' : 'bg-[var(--color-bg-base)]'}
       `}
     >
-      <Link to="/" className="flex items-center gap-1.5">
+      <Link to="/" className="min-w-0 shrink-0">
         <span className="text-[1.125rem] font-extrabold text-[var(--color-text-base)] leading-none tracking-tight">
           화르르
-        </span>
-        <span className="text-[0.625rem] font-bold text-[var(--color-text-secondary)] leading-none uppercase tracking-[1.5px]">
-          hwarr
         </span>
       </Link>
 
       {/* Live indicator */}
-      <div className="flex items-center gap-2 h-8 px-3 bg-[var(--color-bg-surface)] rounded-[var(--radius-pill)] shadow-[var(--shadow-medium)]">
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-accent)]" />
+      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--color-bg-surface)] py-1 pl-1.5 pr-2.5 shadow-[var(--shadow-medium)]">
+        <span className="relative flex size-2 shrink-0">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--color-accent)] opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-[var(--color-accent)]" />
         </span>
-        <span className="text-[0.6875rem] font-bold text-[var(--color-text-secondary)] uppercase tracking-[1px]">
+        <span className="text-[0.6875rem] font-bold uppercase leading-none tracking-wide text-[var(--color-text-secondary)]">
           Live
         </span>
       </div>
