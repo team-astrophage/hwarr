@@ -1,0 +1,119 @@
+/**
+ * Socket.IO 연결 수명주기 관리
+ *
+ * 책임:
+ * - 앱 전역에서 공유되는 단일 소켓 인스턴스 제공
+ * - 서버 애플리케이션 heartbeat 송신 (10초 간격, 서버 reaper timeout=30s)
+ * - 연결/재접속/오프라인 상태를 Zustand 스토어로 노출
+ * - 서버발 `io server disconnect` 시 수동 재접속 (Socket.IO 기본 동작 보정)
+ *
+ * 사용:
+ * - 앱 진입 시 SocketProvider 가 `startSocket()` 을 1회 호출
+ * - 기능별 훅(useFireSocket, useChat 등)은 리스너만 등록/해제하고
+ *   소켓 자체의 connect/disconnect 는 건드리지 않음
+ */
+
+import { io, type Socket } from 'socket.io-client'
+import { create } from 'zustand'
+import { SOCKET_URL } from './config'
+import { getOrCreateChatIdentity } from '../features/chat/identity'
+
+export type ConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'offline'
+
+interface SocketState {
+  status: ConnectionStatus
+  reconnectAttempt: number
+  setStatus: (s: ConnectionStatus) => void
+  setAttempt: (n: number) => void
+}
+
+export const useSocketStore = create<SocketState>((set) => ({
+  status: 'idle',
+  reconnectAttempt: 0,
+  setStatus: (status) => set({ status }),
+  setAttempt: (n) => set({ reconnectAttempt: n }),
+}))
+
+// 서버 HEARTBEAT_INTERVAL_SEC=10, TIMEOUT=30 에 맞춤
+const HEARTBEAT_MS = 10_000
+const MAX_RECONNECT_ATTEMPTS = 8
+
+export const socket: Socket = io(SOCKET_URL, {
+  autoConnect: false,
+  transports: ['polling', 'websocket'],
+  reconnection: true,
+  reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 5_000,
+  auth: (cb) => cb({ user_id: getOrCreateChatIdentity().userId }),
+})
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let started = false
+
+function startHeartbeat() {
+  if (heartbeatTimer) return
+  // 첫 박동을 즉시 보내 서버 last_heartbeat 를 connect 직후 갱신
+  socket.emit('heartbeat', { ts: Date.now() })
+  heartbeatTimer = setInterval(() => {
+    if (socket.connected) socket.emit('heartbeat', { ts: Date.now() })
+  }, HEARTBEAT_MS)
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+}
+
+/**
+ * 소켓 연결을 시작한다. 앱에서 1회만 호출.
+ * StrictMode 더블마운트 방어를 위해 `started` 가드가 적용돼 있다.
+ */
+export function startSocket(): void {
+  if (started) return
+  started = true
+  const { setStatus, setAttempt } = useSocketStore.getState()
+
+  socket.on('connect', () => {
+    setStatus('connected')
+    setAttempt(0)
+    startHeartbeat()
+  })
+
+  socket.on('disconnect', (reason) => {
+    stopHeartbeat()
+    setStatus('reconnecting')
+    // Socket.IO 는 'io server disconnect' 시 자동 재접속하지 않음 → 수동 재접속
+    if (reason === 'io server disconnect') {
+      socket.connect()
+    }
+  })
+
+  socket.io.on('reconnect_attempt', (n) => {
+    setStatus('reconnecting')
+    setAttempt(n)
+  })
+
+  socket.io.on('reconnect_failed', () => {
+    setStatus('offline')
+  })
+
+  setStatus('connecting')
+  socket.connect()
+}
+
+/** 테스트/HMR 등에서만 사용. 일반 런타임에서는 호출할 일이 없다. */
+export function stopSocket(): void {
+  stopHeartbeat()
+  socket.removeAllListeners()
+  socket.disconnect()
+  started = false
+  useSocketStore.getState().setStatus('idle')
+}

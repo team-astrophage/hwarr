@@ -132,20 +132,28 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
                     </div>
                   )}
                   <div
-                    className={`px-3.5 py-2.5 text-[0.875rem] leading-[1.45] ${
+                    className={`px-3.5 py-2.5 text-[0.875rem] leading-[1.45] transition-opacity ${
                       isMe
                         ? 'bg-[var(--color-accent)] text-[#000] font-medium rounded-[18px] rounded-br-[4px]'
                         : 'bg-[var(--color-bg-card)] text-[var(--color-text-base)] rounded-[18px] rounded-bl-[4px]'
+                    } ${msg.status === 'pending' ? 'opacity-60' : ''} ${
+                      msg.status === 'failed' ? 'opacity-80 ring-1 ring-red-500/60' : ''
                     }`}
                   >
                     {msg.text}
                   </div>
                   <div
-                    className={`text-[0.625rem] text-[var(--color-text-secondary)] mt-0.5 ${
-                      isMe ? 'text-right' : ''
+                    className={`text-[0.625rem] text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-1 ${
+                      isMe ? 'justify-end' : ''
                     }`}
                   >
-                    {formatTime(msg.timestamp)}
+                    {msg.status === 'pending' && isMe && (
+                      <span className="text-[var(--color-text-secondary)]">전송 대기…</span>
+                    )}
+                    {msg.status === 'failed' && isMe && (
+                      <span className="text-red-400">전송 실패</span>
+                    )}
+                    <span>{formatTime(msg.timestamp)}</span>
                   </div>
                 </div>
               </div>
