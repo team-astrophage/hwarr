@@ -1,15 +1,8 @@
 /**
  * Canvas 기반 불 시각 이펙트
  *
- * 줌 레벨에 따른 동작:
- * - 축소 (zoom < 14): 빨간색 격자 채우기 + 빨간 테두리만 표시
- *   → 멀리서 불 강도를 색상 강도로 판단
- * - 확대 (zoom >= 14): 격자 안에 화염 애니메이션 추가
- *   → ctx.clip()으로 격자 영역 밖 절대 안 나감
- *
- * 화염 렌더링:
- * - 격자 바닥에서 위로 타오르는 불꽃 형태
- * - 단계별로 불꽃 밀도/크기/색상 강도 증가
+ * 모든 줌 레벨에서 화염 파티클 렌더링 (격자 border/bg 없음).
+ * 단계별 차별화: 불씨→모닥불→화재→대화재→전소(잿불)
  */
 
 import { useEffect, useRef } from 'react'
@@ -93,8 +86,6 @@ const STAGE = [
     glowColor: [180, 40, 0],
   },
 ]
-
-const ANIM_ZOOM_THRESHOLD = 14
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
@@ -228,8 +219,6 @@ export function FireCanvas() {
       ctx.save()
       ctx.scale(dpr, dpr)
 
-      const zoom = map.getZoom()
-      const showAnim = zoom >= ANIM_ZOOM_THRESHOLD
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
 
