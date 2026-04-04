@@ -9,6 +9,7 @@ import { socket } from '../../../lib/socket'
 
 export function useFire() {
   const fire = useCallback((lat: number, lng: number) => {
+    console.log('[Socket] fire emit:', { lat, lng, connected: socket.connected })
     socket.emit('fire', { lat, lng })
   }, [])
 

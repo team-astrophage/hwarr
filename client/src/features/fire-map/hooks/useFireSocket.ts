@@ -26,14 +26,17 @@ export function useFireSocket() {
     })
 
     socket.on('fire:update', (data: FireCell) => {
+      console.log('[Socket] fire:update received:', data)
       updateFire(data)
     })
 
     socket.on('fires:sync', (data: FireCell[]) => {
+      console.log('[Socket] fires:sync received:', data.length, 'fires')
       syncFires(data)
     })
 
     socket.on('users:count', (data: { count: number }) => {
+      console.log('[Socket] users:count received:', data.count)
       setOnlineUsers(data.count)
     })
 
