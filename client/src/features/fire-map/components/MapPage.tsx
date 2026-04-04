@@ -136,12 +136,12 @@ export function MapPage() {
             </p>
           )}
           {parts.district && (
-            <p className='text-[52px] font-extrabold text-white leading-tight'>
+            <p className='text-4xl font-extrabold text-white leading-tight'>
               {parts.district}
             </p>
           )}
           {parts.road && (
-            <p className='text-[52px] font-extrabold text-white leading-tight'>
+            <p className='text-4xl font-extrabold text-white leading-tight'>
               {parts.road}
             </p>
           )}
