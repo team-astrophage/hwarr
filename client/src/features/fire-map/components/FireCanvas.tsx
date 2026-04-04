@@ -329,6 +329,14 @@ export function FireCanvas() {
         // ── 줌 확대: 화염 파티클 ──
         if (w < 3) continue
 
+        // ── 톤온톤 격자선 ──
+        ctx.save()
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.strokeStyle = 'rgba(120, 60, 60, 0.25)'
+        ctx.lineWidth = zoom >= 15 ? 1.5 : 1
+        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
+        ctx.restore()
+
         if (!allFlames.has(gridId)) allFlames.set(gridId, [])
         const flames = allFlames.get(gridId)!
 
