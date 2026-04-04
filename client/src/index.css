@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* MELTTOWN Design Tokens — Spotify DESIGN.md exact spec */
+@theme {
+  /* Background Surfaces (Section 2) */
+  --color-bg-base: #121212;
+  --color-bg-surface: #181818;
+  --color-bg-elevated: #1f1f1f;
+  --color-bg-card: #252525;
+  --color-bg-card-alt: #272727;
+
+  /* Brand Accent — Spotify Green, functional only */
+  --color-accent: #1ed760;
+  --color-accent-border: #1db954;
+
+  /* Text (Section 2) */
+  --color-text-base: #ffffff;
+  --color-text-secondary: #b3b3b3;
+  --color-text-bright: #cbcbcb;
+  --color-text-max: #fdfdfd;
+
+  /* Semantic (Section 2) */
+  --color-negative: #f3727f;
+  --color-warning: #ffa42b;
+  --color-info: #539df5;
+
+  /* Borders (Section 2) */
+  --color-border: #4d4d4d;
+  --color-border-light: #7c7c7c;
+  --color-separator: #b3b3b3;
+
+  /* Shadows (Section 2) */
+  --shadow-heavy: rgba(0, 0, 0, 0.5) 0px 8px 24px;
+  --shadow-medium: rgba(0, 0, 0, 0.3) 0px 8px 8px;
+
+  /* Border Radius (Section 5) */
+  --radius-badge: 2px;
+  --radius-subtle: 4px;
+  --radius-standard: 6px;
+  --radius-comfortable: 8px;
+  --radius-panel: 16px;
+  --radius-pill-lg: 500px;
+  --radius-pill: 9999px;
+}
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', helvetica, arial,
+    'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-base);
+  /* Font smoothing — crisper text on macOS */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+/* Mobile-first container */
+#root {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100svh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* 내 위치 마커 펄스 애니메이션 */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}

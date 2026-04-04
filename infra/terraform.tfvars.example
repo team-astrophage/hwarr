@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and adjust as needed
+project_name  = "astrophage-hwarr"
+environment   = "prod"
+aws_region    = "ap-northeast-2"
+ecr_image_tag = "latest"
+
+# 필수: 과금 알림 이메일
+budget_alert_email = "isac7722@example.com"
+
+# 월 예산 상한 (USD) — 기본값 $10
+# budget_limit_usd = "10"
+
+# S3 버킷명 충돌 시 변경
+# frontend_bucket_name = "astrophage-hwarr-frontend-unique-suffix"
