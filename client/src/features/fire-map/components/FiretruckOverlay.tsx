@@ -13,7 +13,7 @@ import { useFireStore } from '../stores/fireStore'
 import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 const FIRETRUCK_STAGE_THRESHOLD = 4
-const FIRETRUCK_MIN_ZOOM = 14
+const FIRETRUCK_MIN_ZOOM = 18
 
 function createFiretruckIcon() {
   return L.divIcon({

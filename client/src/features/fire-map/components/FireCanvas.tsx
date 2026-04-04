@@ -27,6 +27,16 @@ interface Flame {
   seed: number
 }
 
+interface Smoke {
+  rx: number
+  ry: number
+  vx: number
+  vy: number
+  life: number
+  maxLife: number
+  size: number
+}
+
 interface StreamParticle {
   x: number; y: number; vx: number; vy: number
   life: number; maxLife: number; size: number; colorIdx: number
@@ -50,55 +60,65 @@ interface StageCfg {
   dotColor: string
   dotSize: number         // 최소 px 크기
   dotPulse: number        // 펄스 속도
+  // 연기 (4~5단계)
+  smokeCount: number
+  smokeMaxHeight: number
+  smokeAlpha: number
 }
 
 const STAGES: (StageCfg | null)[] = [
   null, // 0: 없음
   { // 1: 불씨 — 작은 잔불, 은은한 빛
-    particleCount: 12,
-    maxHeight: 0.5,
-    baseSpeed: 0.006,
-    spreadX: 0.15,
-    turbulence: 0.002,
-    baseSize: 0.18,
+    particleCount: 10,
+    maxHeight: 0.35,
+    baseSpeed: 0.005,
+    spreadX: 0.1,
+    turbulence: 0.001,
+    baseSize: 0.14,
     colorStops: [
-      [255, 200, 80, 0.9],   // 바닥: 노란빛
-      [220, 100, 20, 0.6],   // 중간: 주황
-      [150, 40, 0, 0.2],     // 상단: 어두운 빨강
-      [80, 20, 0, 0],        // 꼭대기: 투명
+      [255, 180, 60, 0.7],   // 바닥: 노란빛
+      [200, 80, 10, 0.4],    // 중간: 주황
+      [120, 30, 0, 0.1],     // 상단: 어두운 빨강
+      [60, 10, 0, 0],        // 꼭대기: 투명
     ],
-    coreAlpha: 0.3,
-    glowRadius: 0.4,
+    coreAlpha: 0.2,
+    glowRadius: 0.3,
     dotColor: '#ff6b35',
-    dotSize: 8,
-    dotPulse: 0.03,
+    dotSize: 6,
+    dotPulse: 0.02,
+    smokeCount: 0,
+    smokeMaxHeight: 0,
+    smokeAlpha: 0,
   },
   { // 2: 모닥불 — 따뜻한 불꽃
-    particleCount: 25,
-    maxHeight: 0.7,
-    baseSpeed: 0.008,
-    spreadX: 0.2,
+    particleCount: 22,
+    maxHeight: 0.6,
+    baseSpeed: 0.007,
+    spreadX: 0.18,
     turbulence: 0.003,
-    baseSize: 0.22,
+    baseSize: 0.2,
     colorStops: [
-      [255, 240, 150, 1.0],  // 밝은 노랑
-      [255, 150, 30, 0.8],   // 주황
-      [220, 60, 0, 0.4],     // 빨강
-      [120, 20, 0, 0],
+      [255, 230, 120, 0.95],  // 밝은 노랑
+      [255, 140, 25, 0.7],    // 주황
+      [200, 50, 0, 0.3],      // 빨강
+      [100, 15, 0, 0],
     ],
-    coreAlpha: 0.5,
-    glowRadius: 0.5,
+    coreAlpha: 0.4,
+    glowRadius: 0.45,
     dotColor: '#ff8c42',
-    dotSize: 10,
-    dotPulse: 0.04,
+    dotSize: 9,
+    dotPulse: 0.035,
+    smokeCount: 0,
+    smokeMaxHeight: 0,
+    smokeAlpha: 0,
   },
   { // 3: 화재 — 격렬한 불
     particleCount: 45,
     maxHeight: 0.9,
     baseSpeed: 0.01,
-    spreadX: 0.25,
+    spreadX: 0.28,
     turbulence: 0.004,
-    baseSize: 0.25,
+    baseSize: 0.26,
     colorStops: [
       [255, 255, 200, 1.0],  // 흰노랑 코어
       [255, 180, 40, 0.9],   // 밝은 주황
@@ -110,46 +130,70 @@ const STAGES: (StageCfg | null)[] = [
     dotColor: '#ff4500',
     dotSize: 14,
     dotPulse: 0.05,
+    smokeCount: 0,
+    smokeMaxHeight: 0,
+    smokeAlpha: 0,
   },
-  { // 4: 대화재 — 맹렬한 화염, 흰색 핵심부
-    particleCount: 70,
-    maxHeight: 1.2,
-    baseSpeed: 0.013,
-    spreadX: 0.3,
-    turbulence: 0.005,
-    baseSize: 0.3,
+  { // 4: 대화재 — 맹렬한 화염 + 연기
+    particleCount: 80,
+    maxHeight: 1.4,
+    baseSpeed: 0.014,
+    spreadX: 0.35,
+    turbulence: 0.006,
+    baseSize: 0.32,
     colorStops: [
-      [255, 255, 240, 1.0],  // 거의 흰색 코어
-      [255, 220, 80, 1.0],   // 밝은 노랑
-      [255, 120, 10, 0.7],   // 주황
-      [200, 30, 0, 0.1],
+      [255, 255, 245, 1.0],  // 거의 흰색 코어
+      [255, 220, 60, 1.0],   // 밝은 노랑
+      [255, 100, 0, 0.8],    // 주황
+      [220, 30, 0, 0.15],
     ],
-    coreAlpha: 0.9,
-    glowRadius: 0.8,
+    coreAlpha: 0.95,
+    glowRadius: 0.9,
     dotColor: '#ff2200',
     dotSize: 18,
     dotPulse: 0.07,
+    smokeCount: 12,
+    smokeMaxHeight: 2.0,
+    smokeAlpha: 0.25,
   },
-  { // 5: 전소 — 잿불 + 검은 연기
-    particleCount: 20,
-    maxHeight: 0.4,
-    baseSpeed: 0.004,
-    spreadX: 0.3,
-    turbulence: 0.002,
-    baseSize: 0.2,
+  { // 5: 지옥불 — 최대 화염 + 짙은 연기
+    particleCount: 120,
+    maxHeight: 1.8,
+    baseSpeed: 0.018,
+    spreadX: 0.45,
+    turbulence: 0.008,
+    baseSize: 0.38,
     colorStops: [
-      [200, 100, 30, 0.6],   // 어두운 주황
-      [150, 50, 10, 0.4],    // 어두운 빨강
-      [80, 30, 10, 0.2],     // 거의 검정
-      [40, 15, 5, 0],
+      [255, 255, 255, 1.0],  // 완전 흰색 코어
+      [255, 240, 80, 1.0],   // 밝은 노랑
+      [255, 60, 0, 0.9],     // 강렬한 빨강
+      [180, 0, 0, 0.2],
     ],
-    coreAlpha: 0.15,
-    glowRadius: 0.3,
-    dotColor: '#882200',
-    dotSize: 10,
-    dotPulse: 0.02,
+    coreAlpha: 1.0,
+    glowRadius: 1.2,
+    dotColor: '#ff0000',
+    dotSize: 22,
+    dotPulse: 0.09,
+    smokeCount: 25,
+    smokeMaxHeight: 3.0,
+    smokeAlpha: 0.4,
   },
 ]
+
+// ── 연기 파티클 생성 ──
+
+function spawnSmoke(cfg: StageCfg): Smoke {
+  const life = 60 + Math.random() * 80
+  return {
+    rx: 0.2 + Math.random() * 0.6,
+    ry: cfg.maxHeight * 0.6 + Math.random() * cfg.maxHeight * 0.3, // 불꽃 위에서 시작
+    vx: (Math.random() - 0.5) * 0.015,
+    vy: 0.003 + Math.random() * 0.004,
+    life,
+    maxLife: life,
+    size: 0.3 + Math.random() * 0.4,
+  }
+}
 
 // ── 줌 임계값 ──
 const GLOW_DOT_ZOOM = 13   // 이 줌 미만이면 글로우 도트로 전환
@@ -198,6 +242,7 @@ export function FireCanvas() {
   const map = useMap()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
+  const smokesRef = useRef<Map<string, Smoke[]>>(new Map())
   const streamRef = useRef<StreamParticle[]>([])
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
@@ -266,9 +311,14 @@ export function FireCanvas() {
       const sw = canvas.width / dpr
       const sh = canvas.height / dpr
 
+      const allSmokes = smokesRef.current
+
       // 불 없는 격자의 파티클 제거
       for (const gid of allFlames.keys()) {
         if (!currentFires.has(gid)) allFlames.delete(gid)
+      }
+      for (const gid of allSmokes.keys()) {
+        if (!currentFires.has(gid)) allSmokes.delete(gid)
       }
 
       for (const [gridId, cell] of currentFires) {
@@ -352,10 +402,11 @@ export function FireCanvas() {
           flames.pop()
         }
 
-        // 격자 클리핑 (위로는 확장 — 불꽃이 격자 위로 타오름)
+        // 격자 클리핑 (위로는 확장 — 불꽃+연기가 격자 위로 타오름)
+        const clipHeight = Math.max(cfg.maxHeight, cfg.smokeMaxHeight)
         ctx.save()
         ctx.beginPath()
-        ctx.rect(left - w * 0.2, top - h * cfg.maxHeight, w * 1.4, h * (1 + cfg.maxHeight))
+        ctx.rect(left - w * 0.3, top - h * clipHeight, w * 1.6, h * (1 + clipHeight))
         ctx.clip()
 
         ctx.globalCompositeOperation = 'lighter'
@@ -425,6 +476,63 @@ export function FireCanvas() {
           ctx.beginPath()
           ctx.arc(px, py, particleR, 0, Math.PI * 2)
           ctx.fill()
+        }
+
+        // ── 연기 파티클 (4~5단계) ──
+        if (cfg.smokeCount > 0) {
+          if (!allSmokes.has(gridId)) allSmokes.set(gridId, [])
+          const smokes = allSmokes.get(gridId)!
+
+          while (smokes.length < cfg.smokeCount) {
+            const s = spawnSmoke(cfg)
+            s.ry = cfg.maxHeight * 0.6 + Math.random() * cfg.smokeMaxHeight * 0.5
+            s.life = Math.random() * s.maxLife
+            smokes.push(s)
+          }
+          while (smokes.length > cfg.smokeCount) smokes.pop()
+
+          ctx.globalCompositeOperation = 'source-over'
+
+          for (let i = smokes.length - 1; i >= 0; i--) {
+            const s = smokes[i]
+            s.ry += s.vy
+            s.rx += s.vx
+            s.vx += (Math.random() - 0.5) * 0.002
+            s.vx *= 0.99
+            s.life--
+
+            if (s.life <= 0 || s.ry > cfg.smokeMaxHeight) {
+              smokes[i] = spawnSmoke(cfg)
+              continue
+            }
+
+            s.rx = Math.max(0, Math.min(1, s.rx))
+            const lifeRatio = s.life / s.maxLife
+            const heightRatio = Math.min(s.ry / cfg.smokeMaxHeight, 1)
+
+            const px = left + s.rx * w
+            const py = (top + h) - s.ry * h
+
+            const smokeR = w * s.size * (0.8 + heightRatio * 0.5)
+            if (smokeR < 1) continue
+
+            const fadeIn = Math.min(1, (1 - lifeRatio) * 3)
+            const fadeOut = lifeRatio
+            const alpha = cfg.smokeAlpha * fadeIn * fadeOut * (1 - heightRatio * 0.5)
+            if (alpha < 0.01) continue
+
+            const gray = Math.round(30 + heightRatio * 20)
+            const grad = ctx.createRadialGradient(px, py, 0, px, py, smokeR)
+            grad.addColorStop(0, `rgba(${gray}, ${gray}, ${gray}, ${alpha})`)
+            grad.addColorStop(0.6, `rgba(${gray}, ${gray}, ${gray}, ${alpha * 0.4})`)
+            grad.addColorStop(1, `rgba(${gray}, ${gray}, ${gray}, 0)`)
+
+            ctx.globalAlpha = 1
+            ctx.fillStyle = grad
+            ctx.beginPath()
+            ctx.arc(px, py, smokeR, 0, Math.PI * 2)
+            ctx.fill()
+          }
         }
 
         ctx.restore() // clip 해제
