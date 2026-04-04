@@ -27,6 +27,7 @@ from sio.connection_manager import (
     ConnectionManager,
     HEARTBEAT_INTERVAL_SEC,
 )
+from sio.chat_events import register_chat_events
 from sio.events import register_fire_events
 
 # ---------------------------------------------------------------------------
@@ -62,6 +63,10 @@ manager = ConnectionManager(sio)
 # The engine is created at startup when Redis is available.
 # For tests, it can be None until explicitly set.
 engine = None
+
+# Populated at startup; called from the disconnect handler to rebroadcast
+# chat presence when a chat participant drops off.
+_chat_presence_on_disconnect = None
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -106,7 +111,7 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """Initialize Redis connection and fire progression engine on startup."""
-    global engine
+    global engine, _chat_presence_on_disconnect
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -133,6 +138,11 @@ async def startup_event():
 
         # Register fire event handlers with the engine
         register_fire_events(sio, manager, engine)
+
+        # Register global anonymous chat event handlers
+        _chat_presence_on_disconnect = register_chat_events(
+            sio, manager, redis_client,
+        )
 
         # Load admin region resolver for daily ranking (optional)
         from pathlib import Path as _Path
@@ -226,7 +236,12 @@ async def disconnect(sid: str):
     Preserves session info in _user_sessions for potential reconnection.
     """
     logger.info("Client disconnecting: %s", sid)
-    await manager.remove(sid)
+    info = await manager.remove(sid)
+
+    # If the disconnected client was in the global chat room, rebroadcast
+    # the updated presence count to remaining participants.
+    if info is not None and _chat_presence_on_disconnect is not None:
+        await _chat_presence_on_disconnect(info.rooms)
 
     # Broadcast users:count to all clients (mock server compat)
     await sio.emit("users:count", {"count": manager.active_count})

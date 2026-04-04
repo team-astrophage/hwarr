@@ -10,8 +10,13 @@
 
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from './config'
+import { getOrCreateChatIdentity } from '../features/chat/identity'
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false,
   transports: ['polling', 'websocket'],
+  auth: (cb) => {
+    // ConnectionManager 재접속 로직과 호환되도록 stable user_id 전달
+    cb({ user_id: getOrCreateChatIdentity().userId })
+  },
 })
