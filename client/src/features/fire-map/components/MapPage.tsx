@@ -128,9 +128,9 @@ export function MapPage() {
       {/* 현재 위치 도로명 주소 */}
       {address && (
         <div className="absolute top-14 left-4 z-[1000]">
-          <div className="bg-[var(--color-bg-surface)]/80 backdrop-blur-sm rounded-[10px] px-3 py-1.5 shadow-[var(--shadow-medium)]">
-            <p className="text-[0.6875rem] text-[var(--color-text-secondary)]">
-              <span className="text-[var(--color-accent)] mr-1">&#x2022;</span>
+          <div className="bg-[var(--color-bg-surface)]/60 backdrop-blur-sm rounded-[10px] px-3.5 py-2 shadow-[var(--shadow-medium)]">
+            <p className="text-[0.9375rem] font-bold text-white/80">
+              <span className="text-[var(--color-accent)] mr-1.5">&#x2022;</span>
               {address}
             </p>
           </div>
