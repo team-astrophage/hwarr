@@ -1,8 +1,9 @@
 /**
- * Canvas 기반 불 시각 이펙트
+ * Canvas 기반 고퀄리티 화염 이펙트
  *
- * 모든 줌 레벨에서 화염 파티클 렌더링 (격자 border/bg 없음).
- * 단계별 차별화: 불씨→모닥불→화재→대화재→전소(잿불)
+ * 소프트 라디얼 그라디언트 파티클 + additive blending.
+ * 바닥: 밝은 노랑/흰 코어, 중간: 주황, 상단: 붉은 혀 → 페이드아웃.
+ * 줌 축소 시 글로우 도트로 전환하여 원거리에서도 가시성 확보.
  */
 
 import { useEffect, useRef } from 'react'
@@ -12,145 +13,186 @@ import { useFireStore } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
 import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
-// 화염 파티클
+// ── 파티클 타입 ──
+
 interface Flame {
-  /** 격자 내 상대 위치 0~1 */
-  rx: number
-  /** 격자 바닥 기준 높이 0~1 (0=바닥, 1=꼭대기) */
-  ry: number
-  /** 수평 속도 */
+  rx: number   // 격자 내 수평 위치 0~1
+  ry: number   // 높이 0(바닥)~1(꼭대기)
   vx: number
-  /** 상승 속도 */
   vy: number
-  /** 남은 수명 */
   life: number
-  /** 최대 수명 */
   maxLife: number
-  /** 불꽃 상대 크기 0~1 */
   size: number
-  /** 색상 인덱스 */
-  colorIdx: number
+  /** 높이 비율에 따라 색상 결정 (0=바닥 밝은색, 1=꼭대기 어두운색) */
+  seed: number
 }
 
-// 단계별 설정 — 불씨(1)→모닥불(2)→화재(3)→대화재(4)→전소(5)
-const STAGE = [
-  null, // 0
-  {
-    // 1: 불씨 — 작은 연기 속 잔불, 은은한 빛
-    flameCount: 4,
-    maxFlameH: 0.25,
-    flameSpeed: 0.003,
-    colors: ['#ff8c42', '#cc5500', '#aa3300'],
-    turbulence: 0.0008,
-    glowAlpha: 0.05,
-    glowColor: [255, 80, 0],
-  },
-  {
-    // 2: 모닥불 — 따뜻한 불꽃, 주황+노랑
-    flameCount: 10,
-    maxFlameH: 0.4,
-    flameSpeed: 0.005,
-    colors: ['#ff6b35', '#ff8c42', '#ffaa00', '#cc4400'],
-    turbulence: 0.0012,
-    glowAlpha: 0.1,
-    glowColor: [255, 100, 20],
-  },
-  {
-    // 3: 화재 — 격렬한 불, 붉은+노란 혼합
-    flameCount: 22,
-    maxFlameH: 0.6,
-    flameSpeed: 0.007,
-    colors: ['#ff2200', '#ff4500', '#ff6b35', '#ffcc00'],
+interface StreamParticle {
+  x: number; y: number; vx: number; vy: number
+  life: number; maxLife: number; size: number; colorIdx: number
+}
+
+// ── 단계별 설정 ──
+// 불씨(1) → 모닥불(2) → 화재(3) → 대화재(4) → 전소(5)
+
+interface StageCfg {
+  particleCount: number
+  maxHeight: number       // 불꽃 최대 높이 (격자 높이 대비 비율)
+  baseSpeed: number       // 상승 기본 속도
+  spreadX: number         // 수평 퍼짐 정도
+  turbulence: number      // 흔들림 강도
+  baseSize: number        // 파티클 기본 크기 (격자 너비 대비)
+  // 높이별 색상 그라디언트 (바닥→꼭대기)
+  colorStops: [number, number, number, number][]  // [r, g, b, a]
+  coreAlpha: number       // 바닥 코어 밝기
+  glowRadius: number      // 바닥 글로우 반경 (격자 너비 대비)
+  // 원거리 글로우 도트
+  dotColor: string
+  dotSize: number         // 최소 px 크기
+  dotPulse: number        // 펄스 속도
+}
+
+const STAGES: (StageCfg | null)[] = [
+  null, // 0: 없음
+  { // 1: 불씨 — 작은 잔불, 은은한 빛
+    particleCount: 12,
+    maxHeight: 0.5,
+    baseSpeed: 0.006,
+    spreadX: 0.15,
     turbulence: 0.002,
-    glowAlpha: 0.18,
-    glowColor: [255, 50, 0],
+    baseSize: 0.18,
+    colorStops: [
+      [255, 200, 80, 0.9],   // 바닥: 노란빛
+      [220, 100, 20, 0.6],   // 중간: 주황
+      [150, 40, 0, 0.2],     // 상단: 어두운 빨강
+      [80, 20, 0, 0],        // 꼭대기: 투명
+    ],
+    coreAlpha: 0.3,
+    glowRadius: 0.4,
+    dotColor: '#ff6b35',
+    dotSize: 8,
+    dotPulse: 0.03,
   },
-  {
-    // 4: 대화재 — 맹렬한 화염, 흰색 핵심부
-    flameCount: 38,
-    maxFlameH: 0.85,
-    flameSpeed: 0.01,
-    colors: ['#ff0000', '#ff2200', '#ff6b35', '#ffdd00', '#ffffcc'],
+  { // 2: 모닥불 — 따뜻한 불꽃
+    particleCount: 25,
+    maxHeight: 0.7,
+    baseSpeed: 0.008,
+    spreadX: 0.2,
     turbulence: 0.003,
-    glowAlpha: 0.28,
-    glowColor: [255, 30, 0],
+    baseSize: 0.22,
+    colorStops: [
+      [255, 240, 150, 1.0],  // 밝은 노랑
+      [255, 150, 30, 0.8],   // 주황
+      [220, 60, 0, 0.4],     // 빨강
+      [120, 20, 0, 0],
+    ],
+    coreAlpha: 0.5,
+    glowRadius: 0.5,
+    dotColor: '#ff8c42',
+    dotSize: 10,
+    dotPulse: 0.04,
   },
-  {
-    // 5: 전소 — 검은 연기+잔불, 재가 된 상태
-    flameCount: 15,
-    maxFlameH: 0.3,
-    flameSpeed: 0.003,
-    colors: ['#882200', '#aa3300', '#ff4500', '#444444'],
-    turbulence: 0.001,
-    glowAlpha: 0.06,
-    glowColor: [180, 40, 0],
+  { // 3: 화재 — 격렬한 불
+    particleCount: 45,
+    maxHeight: 0.9,
+    baseSpeed: 0.01,
+    spreadX: 0.25,
+    turbulence: 0.004,
+    baseSize: 0.25,
+    colorStops: [
+      [255, 255, 200, 1.0],  // 흰노랑 코어
+      [255, 180, 40, 0.9],   // 밝은 주황
+      [255, 80, 0, 0.5],     // 주황빨강
+      [180, 20, 0, 0],
+    ],
+    coreAlpha: 0.7,
+    glowRadius: 0.6,
+    dotColor: '#ff4500',
+    dotSize: 14,
+    dotPulse: 0.05,
+  },
+  { // 4: 대화재 — 맹렬한 화염, 흰색 핵심부
+    particleCount: 70,
+    maxHeight: 1.2,
+    baseSpeed: 0.013,
+    spreadX: 0.3,
+    turbulence: 0.005,
+    baseSize: 0.3,
+    colorStops: [
+      [255, 255, 240, 1.0],  // 거의 흰색 코어
+      [255, 220, 80, 1.0],   // 밝은 노랑
+      [255, 120, 10, 0.7],   // 주황
+      [200, 30, 0, 0.1],
+    ],
+    coreAlpha: 0.9,
+    glowRadius: 0.8,
+    dotColor: '#ff2200',
+    dotSize: 18,
+    dotPulse: 0.07,
+  },
+  { // 5: 전소 — 잿불 + 검은 연기
+    particleCount: 20,
+    maxHeight: 0.4,
+    baseSpeed: 0.004,
+    spreadX: 0.3,
+    turbulence: 0.002,
+    baseSize: 0.2,
+    colorStops: [
+      [200, 100, 30, 0.6],   // 어두운 주황
+      [150, 50, 10, 0.4],    // 어두운 빨강
+      [80, 30, 10, 0.2],     // 거의 검정
+      [40, 15, 5, 0],
+    ],
+    coreAlpha: 0.15,
+    glowRadius: 0.3,
+    dotColor: '#882200',
+    dotSize: 10,
+    dotPulse: 0.02,
   },
 ]
+
+// ── 줌 임계값 ──
+const GLOW_DOT_ZOOM = 13   // 이 줌 미만이면 글로우 도트로 전환
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
 
-// 화염방사기 스트림 파티클
-interface StreamParticle {
-  x: number
-  y: number
-  vx: number
-  vy: number
-  life: number
-  maxLife: number
-  size: number
-  colorIdx: number
-}
-
 const STREAM_COLORS = ['#ff4500', '#ff6b35', '#ffaa00', '#ffdd00', '#ffffff']
 
-function spawnFlame(cfg: (typeof STAGE)[1]): Flame {
-  if (!cfg) return {} as Flame
+// ── 파티클 생성 ──
+
+function spawnFlame(cfg: StageCfg): Flame {
+  const life = 40 + Math.random() * 50
   return {
-    rx: Math.random(),
+    rx: 0.3 + Math.random() * 0.4, // 중앙 근처에서 시작
     ry: 0,
-    vx: (Math.random() - 0.5) * cfg.turbulence,
-    vy: cfg.flameSpeed * (0.6 + Math.random() * 0.8),
-    life: 30 + Math.random() * 40,
-    maxLife: 30 + Math.random() * 40,
-    size: 0.15 + Math.random() * 0.25,
-    colorIdx: Math.floor(Math.random() * cfg.colors.length),
+    vx: (Math.random() - 0.5) * cfg.spreadX * 0.02,
+    vy: cfg.baseSpeed * (0.7 + Math.random() * 0.6),
+    life,
+    maxLife: life,
+    size: cfg.baseSize * (0.6 + Math.random() * 0.8),
+    seed: Math.random(),
   }
 }
 
-/** 불꽃 모양 — 아래가 넓고 위가 뾰족한 역물방울 */
-function drawFlameShape(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  color: string,
-  alpha: number,
-) {
-  ctx.globalAlpha = alpha
-  ctx.fillStyle = color
+// ── 높이에 따른 색상 보간 ──
 
-  ctx.beginPath()
-  // 꼭대기 뾰족 점
-  ctx.moveTo(x, y - h)
-  // 왼쪽 곡선
-  ctx.bezierCurveTo(
-    x - w * 0.3, y - h * 0.6,
-    x - w * 0.5, y - h * 0.1,
-    x - w * 0.4, y,
-  )
-  // 바닥 둥근 부분
-  ctx.quadraticCurveTo(x, y + h * 0.15, x + w * 0.4, y)
-  // 오른쪽 곡선
-  ctx.bezierCurveTo(
-    x + w * 0.5, y - h * 0.1,
-    x + w * 0.3, y - h * 0.6,
-    x, y - h,
-  )
-  ctx.closePath()
-  ctx.fill()
+function getFlameColor(cfg: StageCfg, heightRatio: number): [number, number, number, number] {
+  const stops = cfg.colorStops
+  const t = Math.min(heightRatio, 1) * (stops.length - 1)
+  const i = Math.floor(t)
+  const f = t - i
+  const a = stops[Math.min(i, stops.length - 1)]
+  const b = stops[Math.min(i + 1, stops.length - 1)]
+  return [
+    a[0] + (b[0] - a[0]) * f,
+    a[1] + (b[1] - a[1]) * f,
+    a[2] + (b[2] - a[2]) * f,
+    a[3] + (b[3] - a[3]) * f,
+  ]
 }
+
+// ── 메인 컴포넌트 ──
 
 export function FireCanvas() {
   const map = useMap()
@@ -162,7 +204,6 @@ export function FireCanvas() {
   const firesRef = useRef(fires)
   firesRef.current = fires
 
-  // 애니메이션 스토어 (성냥 + 화염방사기)
   const matches = useAnimationStore((s) => s.matches)
   const matchesRef = useRef(matches)
   matchesRef.current = matches
@@ -206,21 +247,24 @@ export function FireCanvas() {
     map.on('resize', resize)
     map.on('zoom', resize)
 
-    let time = 0
+    let frameCount = 0
 
     const animate = () => {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       animRef.current = requestAnimationFrame(animate)
 
-      time++
+      frameCount++
       const dpr = window.devicePixelRatio
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.save()
       ctx.scale(dpr, dpr)
 
+      const zoom = map.getZoom()
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
+      const sw = canvas.width / dpr
+      const sh = canvas.height / dpr
 
       // 불 없는 격자의 파티클 제거
       for (const gid of allFlames.keys()) {
@@ -228,10 +272,9 @@ export function FireCanvas() {
       }
 
       for (const [gridId, cell] of currentFires) {
-        const cfg = STAGE[cell.stage] ?? STAGE[1]
+        const cfg = STAGES[cell.stage] ?? STAGES[1]
         if (!cfg) continue
 
-        // 격자 → 픽셀 좌표
         const [latStr, lngStr] = gridId.split(':')
         const gLat = Number(latStr) * LAT_UNIT
         const gLng = Number(lngStr) * LNG_UNIT
@@ -244,147 +287,176 @@ export function FireCanvas() {
         const w = Math.abs(br.x - tl.x)
         const h = Math.abs(br.y - tl.y)
 
-        // 화면 밖이면 스킵
-        const sw = canvas.width / dpr
-        const sh = canvas.height / dpr
-        if (left + w < 0 || left > sw || top + h < 0 || top > sh) continue
+        const cx = left + w / 2
+        const cy = top + h / 2
 
-        // ── 화염 애니메이션 (모든 줌 레벨) ──
-        if (w > 4) {
-          // 화염 파티클 관리
-          if (!allFlames.has(gridId)) allFlames.set(gridId, [])
-          const flames = allFlames.get(gridId)!
+        // 화면 밖이면 스킵 (여유 포함)
+        const margin = 30
+        if (cx + margin < 0 || cx - margin > sw || cy + margin < 0 || cy - margin > sh) continue
 
-          // 부족한 파티클 보충
-          while (flames.length < cfg.flameCount) {
-            const f = spawnFlame(cfg)
-            // 첫 생성 시 랜덤 높이로 흩뿌림 (시작부터 자연스럽게)
-            f.ry = Math.random() * cfg.maxFlameH
-            f.life = Math.random() * f.maxLife
-            flames.push(f)
-          }
+        // ── 줌 축소: 글로우 도트 ──
+        if (zoom < GLOW_DOT_ZOOM) {
+          const pulse = Math.sin(frameCount * cfg.dotPulse) * 0.3 + 0.7
+          const dotR = Math.max(cfg.dotSize, 6) * pulse
 
-          // 격자 영역으로 clip — 불꽃이 절대 밖으로 안 나감
-          ctx.save()
-          ctx.beginPath()
-          ctx.rect(left, top, w, h)
-          ctx.clip()
-
-          // 하단 글로우 (바닥에서 불이 타는 느낌)
-          const [gr, gg, gb] = cfg.glowColor
-          const glowGrad = ctx.createLinearGradient(left, top + h, left, top + h * 0.3)
-          glowGrad.addColorStop(0, `rgba(${gr}, ${gg}, ${gb}, ${cfg.glowAlpha})`)
-          glowGrad.addColorStop(0.5, `rgba(${gr}, ${Math.floor(gg * 0.5)}, ${Math.floor(gb * 0.5)}, ${cfg.glowAlpha * 0.4})`)
-          glowGrad.addColorStop(1, `rgba(${gr}, 0, 0, 0)`)
           ctx.globalCompositeOperation = 'lighter'
-          ctx.fillStyle = glowGrad
-          ctx.fillRect(left, top, w, h)
 
-          // 화염 파티클 업데이트 & 렌더
-          for (let i = flames.length - 1; i >= 0; i--) {
-            const f = flames[i]
+          // 외부 글로우
+          const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotR * 2.5)
+          outerGlow.addColorStop(0, cfg.dotColor + '60')
+          outerGlow.addColorStop(0.5, cfg.dotColor + '20')
+          outerGlow.addColorStop(1, cfg.dotColor + '00')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = outerGlow
+          ctx.beginPath()
+          ctx.arc(cx, cy, dotR * 2.5, 0, Math.PI * 2)
+          ctx.fill()
 
-            // 물리 업데이트
-            f.ry += f.vy
-            f.rx += f.vx
-            f.vx += (Math.random() - 0.5) * cfg.turbulence * 2 // 흔들림
-            f.life--
+          // 내부 밝은 코어
+          const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotR)
+          coreGlow.addColorStop(0, '#ffffcc')
+          coreGlow.addColorStop(0.4, cfg.dotColor)
+          coreGlow.addColorStop(1, cfg.dotColor + '00')
+          ctx.globalAlpha = pulse
+          ctx.fillStyle = coreGlow
+          ctx.beginPath()
+          ctx.arc(cx, cy, dotR, 0, Math.PI * 2)
+          ctx.fill()
 
-            // 수명 종료 또는 격자 상단 초과 → 재생성
-            if (f.life <= 0 || f.ry > cfg.maxFlameH) {
-              flames[i] = spawnFlame(cfg)
-              continue
-            }
+          continue
+        }
 
-            // rx는 0~1 범위 순환
-            if (f.rx < 0) f.rx += 1
-            if (f.rx > 1) f.rx -= 1
+        // ── 줌 확대: 화염 파티클 ──
+        if (w < 3) continue
 
-            const lifeRatio = f.life / f.maxLife
+        if (!allFlames.has(gridId)) allFlames.set(gridId, [])
+        const flames = allFlames.get(gridId)!
 
-            // 화면 좌표 계산
-            // ry: 0=바닥, maxFlameH=최대 높이
-            const px = left + f.rx * w
-            const py = top + h - (f.ry / cfg.maxFlameH) * h * cfg.maxFlameH
+        // 파티클 보충
+        while (flames.length < cfg.particleCount) {
+          const f = spawnFlame(cfg)
+          f.ry = Math.random() * cfg.maxHeight
+          f.life = Math.random() * f.maxLife
+          flames.push(f)
+        }
+        // 초과 파티클 제거
+        while (flames.length > cfg.particleCount) {
+          flames.pop()
+        }
 
-            // 불꽃 크기: 바닥에서 클수록 크고, 올라갈수록 작아짐
-            const sizeScale = (1 - f.ry / cfg.maxFlameH) * 0.7 + 0.3
-            const flameW = w * f.size * sizeScale * 0.3
-            const flameH = h * f.size * sizeScale * 0.5
+        // 격자 클리핑 (위로는 확장 — 불꽃이 격자 위로 타오름)
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(left - w * 0.2, top - h * cfg.maxHeight, w * 1.4, h * (1 + cfg.maxHeight))
+        ctx.clip()
 
-            if (flameW < 1 || flameH < 1) continue
+        ctx.globalCompositeOperation = 'lighter'
 
-            const color = cfg.colors[f.colorIdx]
-            const alpha = lifeRatio * (0.6 + sizeScale * 0.4)
+        // ── 바닥 코어 글로우 ──
+        const coreX = cx
+        const coreY = top + h  // 격자 바닥
+        const coreR = w * cfg.glowRadius
 
-            // 바닥 근처 불꽃: 밝은 색(노란/흰), 위쪽: 어두운 색(빨강)
-            ctx.globalCompositeOperation = 'lighter'
-            drawFlameShape(ctx, px, py, flameW, flameH, color, alpha)
+        const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, coreR)
+        coreGrad.addColorStop(0, `rgba(255, 220, 100, ${cfg.coreAlpha})`)
+        coreGrad.addColorStop(0.3, `rgba(255, 150, 30, ${cfg.coreAlpha * 0.6})`)
+        coreGrad.addColorStop(0.7, `rgba(200, 50, 0, ${cfg.coreAlpha * 0.2})`)
+        coreGrad.addColorStop(1, 'rgba(150, 20, 0, 0)')
+        ctx.globalAlpha = 1
+        ctx.fillStyle = coreGrad
+        ctx.beginPath()
+        ctx.arc(coreX, coreY, coreR, 0, Math.PI * 2)
+        ctx.fill()
 
-            // 바닥 근처에 추가 글로우
-            if (f.ry < cfg.maxFlameH * 0.3) {
-              const glowR = flameW * 1.5
-              const glow = ctx.createRadialGradient(px, py, 0, px, py, glowR)
-              glow.addColorStop(0, `rgba(255, 150, 0, ${alpha * 0.3})`)
-              glow.addColorStop(1, 'rgba(255, 50, 0, 0)')
-              ctx.globalAlpha = alpha * 0.5
-              ctx.fillStyle = glow
-              ctx.beginPath()
-              ctx.arc(px, py, glowR, 0, Math.PI * 2)
-              ctx.fill()
-            }
+        // ── 화염 파티클 업데이트 & 렌더 ──
+        for (let i = flames.length - 1; i >= 0; i--) {
+          const f = flames[i]
+
+          // 물리
+          f.ry += f.vy
+          f.rx += f.vx
+          f.vx += (Math.random() - 0.5) * cfg.turbulence
+          // 위로 갈수록 좌우 흔들림 증가
+          f.vx *= 0.98
+          f.life--
+
+          if (f.life <= 0 || f.ry > cfg.maxHeight) {
+            flames[i] = spawnFlame(cfg)
+            continue
           }
 
-          ctx.restore() // clip 해제
+          // rx 범위 제한
+          f.rx = Math.max(0.05, Math.min(0.95, f.rx))
+
+          const heightRatio = f.ry / cfg.maxHeight
+          const lifeRatio = f.life / f.maxLife
+
+          // 화면 좌표
+          const px = left + f.rx * w
+          const py = (top + h) - f.ry * h  // 바닥에서 위로
+
+          // 크기: 바닥에서 크고, 위로 갈수록 작아짐 (역삼각형 형태)
+          const sizeDecay = (1 - heightRatio * 0.7)
+          const particleR = w * f.size * sizeDecay * 0.5
+          if (particleR < 0.5) continue
+
+          // 높이에 따른 색상
+          const [cr, cg, cb, ca] = getFlameColor(cfg, heightRatio)
+          const alpha = ca * lifeRatio * sizeDecay
+
+          if (alpha < 0.01) continue
+
+          // 소프트 라디얼 그라디언트 파티클
+          const grad = ctx.createRadialGradient(px, py, 0, px, py, particleR)
+          grad.addColorStop(0, `rgba(${Math.round(cr)}, ${Math.round(cg)}, ${Math.round(cb)}, ${alpha})`)
+          grad.addColorStop(0.4, `rgba(${Math.round(cr * 0.9)}, ${Math.round(cg * 0.7)}, ${Math.round(cb * 0.5)}, ${alpha * 0.6})`)
+          grad.addColorStop(1, `rgba(${Math.round(cr * 0.5)}, ${Math.round(cg * 0.2)}, 0, 0)`)
+
+          ctx.globalAlpha = 1
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.arc(px, py, particleR, 0, Math.PI * 2)
+          ctx.fill()
         }
+
+        ctx.restore() // clip 해제
       }
 
-      // ── 성냥 던지기 포물선 애니메이션 ──
+      // ── 성냥 던지기 포물선 ──
       const now = performance.now()
-      const sw = canvas.width / dpr
-      const sh = canvas.height / dpr
 
       for (const m of matchesRef.current) {
         const elapsed = now - m.startTime
         const progress = Math.min(elapsed / MATCH_DURATION, 1)
 
-        // 대상 격자 중심 좌표 계산
         const [mLatStr, mLngStr] = m.gridId.split(':')
         const mLat = Number(mLatStr) * LAT_UNIT + LAT_UNIT / 2
         const mLng = Number(mLngStr) * LNG_UNIT + LNG_UNIT / 2
         const targetPt = map.latLngToContainerPoint(L.latLng(mLat, mLng))
 
-        // 시작점: 화면 하단 중앙 (버튼 위치)
         const startX = sw / 2
         const startY = sh - 80
-
-        // 포물선 보간 (위로 볼록)
         const t = progress
         const x = startX + (targetPt.x - startX) * t
-        const parabola = -4 * t * (t - 1) // 0→1→0 포물선
+        const parabola = -4 * t * (t - 1)
         const baseY = startY + (targetPt.y - startY) * t
-        const y = baseY - parabola * 120 // 포물선 높이
+        const y = baseY - parabola * 120
 
-        // 성냥 회전 (2바퀴)
         const rotation = t * Math.PI * 4
 
         ctx.save()
-        ctx.globalAlpha = 1 - t * 0.3 // 도달 시 약간 투명
+        ctx.globalAlpha = 1 - t * 0.3
         ctx.globalCompositeOperation = 'source-over'
         ctx.translate(x, y)
         ctx.rotate(rotation)
 
-        // 성냥 몸체
         ctx.fillStyle = '#8B6914'
         ctx.fillRect(-2, -10, 4, 16)
-
-        // 성냥 머리 (빨간색 + 불꽃)
         ctx.fillStyle = '#ff4444'
         ctx.beginPath()
         ctx.arc(0, -10, 4, 0, Math.PI * 2)
         ctx.fill()
 
-        // 불꽃 이펙트
         if (t < 0.8) {
           ctx.fillStyle = '#ffaa00'
           ctx.globalAlpha = 0.8 - t
@@ -397,13 +469,12 @@ export function FireCanvas() {
 
         ctx.restore()
 
-        // 완료된 성냥 제거
         if (progress >= 1) {
           removeMatchRef.current(m.id)
         }
       }
 
-      // ── 화염방사기 스트림 파티클 ──
+      // ── 화염방사기 스트림 ──
       if (flamethrowerRef.current && targetGridRef.current) {
         const gid = targetGridRef.current
         const [fLatStr, fLngStr] = gid.split(':')
@@ -414,7 +485,6 @@ export function FireCanvas() {
         const srcX = sw / 2
         const srcY = sh - 80
 
-        // 새 스트림 파티클 생성 (프레임당 3개)
         for (let i = 0; i < 3; i++) {
           const dx = targetPt.x - srcX
           const dy = targetPt.y - srcY
@@ -433,19 +503,13 @@ export function FireCanvas() {
         }
       }
 
-      // 스트림 파티클 업데이트 & 렌더
       const stream = streamRef.current
       for (let i = stream.length - 1; i >= 0; i--) {
         const p = stream[i]
         p.x += p.vx
         p.y += p.vy
         p.life--
-
-        if (p.life <= 0) {
-          stream.splice(i, 1)
-          continue
-        }
-
+        if (p.life <= 0) { stream.splice(i, 1); continue }
         const lifeRatio = p.life / p.maxLife
         ctx.globalAlpha = lifeRatio * 0.9
         ctx.globalCompositeOperation = 'lighter'
@@ -455,14 +519,13 @@ export function FireCanvas() {
         ctx.fill()
       }
 
-      // ── 전소 폭발 이펙트 (5단계) ──
+      // ── 전소 폭발 이펙트 ──
       const EXPLOSION_DURATION = 2000
 
       for (const exp of explosionsRef.current) {
         const elapsed = now - exp.startTime
         const progress = Math.min(elapsed / EXPLOSION_DURATION, 1)
 
-        // 폭발 중심 좌표
         const [eLat, eLng] = exp.gridId.split(':')
         const eCenterLat = Number(eLat) * LAT_UNIT + LAT_UNIT / 2
         const eCenterLng = Number(eLng) * LNG_UNIT + LNG_UNIT / 2
@@ -470,7 +533,6 @@ export function FireCanvas() {
 
         ctx.globalCompositeOperation = 'lighter'
 
-        // 방사형 파티클 (원형으로 퍼져나감)
         const particleCount = 24
         for (let i = 0; i < particleCount; i++) {
           const angle = (i / particleCount) * Math.PI * 2
@@ -479,7 +541,6 @@ export function FireCanvas() {
           const px = ePt.x + Math.cos(angle) * radius
           const py = ePt.y + Math.sin(angle) * radius
           const pSize = (1 - progress) * (4 + Math.random() * 6)
-
           const colorChoices = ['#ff0000', '#ff4500', '#ffaa00', '#ffdd00', '#ffffff']
           ctx.fillStyle = colorChoices[i % colorChoices.length]
           ctx.globalAlpha = (1 - progress) * 0.8
@@ -488,7 +549,6 @@ export function FireCanvas() {
           ctx.fill()
         }
 
-        // 중앙 플래시 글로우
         if (progress < 0.5) {
           const flashAlpha = (1 - progress * 2) * 0.4
           const flashRadius = 80 + progress * 200
@@ -503,7 +563,6 @@ export function FireCanvas() {
           ctx.fill()
         }
 
-        // 화면 전체 플래시 (처음 0.3초)
         if (progress < 0.15) {
           ctx.globalCompositeOperation = 'source-over'
           ctx.globalAlpha = (1 - progress / 0.15) * 0.25
