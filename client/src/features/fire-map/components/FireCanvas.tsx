@@ -18,7 +18,6 @@ import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
 import { GRID_SIZE } from '../../../lib/config'
-import { fetchBuildings, type BuildingPolygon } from '../utils/buildings'
 
 // 화염 파티클
 interface Flame {
@@ -119,9 +118,6 @@ interface StreamParticle {
 
 const STREAM_COLORS = ['#ff4500', '#ff6b35', '#ffaa00', '#ffdd00', '#ffffff']
 
-/** 건물 LOD 줌 임계값 */
-const BUILDING_ZOOM_THRESHOLD = 16
-
 function spawnFlame(cfg: (typeof STAGE)[1]): Flame {
   if (!cfg) return {} as Flame
   return {
@@ -175,8 +171,6 @@ export function FireCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
   const streamRef = useRef<StreamParticle[]>([])
-  const buildingsRef = useRef<BuildingPolygon[]>([])
-  const buildingFetchKeyRef = useRef('')
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
@@ -226,68 +220,7 @@ export function FireCanvas() {
     map.on('resize', resize)
     map.on('zoom', resize)
 
-    // 건물 LOD: 뷰포트 변경 시 건물 데이터 fetch
-    const fetchBuildingsForViewport = () => {
-      const zoom = map.getZoom()
-      if (zoom < BUILDING_ZOOM_THRESHOLD) {
-        buildingsRef.current = []
-        buildingFetchKeyRef.current = ''
-        return
-      }
-      const bounds = map.getBounds()
-      const key = `${bounds.getSouth().toFixed(3)},${bounds.getWest().toFixed(3)},${bounds.getNorth().toFixed(3)},${bounds.getEast().toFixed(3)}`
-      if (key !== buildingFetchKeyRef.current) {
-        buildingFetchKeyRef.current = key
-        fetchBuildings(
-          bounds.getSouth(), bounds.getWest(),
-          bounds.getNorth(), bounds.getEast(),
-        ).then((b) => { buildingsRef.current = b })
-      }
-    }
-    // 즉시 + 이동/줌 시 fetch
-    fetchBuildingsForViewport()
-    map.on('moveend', fetchBuildingsForViewport)
-    map.on('zoomend', fetchBuildingsForViewport)
-
     let time = 0
-
-    // 건물 폴리곤 경로를 ctx에 추가하는 헬퍼
-    const traceBuildingPath = (
-      ctx: CanvasRenderingContext2D,
-      bldg: BuildingPolygon,
-    ) => {
-      for (let ci = 0; ci < bldg.coords.length; ci++) {
-        const pt = map.latLngToContainerPoint(
-          L.latLng(bldg.coords[ci][0], bldg.coords[ci][1]),
-        )
-        if (ci === 0) ctx.moveTo(pt.x, pt.y)
-        else ctx.lineTo(pt.x, pt.y)
-      }
-      ctx.closePath()
-    }
-
-    // 격자에 겹치는 건물들 찾기 (AABB 바운딩 박스 교차)
-    const findOverlappingBuildings = (
-      gLat0: number, gLng0: number, gLat1: number, gLng1: number,
-    ): BuildingPolygon[] => {
-      const result: BuildingPolygon[] = []
-      for (const bldg of buildingsRef.current) {
-        // 건물 바운딩 박스 계산
-        let minLat = Infinity, maxLat = -Infinity
-        let minLng = Infinity, maxLng = -Infinity
-        for (const [bLat, bLng] of bldg.coords) {
-          if (bLat < minLat) minLat = bLat
-          if (bLat > maxLat) maxLat = bLat
-          if (bLng < minLng) minLng = bLng
-          if (bLng > maxLng) maxLng = bLng
-        }
-        // AABB 교차: 건물 bbox와 격자가 겹치면 매칭
-        if (maxLat >= gLat0 && minLat <= gLat1 && maxLng >= gLng0 && minLng <= gLng1) {
-          result.push(bldg)
-        }
-      }
-      return result
-    }
 
     const animate = () => {
       const ctx = canvas.getContext('2d')
@@ -302,7 +235,6 @@ export function FireCanvas() {
 
       const zoom = map.getZoom()
       const showAnim = zoom >= ANIM_ZOOM_THRESHOLD
-      const showBuildings = zoom >= BUILDING_ZOOM_THRESHOLD && buildingsRef.current.length > 0
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
 
@@ -333,39 +265,18 @@ export function FireCanvas() {
         const sh = canvas.height / dpr
         if (left + w < 0 || left > sw || top + h < 0 || top > sh) continue
 
-        // 건물 모드: 이 격자에 겹치는 건물 찾기
-        const gLat0 = Number(latStr) * GRID_SIZE
-        const gLng0 = Number(lngStr) * GRID_SIZE
-        const overlapping = showBuildings
-          ? findOverlappingBuildings(gLat0, gLng0, gLat0 + GRID_SIZE, gLng0 + GRID_SIZE)
-          : []
-        const useBuildingMode = overlapping.length > 0
-
-        // ── 배경 채우기 + 테두리 ──
+        // ── 항상 그리는 것: 채우기 + 테두리 ──
         ctx.globalAlpha = 1
         ctx.globalCompositeOperation = 'source-over'
 
-        if (useBuildingMode) {
-          // 건물 윤곽선만 빨갛게 + 내부 채우기 없음 (지도 타일이 보이게)
-          for (const bldg of overlapping) {
-            ctx.beginPath()
-            traceBuildingPath(ctx, bldg)
-            // 건물 내부: 아주 약한 빨간 틴트만
-            ctx.fillStyle = `rgba(255, 30, 0, ${0.08 * cell.stage})`
-            ctx.fill()
-            // 건물 윤곽: 밝은 빨간 테두리로 "불타는 건물" 강조
-            ctx.strokeStyle = cfg.border
-            ctx.lineWidth = 2.5
-            ctx.stroke()
-          }
-        } else {
-          // 기존 격자 사각형
-          ctx.fillStyle = cfg.fill
-          ctx.fillRect(left, top, w, h)
-          ctx.strokeStyle = cfg.border
-          ctx.lineWidth = zoom >= 14 ? 2 : 1
-          ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
-        }
+        // 격자 배경 채우기
+        ctx.fillStyle = cfg.fill
+        ctx.fillRect(left, top, w, h)
+
+        // 빨간 테두리
+        ctx.strokeStyle = cfg.border
+        ctx.lineWidth = zoom >= 14 ? 2 : 1
+        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
 
         // ── 확대 시에만: 화염 애니메이션 ──
         if (showAnim && w > 8) {
@@ -376,21 +287,16 @@ export function FireCanvas() {
           // 부족한 파티클 보충
           while (flames.length < cfg.flameCount) {
             const f = spawnFlame(cfg)
+            // 첫 생성 시 랜덤 높이로 흩뿌림 (시작부터 자연스럽게)
             f.ry = Math.random() * cfg.maxFlameH
             f.life = Math.random() * f.maxLife
             flames.push(f)
           }
 
-          // clip 영역: 건물 or 격자
+          // 격자 영역으로 clip — 불꽃이 절대 밖으로 안 나감
           ctx.save()
           ctx.beginPath()
-          if (useBuildingMode) {
-            for (const bldg of overlapping) {
-              traceBuildingPath(ctx, bldg)
-            }
-          } else {
-            ctx.rect(left, top, w, h)
-          }
+          ctx.rect(left, top, w, h)
           ctx.clip()
 
           // 하단 글로우 (바닥에서 불이 타는 느낌)
@@ -647,8 +553,6 @@ export function FireCanvas() {
       cancelAnimationFrame(animRef.current)
       map.off('resize', resize)
       map.off('zoom', resize)
-      map.off('moveend', fetchBuildingsForViewport)
-      map.off('zoomend', fetchBuildingsForViewport)
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas)
     }
   }, [map])
