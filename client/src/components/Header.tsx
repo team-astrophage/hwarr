@@ -11,9 +11,12 @@ export function Header() {
         ${isMap ? 'absolute top-0 left-0 right-0 z-[1000]' : 'bg-[var(--color-bg-base)]'}
       `}
     >
-      <Link to="/" className="flex items-center gap-2">
-        <span className="text-[1rem] font-bold text-[var(--color-text-base)] leading-none">
-          MELT<span className="text-[var(--color-accent)]">TOWN</span>
+      <Link to="/" className="flex items-center gap-1.5">
+        <span className="text-[1.125rem] font-extrabold text-[var(--color-text-base)] leading-none tracking-tight">
+          화르르
+        </span>
+        <span className="text-[0.625rem] font-bold text-[var(--color-text-secondary)] leading-none uppercase tracking-[1.5px]">
+          hwarr
         </span>
       </Link>
 
