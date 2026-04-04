@@ -11,6 +11,8 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
+from config import STATS_TOTAL_FIRES_KEY
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["stats"])
@@ -39,6 +41,7 @@ async def get_stats() -> dict:
     """
     engine = _get_engine()
     mgr = _get_manager()
+    redis = engine._redis
     now = time.time()
 
     grid_ids = await engine._get_active_grid_ids()
@@ -51,8 +54,13 @@ async def get_stats() -> dict:
             active_grids += 1
             total_fires += count
 
+    # Cumulative total fires (persisted across restarts with Redis AOF)
+    cumulative_raw = await redis.get(STATS_TOTAL_FIRES_KEY)
+    cumulative_fires = int(cumulative_raw) if cumulative_raw else 0
+
     return {
         "activeGrids": active_grids,
         "totalFires": total_fires,
+        "cumulativeFires": cumulative_fires,
         "onlineUsers": mgr.active_count,
     }

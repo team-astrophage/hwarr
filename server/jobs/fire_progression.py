@@ -22,6 +22,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Protocol
 
+from config import STATS_TOTAL_FIRES_KEY
 from models.fire import (
     FireStage,
     build_grid_state,
@@ -626,6 +627,9 @@ class FireProgressionEngine:
 
         # Track this grid as active
         await self._redis.sadd(ACTIVE_GRIDS_KEY, grid_id)
+
+        # Increment cumulative fire counter
+        await self._redis.incr(STATS_TOTAL_FIRES_KEY)
 
         # Get current active count
         active_count = await self._redis.zcount(key, now, "+inf")

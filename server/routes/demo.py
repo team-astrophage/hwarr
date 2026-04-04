@@ -25,6 +25,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from config import FIRE_TTL_SEC
 from grid import to_grid_id
 from models.fire import build_grid_state
 from routes.map_config import _PREDEFINED_LOCATIONS, FIRE_LOCATIONS, FireLocation
@@ -32,9 +33,6 @@ from routes.map_config import _PREDEFINED_LOCATIONS, FIRE_LOCATIONS, FireLocatio
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
-
-# Fire event TTL — 3 hours (matches sio/events.py)
-FIRE_TTL_SEC = 10800
 
 
 # ---------------------------------------------------------------------------

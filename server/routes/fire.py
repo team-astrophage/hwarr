@@ -18,15 +18,13 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from config import FIRE_TTL_SEC
 from grid import to_grid_id, grid_id_to_center, get_grids_in_viewport
 from models.fire import build_grid_state, get_stage, GridState
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["fire"])
-
-# Fire event TTL — 3 hours (matches sio/events.py)
-FIRE_TTL_SEC = 10800
 
 
 # ---------------------------------------------------------------------------

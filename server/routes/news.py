@@ -12,14 +12,13 @@ import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from config import NEWS_TTL_SEC
 from grid import grid_id_to_center
 from models.fire import FireStage, get_stage, STAGE_CONFIGS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["news"])
-
-FIRE_TTL_SEC = 10800
 MAX_NEWS_ITEMS = 5
 
 # ---------------------------------------------------------------------------
@@ -254,7 +253,7 @@ async def _get_latest_ignite_ts(redis, grid_id: str) -> float | None:
     if not latest:
         return None
     _, expiry_score = latest[0]
-    return float(expiry_score) - FIRE_TTL_SEC
+    return float(expiry_score) - NEWS_TTL_SEC
 
 
 # ---------------------------------------------------------------------------

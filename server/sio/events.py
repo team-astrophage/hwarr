@@ -17,6 +17,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from config import FIRE_TTL_SEC
 from grid import get_grids_in_viewport, to_grid_id
 from models.fire import build_grid_state, get_stage
 from routes.map_config import _PREDEFINED_LOCATIONS
@@ -28,9 +29,6 @@ if TYPE_CHECKING:
     from sio.connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
-
-# Fire event TTL — 3 hours
-FIRE_TTL_SEC = 10800
 
 
 def register_fire_events(
