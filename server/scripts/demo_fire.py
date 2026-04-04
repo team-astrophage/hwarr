@@ -10,7 +10,6 @@ Usage:
     python scripts/demo_fire.py --url http://<서버IP>:8000
     python scripts/demo_fire.py --speed 0.1
     python scripts/demo_fire.py --phase 1
-    python scripts/demo_fire.py --no-reset
 """
 
 from __future__ import annotations
@@ -245,11 +244,6 @@ async def main() -> None:
         default=0.3,
         help="요청 간 딜레이(초), 기본값 0.3",
     )
-    parser.add_argument(
-        "--no-reset",
-        action="store_true",
-        help="기존 화재 데이터를 초기화하지 않음",
-    )
     args = parser.parse_args()
 
     url: str = args.url.rstrip("/")
@@ -272,20 +266,6 @@ async def main() -> None:
             _log(f"서버 연결 실패: {e}")
             sys.exit(1)
         _log("")
-
-        # Reset
-        if not args.no_reset:
-            _log("기존 화재 데이터 초기화 중...")
-            try:
-                resp = await client.post(f"{url}/api/reset", follow_redirects=True)
-                if resp.status_code == 200:
-                    body = resp.json()
-                    _log(f"  초기화 완료: {body.get('deleted_keys', 0)}개 키 삭제")
-                else:
-                    _log(f"  초기화 실패 (HTTP {resp.status_code})")
-            except Exception as e:
-                _log(f"  초기화 요청 실패: {e}")
-            _log("")
 
         locations = LOCATIONS[:]
         random.shuffle(locations)
