@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 import { useStats } from '../api/useStats'
-import { NewsFeed } from './NewsFeed'
+import { RankingFeed } from './RankingFeed'
 import { StatCard } from './StatCard'
 
 export function LandingPage() {
@@ -65,8 +65,8 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* News */}
-        <NewsFeed />
+        {/* Today's ranking */}
+        <RankingFeed />
       </main>
 
       <footer className="pointer-events-none fixed bottom-0 left-1/2 z-[100] w-full max-w-[430px] -translate-x-1/2">

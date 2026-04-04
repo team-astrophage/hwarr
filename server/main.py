@@ -20,6 +20,7 @@ from routes.fire import router as fire_router
 from routes.map_config import router as map_config_router
 from routes.news import router as news_router
 from routes.qr import router as qr_router
+from routes.ranking import router as ranking_router
 from routes.reset import router as reset_router
 from routes.stats import router as stats_router
 from sio.connection_manager import (
@@ -88,6 +89,7 @@ app.include_router(qr_router)
 app.include_router(map_config_router)
 app.include_router(demo_router)
 app.include_router(stats_router)
+app.include_router(ranking_router)
 app.include_router(reset_router)
 
 
@@ -131,6 +133,15 @@ async def startup_event():
 
         # Register fire event handlers with the engine
         register_fire_events(sio, manager, engine)
+
+        # Load admin region resolver for daily ranking (optional)
+        from pathlib import Path as _Path
+
+        from config import ADMIN_GEOJSON_PATH
+        from services.admin_region import AdminRegionResolver
+
+        resolver = AdminRegionResolver.load_or_none(_Path(ADMIN_GEOJSON_PATH))
+        engine.set_region_resolver(resolver)
 
         # Start background tasks
         engine.start()

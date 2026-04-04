@@ -4,6 +4,7 @@ All tunable constants in one place, with environment variable overrides.
 """
 
 import os
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
@@ -23,3 +24,14 @@ NEWS_TTL_SEC = int(os.getenv("NEWS_TTL_SEC", 86400))              # 1 day
 STATS_TOTAL_FIRES_KEY = "stats:total_fires"
 STATS_DAILY_FIRES_PREFIX = "stats:daily_fires:"
 STATS_DAILY_FIRES_TTL_SEC = 60 * 60 * 48  # 48h TTL (KST 자정 경계 여유)
+STATS_DAILY_RANKING_PREFIX = "stats:daily_ranking:"
+STATS_DAILY_RANKING_TTL_SEC = 60 * 60 * 48  # 48h TTL
+
+# ---------------------------------------------------------------------------
+# Admin region GeoJSON (for daily ranking)
+# ---------------------------------------------------------------------------
+
+ADMIN_GEOJSON_PATH = os.getenv(
+    "ADMIN_GEOJSON_PATH",
+    str(Path(__file__).parent / "data" / "admin_dong.geojson"),
+)

@@ -27,8 +27,11 @@ from config import (
     KST,
     STATS_DAILY_FIRES_PREFIX,
     STATS_DAILY_FIRES_TTL_SEC,
+    STATS_DAILY_RANKING_PREFIX,
+    STATS_DAILY_RANKING_TTL_SEC,
     STATS_TOTAL_FIRES_KEY,
 )
+from grid import grid_id_to_center
 from models.fire import (
     FireStage,
     build_grid_state,
@@ -49,6 +52,8 @@ from models.firefighter import (
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
+
+    from services.admin_region import AdminRegionResolver
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +105,9 @@ class FireProgressionEngine:
         # Track previous stage per grid to detect transitions
         self._grid_stages: dict[str, FireStage] = {}
 
+        # Admin region resolver for daily ranking (injected at startup; optional)
+        self._resolver: "AdminRegionResolver | None" = None
+
         # Background task references
         self._progression_task: asyncio.Task | None = None
         self._firefighter_task: asyncio.Task | None = None
@@ -114,6 +122,13 @@ class FireProgressionEngine:
     def grid_stages(self) -> dict[str, FireStage]:
         """Current tracked stage per grid (read-only copy)."""
         return dict(self._grid_stages)
+
+    def set_region_resolver(self, resolver: "AdminRegionResolver | None") -> None:
+        """Inject the admin region resolver used for daily ranking.
+
+        Accepts None to disable ranking writes without failing the pipeline.
+        """
+        self._resolver = resolver
 
     def start(self) -> None:
         """Start all background loops as asyncio tasks."""
@@ -638,9 +653,20 @@ class FireProgressionEngine:
         await self._redis.incr(STATS_TOTAL_FIRES_KEY)
 
         # Increment today's fire counter (KST-based key, 48h TTL for safe rollover)
-        today_key = f"{STATS_DAILY_FIRES_PREFIX}{datetime.now(KST).strftime('%Y-%m-%d')}"
+        today_str = datetime.now(KST).strftime("%Y-%m-%d")
+        today_key = f"{STATS_DAILY_FIRES_PREFIX}{today_str}"
         await self._redis.incr(today_key)
         await self._redis.expire(today_key, STATS_DAILY_FIRES_TTL_SEC)
+
+        # Increment today's region ranking (skip if resolver absent or point
+        # falls outside any admin polygon — cumulative/daily counters stay intact)
+        if self._resolver is not None:
+            lat, lng = grid_id_to_center(grid_id)
+            region = self._resolver.resolve(lat, lng)
+            if region:
+                rank_key = f"{STATS_DAILY_RANKING_PREFIX}{today_str}"
+                await self._redis.zincrby(rank_key, 1, region)
+                await self._redis.expire(rank_key, STATS_DAILY_RANKING_TTL_SEC)
 
         # Get current active count
         active_count = await self._redis.zcount(key, now, "+inf")

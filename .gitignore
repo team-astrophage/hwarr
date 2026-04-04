@@ -1,5 +1,8 @@
 dump.rdb
 
+# Large GeoJSON data (downloaded separately — see server/data/README.md)
+server/data/admin_dong.geojson
+
 __pycache__/
 *.pyc
 node_modules/
