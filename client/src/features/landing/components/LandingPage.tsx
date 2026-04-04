@@ -31,18 +31,18 @@ export function LandingPage() {
         {/* Stat widgets — rounded card style like reference */}
         <div className="bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-medium)] p-5 mx-5">
           <div className="flex items-center gap-4">
-            {/* 실시간 방화범 */}
+            {/* 화재 구역 */}
             <div className="flex-1">
               <p className="text-[0.6875rem] font-bold text-[var(--color-text-secondary)] uppercase tracking-[1.5px] mb-2">
-                실시간 방화범
+                화재 구역
               </p>
               <p
                 className="text-[2rem] font-bold text-[var(--color-accent)] leading-none"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {stats?.onlineUsers?.toLocaleString() ?? '--'}
+                {stats?.activeGrids?.toLocaleString() ?? '--'}
                 <span className="text-[0.875rem] font-normal text-[var(--color-text-secondary)] ml-1">
-                  명
+                  곳
                 </span>
               </p>
             </div>
@@ -50,10 +50,10 @@ export function LandingPage() {
             {/* Divider */}
             <div className="w-px h-12 bg-[var(--color-border)]" />
 
-            {/* 전국 화재 */}
+            {/* 방화 건수 */}
             <div className="flex-1">
               <p className="text-[0.6875rem] font-bold text-[var(--color-text-secondary)] uppercase tracking-[1.5px] mb-2">
-                전국 화재
+                방화 건수
               </p>
               <p
                 className="text-[2rem] font-bold text-[var(--color-accent)] leading-none"
