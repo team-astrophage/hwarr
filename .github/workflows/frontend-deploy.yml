@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "frontend/**"
+      - "client/**"
       - ".github/workflows/frontend-deploy.yml"
   workflow_dispatch:
 
@@ -32,11 +32,11 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: client
         run: npm ci
 
       - name: Build static assets
-        working-directory: frontend
+        working-directory: client
         env:
           VITE_API_URL: ${{ secrets.API_URL }}
           VITE_WS_URL: ${{ secrets.WS_URL }}
@@ -50,19 +50,19 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync frontend/dist/ s3://${{ env.S3_BUCKET }}/ \
+          aws s3 sync client/dist/ s3://${{ env.S3_BUCKET }}/ \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "index.html" \
             --exclude "*.json"
 
           # index.html and JSON manifests: no-cache for instant updates
-          aws s3 cp frontend/dist/index.html s3://${{ env.S3_BUCKET }}/index.html \
+          aws s3 cp client/dist/index.html s3://${{ env.S3_BUCKET }}/index.html \
             --cache-control "no-cache, no-store, must-revalidate"
 
           # Copy any JSON files (e.g., manifest.json) with no-cache
-          if compgen -G "frontend/dist/*.json" > /dev/null; then
-            for f in frontend/dist/*.json; do
+          if compgen -G "client/dist/*.json" > /dev/null; then
+            for f in client/dist/*.json; do
               aws s3 cp "$f" "s3://${{ env.S3_BUCKET }}/$(basename $f)" \
                 --cache-control "no-cache, no-store, must-revalidate"
             done
