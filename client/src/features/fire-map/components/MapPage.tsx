@@ -66,7 +66,7 @@ export function MapPage() {
   const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower)
   const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
-  const { address } = useReverseGeocode(lat, lng)
+  const { addressParts } = useReverseGeocode(lat, lng)
 
   // tap → 성냥 던지기 + 불 이벤트
   const handleFire = useCallback(() => {
@@ -125,14 +125,25 @@ export function MapPage() {
 
       <Header />
 
-      {/* 현재 위치 도로명 주소 */}
-      {address && (
+      {/* 현재 위치 도로명 주소 — 카드뉴스 스타일 멀티라인 */}
+      {addressParts.length > 0 && (
         <div className="absolute top-14 left-4 z-[1000]">
-          <div className="bg-[var(--color-bg-surface)]/60 backdrop-blur-sm rounded-[10px] px-3.5 py-2 shadow-[var(--shadow-medium)]">
-            <p className="text-[0.9375rem] font-bold text-white/80">
-              <span className="text-[var(--color-accent)] mr-1.5">&#x2022;</span>
-              {address}
-            </p>
+          <div className="bg-[var(--color-bg-surface)]/60 backdrop-blur-sm rounded-[12px] px-5 py-3.5 shadow-[var(--shadow-medium)]">
+            {addressParts.map((part, i) => (
+              <p
+                key={i}
+                className={
+                  i === addressParts.length - 1
+                    ? 'text-[1.375rem] font-extrabold text-white leading-tight'
+                    : i === 0
+                      ? 'text-[0.75rem] font-medium text-white/50 leading-tight'
+                      : 'text-[0.9375rem] font-semibold text-white/70 leading-tight'
+                }
+              >
+                {i === 0 && <span className="text-[var(--color-accent)] mr-1">&#x2022;</span>}
+                {part}
+              </p>
+            ))}
           </div>
         </div>
       )}
