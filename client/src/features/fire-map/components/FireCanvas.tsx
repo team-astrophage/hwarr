@@ -266,17 +266,24 @@ export function FireCanvas() {
       ctx.closePath()
     }
 
-    // 격자에 겹치는 건물들 찾기
+    // 격자에 겹치는 건물들 찾기 (AABB 바운딩 박스 교차)
     const findOverlappingBuildings = (
       gLat0: number, gLng0: number, gLat1: number, gLng1: number,
     ): BuildingPolygon[] => {
       const result: BuildingPolygon[] = []
       for (const bldg of buildingsRef.current) {
+        // 건물 바운딩 박스 계산
+        let minLat = Infinity, maxLat = -Infinity
+        let minLng = Infinity, maxLng = -Infinity
         for (const [bLat, bLng] of bldg.coords) {
-          if (bLat >= gLat0 && bLat <= gLat1 && bLng >= gLng0 && bLng <= gLng1) {
-            result.push(bldg)
-            break
-          }
+          if (bLat < minLat) minLat = bLat
+          if (bLat > maxLat) maxLat = bLat
+          if (bLng < minLng) minLng = bLng
+          if (bLng > maxLng) maxLng = bLng
+        }
+        // AABB 교차: 건물 bbox와 격자가 겹치면 매칭
+        if (maxLat >= gLat0 && minLat <= gLat1 && maxLng >= gLng0 && minLng <= gLng1) {
+          result.push(bldg)
         }
       }
       return result
@@ -339,14 +346,16 @@ export function FireCanvas() {
         ctx.globalCompositeOperation = 'source-over'
 
         if (useBuildingMode) {
-          // 건물 폴리곤 모양으로 배경 + 테두리
+          // 건물 윤곽선만 빨갛게 + 내부 채우기 없음 (지도 타일이 보이게)
           for (const bldg of overlapping) {
             ctx.beginPath()
             traceBuildingPath(ctx, bldg)
-            ctx.fillStyle = cfg.fill
+            // 건물 내부: 아주 약한 빨간 틴트만
+            ctx.fillStyle = `rgba(255, 30, 0, ${0.08 * cell.stage})`
             ctx.fill()
+            // 건물 윤곽: 밝은 빨간 테두리로 "불타는 건물" 강조
             ctx.strokeStyle = cfg.border
-            ctx.lineWidth = 2
+            ctx.lineWidth = 2.5
             ctx.stroke()
           }
         } else {
