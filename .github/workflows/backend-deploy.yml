@@ -14,9 +14,9 @@ concurrency:
 
 env:
   AWS_REGION: ap-northeast-2
-  ECR_REPOSITORY: hwarr-prod-backend
-  ECS_CLUSTER: hwarr-prod-cluster
-  ECS_SERVICE: hwarr-prod-backend
+  ECR_REPOSITORY: astrophage-hwarr-prod-backend
+  ECS_CLUSTER: astrophage-hwarr-prod-cluster
+  ECS_SERVICE: astrophage-hwarr-prod-backend
   CONTAINER_NAME: backend
 
 permissions:
