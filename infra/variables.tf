@@ -99,7 +99,7 @@ variable "redis_max_memory_mb" {
 variable "frontend_bucket_name" {
   description = "S3 bucket name for frontend static assets"
   type        = string
-  default     = "astrophage-hwarr-frontend"
+  default     = "astrophage-hwarr-frontend-unique-suffix"
 }
 
 ############################
