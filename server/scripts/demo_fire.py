@@ -142,8 +142,8 @@ async def phase_2_spread(
     _log("  각 지점을 모닥불~화재 수준으로 끌어올립니다...")
     _log("=" * 60)
 
-    clicks_per_location = 60
-    batch_size = 10
+    clicks_per_location = 40
+    batch_size = 5
 
     for loc in locations:
         last_result: dict = {}
@@ -186,8 +186,8 @@ async def phase_3_inferno(
         _log(f"    ▸ {h['name']}")
     _log("=" * 60)
 
-    target_clicks = 210
-    batch_size = 15
+    target_clicks = 160
+    batch_size = 5
 
     for loc in hotspots:
         _log(f"\n  ── {loc['name']} 집중 타격 시작 ──")
@@ -206,7 +206,7 @@ async def phase_3_inferno(
             stage = last.get("stage", 0)
             count = last.get("active_count", 0)
             label = _stage_bar(stage)
-            bar = "█" * min(count // 5, 40)
+            bar = "█" * min(count // 4, 40)
             _log(f"    {loc['name']:16s}  {label:12s}  [{bar}] {count}")
             if stage >= 5:
                 _log(f"    🚒 {loc['name']} 전소 도달! 소방관 출동!")
