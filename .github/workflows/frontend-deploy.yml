@@ -10,7 +10,7 @@ on:
 
 env:
   AWS_REGION: ap-northeast-2
-  S3_BUCKET: astrophage-hwarr-frontend
+  S3_BUCKET: astrophage-hwarr-frontend-unique-suffix
   CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
 
 permissions:
