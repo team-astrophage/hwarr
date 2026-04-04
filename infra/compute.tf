@@ -53,6 +53,31 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
           aws_iam_role.ecs_task.arn,
         ]
       },
+      {
+        Sid    = "S3FrontendDeploy"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ]
+        Resource = aws_s3_bucket.frontend.arn
+      },
+      {
+        Sid    = "S3FrontendObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+        ]
+        Resource = "${aws_s3_bucket.frontend.arn}/*"
+      },
+      {
+        Sid    = "CloudFrontInvalidation"
+        Effect = "Allow"
+        Action = ["cloudfront:CreateInvalidation"]
+        Resource = aws_cloudfront_distribution.frontend.arn
+      },
     ]
   })
 }
