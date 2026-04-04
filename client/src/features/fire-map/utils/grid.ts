@@ -1,14 +1,14 @@
-export const GRID_SIZE = 0.001 // ~100m
+import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 export function getGridId(lat: number, lng: number): string {
-  const gridLat = Math.floor(lat / GRID_SIZE)
-  const gridLng = Math.floor(lng / GRID_SIZE)
+  const gridLat = Math.floor(lat / LAT_UNIT)
+  const gridLng = Math.floor(lng / LNG_UNIT)
   return `${gridLat}:${gridLng}`
 }
 
 export function getGridCenter(gridId: string): [number, number] {
   const [latStr, lngStr] = gridId.split(':')
-  const lat = Number(latStr) * GRID_SIZE + GRID_SIZE / 2
-  const lng = Number(lngStr) * GRID_SIZE + GRID_SIZE / 2
+  const lat = Number(latStr) * LAT_UNIT + LAT_UNIT / 2
+  const lng = Number(lngStr) * LNG_UNIT + LNG_UNIT / 2
   return [lat, lng]
 }

@@ -10,7 +10,7 @@ import { useMemo } from 'react'
 import { Marker } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
-import { GRID_SIZE } from '../../../lib/config'
+import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 const FIRETRUCK_STAGE_THRESHOLD = 4
 
@@ -46,8 +46,8 @@ export function FiretruckOverlay() {
       if (cell.stage >= FIRETRUCK_STAGE_THRESHOLD) {
         const [latStr, lngStr] = gridId.split(':')
         // 격자 오른쪽 하단 모서리에 배치
-        const lat = Number(latStr) * GRID_SIZE
-        const lng = Number(lngStr) * GRID_SIZE + GRID_SIZE
+        const lat = Number(latStr) * LAT_UNIT
+        const lng = Number(lngStr) * LNG_UNIT + LNG_UNIT
         positions.push({ gridId, lat, lng })
       }
     }

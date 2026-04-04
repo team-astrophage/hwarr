@@ -17,7 +17,7 @@ import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
-import { GRID_SIZE } from '../../../lib/config'
+import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 // 화염 파티클
 interface Flame {
@@ -249,11 +249,11 @@ export function FireCanvas() {
 
         // 격자 → 픽셀 좌표
         const [latStr, lngStr] = gridId.split(':')
-        const gLat = Number(latStr) * GRID_SIZE
-        const gLng = Number(lngStr) * GRID_SIZE
+        const gLat = Number(latStr) * LAT_UNIT
+        const gLng = Number(lngStr) * LNG_UNIT
 
-        const tl = map.latLngToContainerPoint(L.latLng(gLat + GRID_SIZE, gLng))
-        const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + GRID_SIZE))
+        const tl = map.latLngToContainerPoint(L.latLng(gLat + LAT_UNIT, gLng))
+        const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
 
         const left = Math.min(tl.x, br.x)
         const top = Math.min(tl.y, br.y)
@@ -378,8 +378,8 @@ export function FireCanvas() {
 
         // 대상 격자 중심 좌표 계산
         const [mLatStr, mLngStr] = m.gridId.split(':')
-        const mLat = Number(mLatStr) * GRID_SIZE + GRID_SIZE / 2
-        const mLng = Number(mLngStr) * GRID_SIZE + GRID_SIZE / 2
+        const mLat = Number(mLatStr) * LAT_UNIT + LAT_UNIT / 2
+        const mLng = Number(mLngStr) * LNG_UNIT + LNG_UNIT / 2
         const targetPt = map.latLngToContainerPoint(L.latLng(mLat, mLng))
 
         // 시작점: 화면 하단 중앙 (버튼 위치)
@@ -435,8 +435,8 @@ export function FireCanvas() {
       if (flamethrowerRef.current && targetGridRef.current) {
         const gid = targetGridRef.current
         const [fLatStr, fLngStr] = gid.split(':')
-        const fLat = Number(fLatStr) * GRID_SIZE + GRID_SIZE / 2
-        const fLng = Number(fLngStr) * GRID_SIZE + GRID_SIZE / 2
+        const fLat = Number(fLatStr) * LAT_UNIT + LAT_UNIT / 2
+        const fLng = Number(fLngStr) * LNG_UNIT + LNG_UNIT / 2
         const targetPt = map.latLngToContainerPoint(L.latLng(fLat, fLng))
 
         const srcX = sw / 2
@@ -492,8 +492,8 @@ export function FireCanvas() {
 
         // 폭발 중심 좌표
         const [eLat, eLng] = exp.gridId.split(':')
-        const eCenterLat = Number(eLat) * GRID_SIZE + GRID_SIZE / 2
-        const eCenterLng = Number(eLng) * GRID_SIZE + GRID_SIZE / 2
+        const eCenterLat = Number(eLat) * LAT_UNIT + LAT_UNIT / 2
+        const eCenterLng = Number(eLng) * LNG_UNIT + LNG_UNIT / 2
         const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
 
         ctx.globalCompositeOperation = 'lighter'
