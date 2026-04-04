@@ -7,23 +7,29 @@
 
 import { useState, useEffect } from 'react'
 
+interface AddressParts {
+  city: string    // 시 (서울특별시)
+  district: string // 구 (광진구)
+  road: string     // 로 (구의강변로)
+}
+
 interface ReverseGeocodeState {
   address: string | null
-  addressParts: string[]
+  parts: AddressParts | null
   loading: boolean
 }
 
 export function useReverseGeocode(lat: number | null, lng: number | null): ReverseGeocodeState {
   const [state, setState] = useState<ReverseGeocodeState>({
     address: null,
-    addressParts: [],
+    parts: null,
     loading: false,
   })
 
   useEffect(() => {
     if (!lat || !lng) return
 
-    setState({ address: null, addressParts: [], loading: true })
+    setState({ address: null, parts: null, loading: true })
 
     const controller = new AbortController()
 
@@ -37,22 +43,20 @@ export function useReverseGeocode(lat: number | null, lng: number | null): Rever
       .then((res) => res.json())
       .then((data) => {
         const addr = data.address
-        // 도로명 주소 조합: 도시 + 구 + 도로명(+번호)
         const city = addr?.city || addr?.town || addr?.county || ''
         const district = addr?.borough || addr?.suburb || addr?.quarter || ''
         const road = [addr?.road, addr?.house_number].filter(Boolean).join(' ') || ''
-        const parts = [city, district, road].filter(Boolean)
+        const allParts = [city, district, road].filter(Boolean)
 
-        const address = parts.length > 0 ? parts.join(' ') : data.display_name?.split(',')[0] || null
         setState({
-          address,
-          addressParts: parts,
+          address: allParts.length > 0 ? allParts.join(' ') : data.display_name?.split(',')[0] || null,
+          parts: allParts.length > 0 ? { city, district, road } : null,
           loading: false,
         })
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setState({ address: null, addressParts: [], loading: false })
+          setState({ address: null, parts: null, loading: false })
         }
       })
 
