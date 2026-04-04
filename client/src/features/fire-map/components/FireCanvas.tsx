@@ -37,11 +37,6 @@ interface Smoke {
   size: number
 }
 
-interface StreamParticle {
-  x: number; y: number; vx: number; vy: number
-  life: number; maxLife: number; size: number; colorIdx: number
-}
-
 // ── 단계별 설정 ──
 // 불씨(1) → 모닥불(2) → 화재(3) → 대화재(4) → 전소(5)
 
@@ -201,7 +196,87 @@ const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환 (�
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
 
-const STREAM_COLORS = ['#ff4500', '#ff6b35', '#ffaa00', '#ffdd00', '#ffffff']
+/** 화염방사기: 연속 fire tongue 그리기 */
+function drawFlameStream(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  tx: number, ty: number,
+  frame: number,
+) {
+  const dx = tx - sx
+  const dy = ty - sy
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const segments = 38
+  const perpX = -dy / dist
+  const perpY = dx / dist
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+
+  const layers = [
+    { width: 50, stops: ['rgba(255,60,0,0.22)', 'rgba(180,20,0,0)'] },
+    { width: 30, stops: ['rgba(255,100,10,0.55)', 'rgba(220,40,0,0)'] },
+    { width: 16, stops: ['rgba(255,200,60,0.8)', 'rgba(255,80,0,0)'] },
+    { width: 7,  stops: ['rgba(255,255,230,0.95)', 'rgba(255,200,60,0)'] },
+  ]
+
+  for (const layer of layers) {
+    ctx.beginPath()
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments
+      const baseX = sx + dx * t
+      const baseY = sy + dy * t
+      const wave = Math.sin(t * 14 + frame * 0.18) * (1 - t * 0.3) * layer.width * 0.45
+      const flicker = Math.sin(t * 23 + frame * 0.31 + i) * layer.width * 0.12
+      const px = baseX + perpX * (wave + flicker)
+      const py = baseY + perpY * (wave + flicker)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    for (let i = segments; i >= 0; i--) {
+      const t = i / segments
+      const baseX = sx + dx * t
+      const baseY = sy + dy * t
+      const wave = Math.sin(t * 14 + frame * 0.18 + 3.14) * (1 - t * 0.3) * layer.width * 0.45
+      const flicker = Math.sin(t * 23 + frame * 0.31 + i + 2) * layer.width * 0.12
+      const px = baseX + perpX * (wave + flicker)
+      const py = baseY + perpY * (wave + flicker)
+      ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+
+    const grad = ctx.createLinearGradient(sx, sy, tx, ty)
+    grad.addColorStop(0, layer.stops[0])
+    grad.addColorStop(0.7, layer.stops[0])
+    grad.addColorStop(1, layer.stops[1])
+    ctx.fillStyle = grad
+    ctx.fill()
+  }
+
+  // 화구 글로우
+  const muzzleR = 28
+  const mg = ctx.createRadialGradient(sx, sy, 0, sx, sy, muzzleR)
+  mg.addColorStop(0, 'rgba(255,255,200,0.7)')
+  mg.addColorStop(0.3, 'rgba(255,160,40,0.35)')
+  mg.addColorStop(1, 'rgba(255,60,0,0)')
+  ctx.fillStyle = mg
+  ctx.beginPath()
+  ctx.arc(sx, sy, muzzleR, 0, Math.PI * 2)
+  ctx.fill()
+
+  // 임팩트 글로우
+  const impR = 36 + Math.sin(frame * 0.25) * 8
+  const ig = ctx.createRadialGradient(tx, ty, 0, tx, ty, impR)
+  ig.addColorStop(0, 'rgba(255,230,140,0.6)')
+  ig.addColorStop(0.35, 'rgba(255,80,0,0.3)')
+  ig.addColorStop(1, 'rgba(200,20,0,0)')
+  ctx.fillStyle = ig
+  ctx.beginPath()
+  ctx.arc(tx, ty, impR, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.restore()
+}
 
 // ── 파티클 생성 ──
 
@@ -243,7 +318,7 @@ export function FireCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
   const smokesRef = useRef<Map<string, Smoke[]>>(new Map())
-  const streamRef = useRef<StreamParticle[]>([])
+  // streamRef 제거됨 — 화염방사기는 drawFlameStream 직접 렌더
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
@@ -585,54 +660,75 @@ export function FireCanvas() {
 
         ctx.restore()
 
+        // 착탄 임팩트 — 성냥이 도착하는 순간 불꽃 스파크
         if (progress >= 1) {
           removeMatchRef.current(m.id)
         }
+
+        const impactT = Math.max(0, (progress - 0.85) / 0.15)
+        if (impactT > 0) {
+          ctx.save()
+          ctx.globalCompositeOperation = 'lighter'
+          const impP = Math.min(impactT, 1)
+
+          // 중심 플래시
+          const flashR = 32 + impP * 60
+          const fg = ctx.createRadialGradient(targetPt.x, targetPt.y, 0, targetPt.x, targetPt.y, flashR)
+          fg.addColorStop(0, `rgba(255,255,200,${0.9 * (1 - impP)})`)
+          fg.addColorStop(0.3, `rgba(255,180,40,${0.6 * (1 - impP)})`)
+          fg.addColorStop(1, 'rgba(255,60,0,0)')
+          ctx.fillStyle = fg
+          ctx.beginPath()
+          ctx.arc(targetPt.x, targetPt.y, flashR, 0, Math.PI * 2)
+          ctx.fill()
+
+          // 스파크 방사
+          const sparkCount = 18
+          for (let si = 0; si < sparkCount; si++) {
+            const angle = (si / sparkCount) * Math.PI * 2 + impP * 0.5
+            const sparkDist = impP * (45 + ((si * 31) % 17) * 3.5)
+            const spx = targetPt.x + Math.cos(angle) * sparkDist
+            const spy = targetPt.y + Math.sin(angle) * sparkDist
+            const sparkSize = (1 - impP) * (2.5 + (si % 3) * 1.5)
+            ctx.globalAlpha = (1 - impP) * 0.95
+            ctx.fillStyle = si % 3 === 0 ? '#ffffff' : si % 3 === 1 ? '#ffdd44' : '#ff6600'
+            ctx.beginPath()
+            ctx.arc(spx, spy, sparkSize, 0, Math.PI * 2)
+            ctx.fill()
+          }
+
+          // 불꽃 혀 (짧은 라인)
+          ctx.lineWidth = 2
+          ctx.lineCap = 'round'
+          for (let li = 0; li < 10; li++) {
+            const a = (li / 10) * Math.PI * 2
+            const len = impP * (20 + (li * 19) % 25)
+            const ex = targetPt.x + Math.cos(a) * len
+            const ey = targetPt.y + Math.sin(a) * len
+            ctx.globalAlpha = (1 - impP) * 0.7
+            ctx.strokeStyle = li % 2 === 0 ? '#ffaa00' : '#ff4400'
+            ctx.beginPath()
+            ctx.moveTo(targetPt.x + Math.cos(a) * 8, targetPt.y + Math.sin(a) * 8)
+            ctx.lineTo(ex, ey)
+            ctx.stroke()
+          }
+
+          ctx.restore()
+        }
       }
 
-      // ── 화염방사기 스트림 ──
+      // ── 화염방사기 — 연속 화염줄기 렌더 ──
       if (flamethrowerRef.current && targetGridRef.current) {
         const gid = targetGridRef.current
         const [fLatStr, fLngStr] = gid.split(':')
         const fLat = Number(fLatStr) * LAT_UNIT + LAT_UNIT / 2
         const fLng = Number(fLngStr) * LNG_UNIT + LNG_UNIT / 2
-        const targetPt = map.latLngToContainerPoint(L.latLng(fLat, fLng))
+        const ftTarget = map.latLngToContainerPoint(L.latLng(fLat, fLng))
 
         const srcX = sw / 2
         const srcY = sh - 80
 
-        for (let i = 0; i < 3; i++) {
-          const dx = targetPt.x - srcX
-          const dy = targetPt.y - srcY
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const speed = 8 + Math.random() * 4
-          streamRef.current.push({
-            x: srcX + (Math.random() - 0.5) * 10,
-            y: srcY + (Math.random() - 0.5) * 6,
-            vx: (dx / dist) * speed + (Math.random() - 0.5) * 2,
-            vy: (dy / dist) * speed + (Math.random() - 0.5) * 2,
-            life: 20 + Math.random() * 15,
-            maxLife: 20 + Math.random() * 15,
-            size: 3 + Math.random() * 4,
-            colorIdx: Math.floor(Math.random() * STREAM_COLORS.length),
-          })
-        }
-      }
-
-      const stream = streamRef.current
-      for (let i = stream.length - 1; i >= 0; i--) {
-        const p = stream[i]
-        p.x += p.vx
-        p.y += p.vy
-        p.life--
-        if (p.life <= 0) { stream.splice(i, 1); continue }
-        const lifeRatio = p.life / p.maxLife
-        ctx.globalAlpha = lifeRatio * 0.9
-        ctx.globalCompositeOperation = 'lighter'
-        ctx.fillStyle = STREAM_COLORS[p.colorIdx]
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size * lifeRatio, 0, Math.PI * 2)
-        ctx.fill()
+        drawFlameStream(ctx, srcX, srcY, ftTarget.x, ftTarget.y, frameCount)
       }
 
       // ── 전소 폭발 이펙트 ──
