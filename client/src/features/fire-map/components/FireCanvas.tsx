@@ -16,6 +16,7 @@ import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
+import { useAnimationStore } from '../stores/animationStore'
 import { GRID_SIZE } from '../../../lib/config'
 
 // 화염 파티클
@@ -100,6 +101,23 @@ const STAGE = [
 
 const ANIM_ZOOM_THRESHOLD = 14
 
+/** 성냥 비행 시간 (ms) */
+const MATCH_DURATION = 500
+
+// 화염방사기 스트림 파티클
+interface StreamParticle {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  life: number
+  maxLife: number
+  size: number
+  colorIdx: number
+}
+
+const STREAM_COLORS = ['#ff4500', '#ff6b35', '#ffaa00', '#ffdd00', '#ffffff']
+
 function spawnFlame(cfg: (typeof STAGE)[1]): Flame {
   if (!cfg) return {} as Flame
   return {
@@ -152,10 +170,33 @@ export function FireCanvas() {
   const map = useMap()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
+  const streamRef = useRef<StreamParticle[]>([])
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
   firesRef.current = fires
+
+  // 애니메이션 스토어 (성냥 + 화염방사기)
+  const matches = useAnimationStore((s) => s.matches)
+  const matchesRef = useRef(matches)
+  matchesRef.current = matches
+  const removeMatch = useAnimationStore((s) => s.removeMatch)
+  const removeMatchRef = useRef(removeMatch)
+  removeMatchRef.current = removeMatch
+
+  const flamethrowerActive = useAnimationStore((s) => s.flamethrowerActive)
+  const flamethrowerRef = useRef(flamethrowerActive)
+  flamethrowerRef.current = flamethrowerActive
+  const targetGridId = useAnimationStore((s) => s.targetGridId)
+  const targetGridRef = useRef(targetGridId)
+  targetGridRef.current = targetGridId
+
+  const explosions = useAnimationStore((s) => s.explosions)
+  const explosionsRef = useRef(explosions)
+  explosionsRef.current = explosions
+  const removeExplosion = useAnimationStore((s) => s.removeExplosion)
+  const removeExplosionRef = useRef(removeExplosion)
+  removeExplosionRef.current = removeExplosion
 
   useEffect(() => {
     const container = map.getContainer()
@@ -323,6 +364,183 @@ export function FireCanvas() {
           }
 
           ctx.restore() // clip 해제
+        }
+      }
+
+      // ── 성냥 던지기 포물선 애니메이션 ──
+      const now = performance.now()
+      const sw = canvas.width / dpr
+      const sh = canvas.height / dpr
+
+      for (const m of matchesRef.current) {
+        const elapsed = now - m.startTime
+        const progress = Math.min(elapsed / MATCH_DURATION, 1)
+
+        // 대상 격자 중심 좌표 계산
+        const [mLatStr, mLngStr] = m.gridId.split(':')
+        const mLat = Number(mLatStr) * GRID_SIZE + GRID_SIZE / 2
+        const mLng = Number(mLngStr) * GRID_SIZE + GRID_SIZE / 2
+        const targetPt = map.latLngToContainerPoint(L.latLng(mLat, mLng))
+
+        // 시작점: 화면 하단 중앙 (버튼 위치)
+        const startX = sw / 2
+        const startY = sh - 80
+
+        // 포물선 보간 (위로 볼록)
+        const t = progress
+        const x = startX + (targetPt.x - startX) * t
+        const parabola = -4 * t * (t - 1) // 0→1→0 포물선
+        const baseY = startY + (targetPt.y - startY) * t
+        const y = baseY - parabola * 120 // 포물선 높이
+
+        // 성냥 회전 (2바퀴)
+        const rotation = t * Math.PI * 4
+
+        ctx.save()
+        ctx.globalAlpha = 1 - t * 0.3 // 도달 시 약간 투명
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.translate(x, y)
+        ctx.rotate(rotation)
+
+        // 성냥 몸체
+        ctx.fillStyle = '#8B6914'
+        ctx.fillRect(-2, -10, 4, 16)
+
+        // 성냥 머리 (빨간색 + 불꽃)
+        ctx.fillStyle = '#ff4444'
+        ctx.beginPath()
+        ctx.arc(0, -10, 4, 0, Math.PI * 2)
+        ctx.fill()
+
+        // 불꽃 이펙트
+        if (t < 0.8) {
+          ctx.fillStyle = '#ffaa00'
+          ctx.globalAlpha = 0.8 - t
+          ctx.beginPath()
+          ctx.moveTo(0, -16)
+          ctx.bezierCurveTo(-3, -20, -2, -24, 0, -22)
+          ctx.bezierCurveTo(2, -24, 3, -20, 0, -16)
+          ctx.fill()
+        }
+
+        ctx.restore()
+
+        // 완료된 성냥 제거
+        if (progress >= 1) {
+          removeMatchRef.current(m.id)
+        }
+      }
+
+      // ── 화염방사기 스트림 파티클 ──
+      if (flamethrowerRef.current && targetGridRef.current) {
+        const gid = targetGridRef.current
+        const [fLatStr, fLngStr] = gid.split(':')
+        const fLat = Number(fLatStr) * GRID_SIZE + GRID_SIZE / 2
+        const fLng = Number(fLngStr) * GRID_SIZE + GRID_SIZE / 2
+        const targetPt = map.latLngToContainerPoint(L.latLng(fLat, fLng))
+
+        const srcX = sw / 2
+        const srcY = sh - 80
+
+        // 새 스트림 파티클 생성 (프레임당 3개)
+        for (let i = 0; i < 3; i++) {
+          const dx = targetPt.x - srcX
+          const dy = targetPt.y - srcY
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          const speed = 8 + Math.random() * 4
+          streamRef.current.push({
+            x: srcX + (Math.random() - 0.5) * 10,
+            y: srcY + (Math.random() - 0.5) * 6,
+            vx: (dx / dist) * speed + (Math.random() - 0.5) * 2,
+            vy: (dy / dist) * speed + (Math.random() - 0.5) * 2,
+            life: 20 + Math.random() * 15,
+            maxLife: 20 + Math.random() * 15,
+            size: 3 + Math.random() * 4,
+            colorIdx: Math.floor(Math.random() * STREAM_COLORS.length),
+          })
+        }
+      }
+
+      // 스트림 파티클 업데이트 & 렌더
+      const stream = streamRef.current
+      for (let i = stream.length - 1; i >= 0; i--) {
+        const p = stream[i]
+        p.x += p.vx
+        p.y += p.vy
+        p.life--
+
+        if (p.life <= 0) {
+          stream.splice(i, 1)
+          continue
+        }
+
+        const lifeRatio = p.life / p.maxLife
+        ctx.globalAlpha = lifeRatio * 0.9
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.fillStyle = STREAM_COLORS[p.colorIdx]
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.size * lifeRatio, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // ── 전소 폭발 이펙트 (5단계) ──
+      const EXPLOSION_DURATION = 2000
+
+      for (const exp of explosionsRef.current) {
+        const elapsed = now - exp.startTime
+        const progress = Math.min(elapsed / EXPLOSION_DURATION, 1)
+
+        // 폭발 중심 좌표
+        const [eLat, eLng] = exp.gridId.split(':')
+        const eCenterLat = Number(eLat) * GRID_SIZE + GRID_SIZE / 2
+        const eCenterLng = Number(eLng) * GRID_SIZE + GRID_SIZE / 2
+        const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
+
+        ctx.globalCompositeOperation = 'lighter'
+
+        // 방사형 파티클 (원형으로 퍼져나감)
+        const particleCount = 24
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (i / particleCount) * Math.PI * 2
+          const maxRadius = 120 * progress
+          const radius = maxRadius * (0.5 + Math.random() * 0.5)
+          const px = ePt.x + Math.cos(angle) * radius
+          const py = ePt.y + Math.sin(angle) * radius
+          const pSize = (1 - progress) * (4 + Math.random() * 6)
+
+          const colorChoices = ['#ff0000', '#ff4500', '#ffaa00', '#ffdd00', '#ffffff']
+          ctx.fillStyle = colorChoices[i % colorChoices.length]
+          ctx.globalAlpha = (1 - progress) * 0.8
+          ctx.beginPath()
+          ctx.arc(px, py, pSize, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // 중앙 플래시 글로우
+        if (progress < 0.5) {
+          const flashAlpha = (1 - progress * 2) * 0.4
+          const flashRadius = 80 + progress * 200
+          const flashGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, flashRadius)
+          flashGrad.addColorStop(0, `rgba(255, 255, 200, ${flashAlpha})`)
+          flashGrad.addColorStop(0.4, `rgba(255, 100, 0, ${flashAlpha * 0.5})`)
+          flashGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = flashGrad
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, flashRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // 화면 전체 플래시 (처음 0.3초)
+        if (progress < 0.15) {
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.globalAlpha = (1 - progress / 0.15) * 0.25
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, sw, sh)
+        }
+
+        if (progress >= 1) {
+          removeExplosionRef.current(exp.id)
         }
       }
 

@@ -1,13 +1,17 @@
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useFireSocket } from '../hooks/useFireSocket'
 import { useFire } from '../hooks/useFire'
 import { getGridId } from '../utils/grid'
+import { useAnimationStore } from '../stores/animationStore'
+import { useReverseGeocode } from '../hooks/useReverseGeocode'
 import { MapControls } from './MapControls'
 import { BottomPanel } from './BottomPanel'
 import { FireOverlay } from './FireOverlay'
+import { FiretruckOverlay } from './FiretruckOverlay'
+import { ChatPanel } from '../../../components/ChatPanel'
 import { Header } from '../../../components/Header'
 import 'leaflet/dist/leaflet.css'
 
@@ -57,11 +61,40 @@ export function MapPage() {
   useFireSocket()
   const { fire } = useFire()
 
-  const handleFire = () => {
-    if (lat && lng) {
+  const throwMatch = useAnimationStore((s) => s.throwMatch)
+  const startFlamethrower = useAnimationStore((s) => s.startFlamethrower)
+  const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower)
+  const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
+  const { address } = useReverseGeocode(lat, lng)
+
+  // tap → 성냥 던지기 + 불 이벤트
+  const handleFire = useCallback(() => {
+    if (lat && lng && gridId) {
+      throwMatch(gridId)
       fire(lat, lng)
     }
-  }
+  }, [lat, lng, gridId, throwMatch, fire])
+
+  // long press 시작 → 화염방사기 + 연속 불 이벤트
+  const handleLongPressFire = useCallback(() => {
+    if (!lat || !lng || !gridId) return
+    startFlamethrower(gridId)
+    fire(lat, lng)
+    // 200ms 간격으로 연속 발사
+    flamethrowerIntervalRef.current = setInterval(() => {
+      fire(lat, lng)
+    }, 200)
+  }, [lat, lng, gridId, startFlamethrower, fire])
+
+  // long press 종료
+  const handleLongPressEnd = useCallback(() => {
+    stopFlamethrower()
+    if (flamethrowerIntervalRef.current) {
+      clearInterval(flamethrowerIntervalRef.current)
+      flamethrowerIntervalRef.current = null
+    }
+  }, [stopFlamethrower])
 
   return (
     <div className="relative h-svh w-full">
@@ -80,6 +113,7 @@ export function MapPage() {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FireOverlay />
+        <FiretruckOverlay />
         {lat && lng && (
           <>
             <FlyToUser lat={lat} lng={lng} />
@@ -91,6 +125,18 @@ export function MapPage() {
 
       <Header />
 
+      {/* 현재 위치 도로명 주소 */}
+      {address && (
+        <div className="absolute top-14 left-4 z-[1000]">
+          <div className="bg-[var(--color-bg-surface)]/60 backdrop-blur-sm rounded-[10px] px-3.5 py-2 shadow-[var(--shadow-medium)]">
+            <p className="text-[0.9375rem] font-bold text-white/80">
+              <span className="text-[var(--color-accent)] mr-1.5">&#x2022;</span>
+              {address}
+            </p>
+          </div>
+        </div>
+      )}
+
       {!loading && error && (
         <div className="absolute top-16 left-4 right-4 z-[1000]">
           <div className="bg-[var(--color-bg-surface)] text-[var(--color-negative)] rounded-[12px] px-4 py-3 text-[0.8125rem] font-bold shadow-[var(--shadow-heavy)] text-center">
@@ -99,9 +145,25 @@ export function MapPage() {
         </div>
       )}
 
+      {/* 채팅 토글 버튼 */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="absolute bottom-[180px] right-4 z-[1000] w-12 h-12 bg-[var(--color-bg-surface)] rounded-full shadow-[var(--shadow-heavy)] flex items-center justify-center transition-transform active:scale-90"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </button>
+      )}
+
+      <ChatPanel visible={chatOpen} onClose={() => setChatOpen(false)} />
+
       <BottomPanel
         gridId={gridId}
         onFire={handleFire}
+        onLongPressFire={handleLongPressFire}
+        onLongPressEnd={handleLongPressEnd}
         disabled={!lat || !lng}
       />
     </div>
