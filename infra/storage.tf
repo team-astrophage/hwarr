@@ -24,8 +24,8 @@ resource "aws_elasticache_serverless_cache" "redis" {
   major_engine_version = "7"
 
   # Daily snapshots for data durability (cumulative stats, etc.)
-  daily_snapshot_time      = "19:00" # 04:00 KST
   snapshot_retention_limit = 7
+  daily_snapshot_time      = "19:00" # 04:00 KST
 
   tags = {
     Name = "${local.name_prefix}-redis"
