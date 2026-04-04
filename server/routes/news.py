@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["news"])
 
-FIRE_TTL_SEC = 1800
+FIRE_TTL_SEC = 10800
 MAX_NEWS_ITEMS = 5
 
 # ---------------------------------------------------------------------------

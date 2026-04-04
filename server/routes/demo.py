@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
 
-# Fire event TTL — 30 minutes (matches sio/events.py)
-FIRE_TTL_SEC = 1800
+# Fire event TTL — 3 hours (matches sio/events.py)
+FIRE_TTL_SEC = 10800
 
 
 # ---------------------------------------------------------------------------

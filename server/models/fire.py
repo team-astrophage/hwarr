@@ -37,8 +37,8 @@ class StageConfig(BaseModel):
         description="Minimum active fire count to reach this stage"
     )
     duration_sec: int = Field(
-        default=1800,
-        description="Base TTL for fires at this stage (seconds). Default 30 min.",
+        default=10800,
+        description="Base TTL for fires at this stage (seconds). Default 3 hours.",
     )
     triggers_firefighter: bool = Field(
         default=False,
@@ -72,7 +72,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         label_ko="불씨",
         label_en="ember",
         threshold=1,           # 1-49 clicks
-        duration_sec=1800,
+        duration_sec=10800,
         triggers_firefighter=False,
         firefighter_remove_count=0,
     ),
@@ -81,7 +81,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         label_ko="모닥불",
         label_en="campfire",
         threshold=50,          # 50-99 clicks
-        duration_sec=1800,
+        duration_sec=10800,
         triggers_firefighter=False,
         firefighter_remove_count=0,
     ),
@@ -90,7 +90,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         label_ko="화재",
         label_en="fire",
         threshold=100,         # 100-149 clicks
-        duration_sec=1800,
+        duration_sec=10800,
         triggers_firefighter=False,
         firefighter_remove_count=0,
     ),
@@ -99,7 +99,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         label_ko="대화재",
         label_en="big fire",
         threshold=150,         # 150-199 clicks — firefighter triggers here
-        duration_sec=1800,
+        duration_sec=10800,
         triggers_firefighter=True,
         firefighter_remove_count=2,
     ),
@@ -108,7 +108,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         label_ko="전소",
         label_en="total burn",
         threshold=200,         # 200+ clicks
-        duration_sec=1800,
+        duration_sec=10800,
         triggers_firefighter=True,
         firefighter_remove_count=3,
     ),

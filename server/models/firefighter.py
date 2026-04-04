@@ -35,8 +35,8 @@ ACTIVE_FIREFIGHTERS_KEY = "active_firefighters"
 # Redis set tracking which grids already have a firefighter assigned
 FIREFIGHTER_GRID_INDEX_KEY = "firefighter_grids"
 
-# TTL for firefighter data in Redis (30 minutes)
-FIREFIGHTER_TTL_SEC = 1800
+# TTL for firefighter data in Redis (3 hours)
+FIREFIGHTER_TTL_SEC = 10800
 
 
 class FirefighterStatus(StrEnum):

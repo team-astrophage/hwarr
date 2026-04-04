@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Fire event TTL — 30 minutes
-FIRE_TTL_SEC = 1800
+# Fire event TTL — 3 hours
+FIRE_TTL_SEC = 10800
 
 
 def register_fire_events(
