@@ -1,4 +1,4 @@
-"""Admin region resolver — maps (lat, lng) to "{구} {동}" label.
+"""Admin region resolver — maps (lat, lng) to "{시도} {구} {동}" label.
 
 Loads a static admin-dong GeoJSON at startup and builds a Shapely STRtree
 spatial index. Queries run in microseconds and require no external API.
@@ -9,7 +9,7 @@ Expected GeoJSON format (FeatureCollection):
 - Supported field names (in priority order): adm_nm, ADM_NM, EMD_KOR_NM,
   adm_nm_kor, name.
 
-Label format: we strip the 시/도 prefix and return "{구|군|시} {동|읍|면}".
+Label format: we return the full name "{시도} {구|군|시} {동|읍|면}".
 """
 
 from __future__ import annotations
@@ -36,15 +36,13 @@ def _extract_name(properties: dict) -> str | None:
 
 
 def _shorten(adm_nm: str) -> str:
-    """'서울특별시 강남구 역삼1동' → '강남구 역삼1동'.
+    """'서울특별시 강남구 역삼1동' → '서울특별시 강남구 역삼1동'.
 
-    Drops the leading 시/도 token. If only two tokens are present, returns
-    as-is. If more than three, keeps the last two (district + dong).
+    Returns the full "{시도} {구|군|시} {동|읍|면}" name. Kept as a function
+    (rather than inlined) so source-format variants can be normalized here
+    later (e.g. trimming internal whitespace).
     """
-    parts = adm_nm.split()
-    if len(parts) <= 2:
-        return adm_nm
-    return " ".join(parts[-2:])
+    return " ".join(adm_nm.split())
 
 
 class AdminRegionResolver:

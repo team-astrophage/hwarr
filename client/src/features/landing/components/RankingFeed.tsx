@@ -1,7 +1,7 @@
 /**
  * 오늘의 방화 지역 Top 10 — 랜딩 페이지 리스트.
  *
- * 백엔드 /api/ranking/today 연동. "{구} {동} NNN회" 형식.
+ * 백엔드 /api/ranking/today 연동. "{시도} {구} {동} NNN회" 형식.
  */
 
 import { useRanking, type RankingItem } from '../api/useRanking'
