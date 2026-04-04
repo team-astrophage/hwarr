@@ -196,7 +196,7 @@ function spawnSmoke(cfg: StageCfg): Smoke {
 }
 
 // ── 줌 임계값 ──
-const GLOW_DOT_ZOOM = 13   // 이 줌 미만이면 글로우 도트로 전환
+const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환 (최대줌 18에서 4단계 축소)
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
