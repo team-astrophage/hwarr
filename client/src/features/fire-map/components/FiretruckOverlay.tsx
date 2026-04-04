@@ -6,13 +6,14 @@
  * 실제 불 단계 감소 기능 없음 (시각 전용).
  */
 
-import { useMemo } from 'react'
-import { Marker } from 'react-leaflet'
+import { useMemo, useState, useEffect } from 'react'
+import { Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 const FIRETRUCK_STAGE_THRESHOLD = 4
+const FIRETRUCK_MIN_ZOOM = 14
 
 function createFiretruckIcon() {
   return L.divIcon({
@@ -36,7 +37,15 @@ function createFiretruckIcon() {
 }
 
 export function FiretruckOverlay() {
+  const map = useMap()
   const fires = useFireStore((s) => s.fires)
+  const [zoom, setZoom] = useState(map.getZoom())
+
+  useEffect(() => {
+    const onZoom = () => setZoom(map.getZoom())
+    map.on('zoomend', onZoom)
+    return () => { map.off('zoomend', onZoom) }
+  }, [map])
 
   const icon = useMemo(() => createFiretruckIcon(), [])
 
@@ -54,7 +63,7 @@ export function FiretruckOverlay() {
     return positions
   }, [fires])
 
-  if (firetruckPositions.length === 0) return null
+  if (firetruckPositions.length === 0 || zoom < FIRETRUCK_MIN_ZOOM) return null
 
   return (
     <>

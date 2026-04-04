@@ -100,7 +100,7 @@ export function MapPage() {
     <div className="relative h-svh w-full">
       <MapContainer
         center={KOREA_CENTER}
-        zoom={7}
+        zoom={13}
         className="h-full w-full"
         zoomControl={false}
         maxBounds={KOREA_BOUNDS}

@@ -39,63 +39,58 @@ interface Flame {
   colorIdx: number
 }
 
-// 단계별 설정
+// 단계별 설정 — 불씨(1)→모닥불(2)→화재(3)→대화재(4)→전소(5)
 const STAGE = [
   null, // 0
   {
-    // 1: 불씨
-    fill: 'rgba(180, 30, 0, 0.12)',
-    border: 'rgba(200, 50, 20, 0.5)',
-    flameCount: 6,
-    maxFlameH: 0.35,
-    flameSpeed: 0.004,
-    colors: ['#ff6b35', '#ff8c42', '#cc4400'],
-    turbulence: 0.001,
-    glowAlpha: 0.08,
+    // 1: 불씨 — 작은 연기 속 잔불, 은은한 빛
+    flameCount: 4,
+    maxFlameH: 0.25,
+    flameSpeed: 0.003,
+    colors: ['#ff8c42', '#cc5500', '#aa3300'],
+    turbulence: 0.0008,
+    glowAlpha: 0.05,
+    glowColor: [255, 80, 0],
   },
   {
-    // 2: 모닥불
-    fill: 'rgba(200, 30, 0, 0.20)',
-    border: 'rgba(220, 40, 10, 0.6)',
-    flameCount: 14,
-    maxFlameH: 0.50,
-    flameSpeed: 0.006,
-    colors: ['#ff4500', '#ff6b35', '#ff8c42', '#ffaa00'],
-    turbulence: 0.0015,
-    glowAlpha: 0.12,
+    // 2: 모닥불 — 따뜻한 불꽃, 주황+노랑
+    flameCount: 10,
+    maxFlameH: 0.4,
+    flameSpeed: 0.005,
+    colors: ['#ff6b35', '#ff8c42', '#ffaa00', '#cc4400'],
+    turbulence: 0.0012,
+    glowAlpha: 0.1,
+    glowColor: [255, 100, 20],
   },
   {
-    // 3: 화재
-    fill: 'rgba(220, 20, 0, 0.30)',
-    border: 'rgba(240, 30, 0, 0.7)',
-    flameCount: 25,
-    maxFlameH: 0.65,
-    flameSpeed: 0.008,
+    // 3: 화재 — 격렬한 불, 붉은+노란 혼합
+    flameCount: 22,
+    maxFlameH: 0.6,
+    flameSpeed: 0.007,
     colors: ['#ff2200', '#ff4500', '#ff6b35', '#ffcc00'],
     turbulence: 0.002,
     glowAlpha: 0.18,
+    glowColor: [255, 50, 0],
   },
   {
-    // 4: 대형화재
-    fill: 'rgba(240, 10, 0, 0.40)',
-    border: 'rgba(255, 20, 0, 0.85)',
-    flameCount: 40,
-    maxFlameH: 0.80,
-    flameSpeed: 0.012,
-    colors: ['#ff0000', '#ff2200', '#ff4500', '#ffdd00', '#ffffff'],
+    // 4: 대화재 — 맹렬한 화염, 흰색 핵심부
+    flameCount: 38,
+    maxFlameH: 0.85,
+    flameSpeed: 0.01,
+    colors: ['#ff0000', '#ff2200', '#ff6b35', '#ffdd00', '#ffffcc'],
     turbulence: 0.003,
-    glowAlpha: 0.25,
+    glowAlpha: 0.28,
+    glowColor: [255, 30, 0],
   },
   {
-    // 5: 전소
-    fill: 'rgba(255, 0, 0, 0.50)',
-    border: 'rgba(255, 0, 0, 1.0)',
-    flameCount: 60,
-    maxFlameH: 1.0,
-    flameSpeed: 0.016,
-    colors: ['#ff0000', '#cc0000', '#ff4500', '#ffdd00', '#ffffff'],
-    turbulence: 0.004,
-    glowAlpha: 0.35,
+    // 5: 전소 — 검은 연기+잔불, 재가 된 상태
+    flameCount: 15,
+    maxFlameH: 0.3,
+    flameSpeed: 0.003,
+    colors: ['#882200', '#aa3300', '#ff4500', '#444444'],
+    turbulence: 0.001,
+    glowAlpha: 0.06,
+    glowColor: [180, 40, 0],
   },
 ]
 
@@ -265,21 +260,8 @@ export function FireCanvas() {
         const sh = canvas.height / dpr
         if (left + w < 0 || left > sw || top + h < 0 || top > sh) continue
 
-        // ── 항상 그리는 것: 채우기 + 테두리 ──
-        ctx.globalAlpha = 1
-        ctx.globalCompositeOperation = 'source-over'
-
-        // 격자 배경 채우기
-        ctx.fillStyle = cfg.fill
-        ctx.fillRect(left, top, w, h)
-
-        // 빨간 테두리
-        ctx.strokeStyle = cfg.border
-        ctx.lineWidth = zoom >= 14 ? 2 : 1
-        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
-
-        // ── 확대 시에만: 화염 애니메이션 ──
-        if (showAnim && w > 8) {
+        // ── 화염 애니메이션 (모든 줌 레벨) ──
+        if (w > 4) {
           // 화염 파티클 관리
           if (!allFlames.has(gridId)) allFlames.set(gridId, [])
           const flames = allFlames.get(gridId)!
@@ -300,10 +282,11 @@ export function FireCanvas() {
           ctx.clip()
 
           // 하단 글로우 (바닥에서 불이 타는 느낌)
+          const [gr, gg, gb] = cfg.glowColor
           const glowGrad = ctx.createLinearGradient(left, top + h, left, top + h * 0.3)
-          glowGrad.addColorStop(0, `rgba(255, 60, 0, ${cfg.glowAlpha})`)
-          glowGrad.addColorStop(0.5, `rgba(255, 30, 0, ${cfg.glowAlpha * 0.4})`)
-          glowGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
+          glowGrad.addColorStop(0, `rgba(${gr}, ${gg}, ${gb}, ${cfg.glowAlpha})`)
+          glowGrad.addColorStop(0.5, `rgba(${gr}, ${Math.floor(gg * 0.5)}, ${Math.floor(gb * 0.5)}, ${cfg.glowAlpha * 0.4})`)
+          glowGrad.addColorStop(1, `rgba(${gr}, 0, 0, 0)`)
           ctx.globalCompositeOperation = 'lighter'
           ctx.fillStyle = glowGrad
           ctx.fillRect(left, top, w, h)
