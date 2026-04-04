@@ -19,6 +19,7 @@ from routes.demo import router as demo_router
 from routes.fire import router as fire_router
 from routes.map_config import router as map_config_router
 from routes.qr import router as qr_router
+from routes.reset import router as reset_router
 from routes.stats import router as stats_router
 from sio.connection_manager import (
     ConnectionManager,
@@ -85,6 +86,7 @@ app.include_router(qr_router)
 app.include_router(map_config_router)
 app.include_router(demo_router)
 app.include_router(stats_router)
+app.include_router(reset_router)
 
 
 @app.get("/health")
