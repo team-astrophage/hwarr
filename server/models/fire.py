@@ -1,7 +1,7 @@
 """Fire stage enum, models, and stage transition rules.
 
-Stages: 불씨(1-9) → 모닥불(10-29) → 화재(30-69) → 대화재(70-149) → 전소(150+)
-Exponential progression — gaps roughly double each stage (9→20→40→80).
+Stages: 불씨(1-9) → 모닥불(10-39) → 화재(40-119) → 대화재(120-279) → 전소(280+)
+Exponential progression — gaps roughly double each stage (9→30→80→160).
 Each stage has:
   - threshold: minimum active fire count to reach this stage
   - duration_sec: how long fires persist at this stage (contributes to TTL)
@@ -22,10 +22,10 @@ class FireStage(IntEnum):
 
     NONE = 0       # 없음 — no active fires
     BULSSSI = 1    # 불씨 — ember/spark (1-9 clicks)
-    MODAKBUL = 2   # 모닥불 — campfire (10-29 clicks)
-    HWAJAE = 3     # 화재 — fire (30-69 clicks)
-    DAEHWAJAE = 4  # 대화재 — big fire (70-149 clicks)
-    JEONSO = 5     # 전소 — total burn (150+ clicks)
+    MODAKBUL = 2   # 모닥불 — campfire (10-39 clicks)
+    HWAJAE = 3     # 화재 — fire (40-119 clicks)
+    DAEHWAJAE = 4  # 대화재 — big fire (120-279 clicks)
+    JEONSO = 5     # 전소 — total burn (280+ clicks)
 
 
 class StageConfig(BaseModel):
@@ -81,7 +81,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         stage=FireStage.MODAKBUL,
         label_ko="모닥불",
         label_en="campfire",
-        threshold=10,          # 10-29 clicks
+        threshold=10,          # 10-39 clicks
         duration_sec=86400,
         triggers_firefighter=False,
         firefighter_remove_count=0,
@@ -90,7 +90,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         stage=FireStage.HWAJAE,
         label_ko="화재",
         label_en="fire",
-        threshold=30,          # 30-69 clicks
+        threshold=40,          # 40-119 clicks
         duration_sec=86400,
         triggers_firefighter=False,
         firefighter_remove_count=0,
@@ -99,7 +99,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         stage=FireStage.DAEHWAJAE,
         label_ko="대화재",
         label_en="big fire",
-        threshold=70,          # 70-149 clicks — firefighter triggers here
+        threshold=120,         # 120-279 clicks — firefighter triggers here
         duration_sec=86400,
         triggers_firefighter=True,
         firefighter_remove_count=2,
@@ -108,7 +108,7 @@ STAGE_CONFIGS: dict[FireStage, StageConfig] = {
         stage=FireStage.JEONSO,
         label_ko="전소",
         label_en="total burn",
-        threshold=150,         # 150+ clicks
+        threshold=280,         # 280+ clicks
         duration_sec=86400,
         triggers_firefighter=True,
         firefighter_remove_count=3,
@@ -132,11 +132,11 @@ def get_stage(active_count: int) -> FireStage:
     <FireStage.BULSSSI: 1>
     >>> get_stage(10)
     <FireStage.MODAKBUL: 2>
-    >>> get_stage(30)
+    >>> get_stage(40)
     <FireStage.HWAJAE: 3>
-    >>> get_stage(70)
+    >>> get_stage(120)
     <FireStage.DAEHWAJAE: 4>
-    >>> get_stage(150)
+    >>> get_stage(280)
     <FireStage.JEONSO: 5>
     """
     for threshold, stage in _STAGE_THRESHOLDS:
