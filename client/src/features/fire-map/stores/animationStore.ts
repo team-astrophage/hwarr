@@ -21,6 +21,11 @@ interface Explosion {
   gridId: string
 }
 
+/** 랜덤 폭발 간격 최소 (탭 횟수) */
+const RANDOM_EXPLOSION_INTERVAL_MIN = 20
+/** 랜덤 폭발 간격 최대 (탭 횟수) */
+const RANDOM_EXPLOSION_INTERVAL_MAX = 30
+
 interface AnimationState {
   /** 활성 성냥 애니메이션 목록 */
   matches: MatchThrow[]
@@ -32,6 +37,10 @@ interface AnimationState {
   explosions: Explosion[]
   /** 전소 달성한 격자 추적 (중복 방지) */
   explodedGrids: Set<string>
+  /** 5단계(전소) 달성 이후 누적 탭 카운트 */
+  postExplodeTapCount: number
+  /** 다음 랜덤 폭발이 발동될 탭 카운트 (postExplodeTapCount 기준) */
+  nextRandomExplosionAt: number
 
   throwMatch: (gridId: string) => void
   removeMatch: (id: number) => void
@@ -41,6 +50,13 @@ interface AnimationState {
   removeExplosion: (id: number) => void
 }
 
+const pickNextRandomInterval = () =>
+  RANDOM_EXPLOSION_INTERVAL_MIN +
+  Math.floor(
+    Math.random() *
+      (RANDOM_EXPLOSION_INTERVAL_MAX - RANDOM_EXPLOSION_INTERVAL_MIN + 1),
+  )
+
 let matchIdCounter = 0
 
 export const useAnimationStore = create<AnimationState>((set) => ({
@@ -49,18 +65,48 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   targetGridId: null,
   explosions: [],
   explodedGrids: new Set(),
+  postExplodeTapCount: 0,
+  nextRandomExplosionAt: pickNextRandomInterval(),
 
   throwMatch: (gridId) =>
-    set((state) => ({
-      matches: [
+    set((state) => {
+      const nextMatches = [
         ...state.matches,
         {
           id: ++matchIdCounter,
           startTime: performance.now(),
           gridId,
         },
-      ],
-    })),
+      ]
+
+      // 5단계(전소) 달성 이전에는 기본 동작만
+      if (state.explodedGrids.size === 0) {
+        return { matches: nextMatches }
+      }
+
+      // 5단계 이후: 탭 20~30회 랜덤 간격으로 폭발 이펙트 트리거
+      const nextCount = state.postExplodeTapCount + 1
+      if (nextCount >= state.nextRandomExplosionAt) {
+        return {
+          matches: nextMatches,
+          postExplodeTapCount: 0,
+          nextRandomExplosionAt: pickNextRandomInterval(),
+          explosions: [
+            ...state.explosions,
+            {
+              id: ++matchIdCounter,
+              startTime: performance.now(),
+              gridId,
+            },
+          ],
+        }
+      }
+
+      return {
+        matches: nextMatches,
+        postExplodeTapCount: nextCount,
+      }
+    }),
 
   removeMatch: (id) =>
     set((state) => ({
@@ -82,7 +128,11 @@ export const useAnimationStore = create<AnimationState>((set) => ({
         explodedGrids: next,
         explosions: [
           ...state.explosions,
-          { id: ++matchIdCounter, startTime: performance.now(), gridId },
+          {
+            id: ++matchIdCounter,
+            startTime: performance.now(),
+            gridId,
+          },
         ],
       }
     }),

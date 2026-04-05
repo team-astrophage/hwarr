@@ -731,8 +731,8 @@ export function FireCanvas() {
         drawFlameStream(ctx, srcX, srcY, ftTarget.x, ftTarget.y, frameCount)
       }
 
-      // ── 전소 폭발 이펙트 ──
-      const EXPLOSION_DURATION = 2000
+      // ── 전소 폭발 이펙트 ("빵!" 느낌) ──
+      const EXPLOSION_DURATION = 700
 
       for (const exp of explosionsRef.current) {
         const elapsed = now - exp.startTime
@@ -743,43 +743,85 @@ export function FireCanvas() {
         const eCenterLng = Number(eLng) * LNG_UNIT + LNG_UNIT / 2
         const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
 
+        // 강한 ease-out (초반 폭발감)
+        const easeOut = 1 - Math.pow(1 - progress, 3)
+
         ctx.globalCompositeOperation = 'lighter'
 
-        const particleCount = 24
+        // ── 핵 화이트 임팩트 (0~80ms, "빵!!" 의 섬광) ──
+        if (elapsed < 80) {
+          const p = elapsed / 80
+          const coreAlpha = 1 - p
+          const coreRadius = 20 + p * 140
+          const coreGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, coreRadius)
+          coreGrad.addColorStop(0, `rgba(255, 255, 255, ${coreAlpha})`)
+          coreGrad.addColorStop(0.35, `rgba(255, 245, 210, ${coreAlpha * 0.95})`)
+          coreGrad.addColorStop(0.7, `rgba(255, 180, 80, ${coreAlpha * 0.6})`)
+          coreGrad.addColorStop(1, 'rgba(255, 120, 20, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = coreGrad
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, coreRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // ── 파이어볼 (가운데 확 부풀었다 사그라드는 공) ──
+        if (progress < 0.6) {
+          const ballProgress = progress / 0.6
+          const ballRadius = 40 + easeOut * 120
+          const ballAlpha = Math.pow(1 - ballProgress, 1.1) * 1.0
+          const ballGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, ballRadius)
+          ballGrad.addColorStop(0, `rgba(255, 250, 220, ${ballAlpha})`)
+          ballGrad.addColorStop(0.25, `rgba(255, 180, 60, ${ballAlpha})`)
+          ballGrad.addColorStop(0.6, `rgba(230, 80, 20, ${ballAlpha * 0.7})`)
+          ballGrad.addColorStop(1, 'rgba(120, 10, 0, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = ballGrad
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, ballRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // ── 충격파 링 (이중, 빠르게) ──
+        if (elapsed < 180) {
+          const p1 = elapsed / 180
+          const r1 = p1 * 180
+          ctx.globalAlpha = (1 - p1) * 0.95
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 4 - p1 * 3
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, r1, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+        if (elapsed < 280 && elapsed > 60) {
+          const p2 = (elapsed - 60) / 220
+          const r2 = p2 * 240
+          ctx.globalAlpha = (1 - p2) * 0.7
+          ctx.strokeStyle = '#ffaa44'
+          ctx.lineWidth = 3 - p2 * 2.5
+          ctx.beginPath()
+          ctx.arc(ePt.x, ePt.y, r2, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+
+        // ── 파편 파티클 (적당, 근거리 산발) ──
+        const particleCount = 18
+        const maxRadius = 110
+        const colorChoices = ['#ffaa44', '#ff6622', '#cc2200', '#661100']
         for (let i = 0; i < particleCount; i++) {
-          const angle = (i / particleCount) * Math.PI * 2
-          const maxRadius = 120 * progress
-          const radius = maxRadius * (0.5 + Math.random() * 0.5)
+          const baseAngle = (i / particleCount) * Math.PI * 2
+          const angle = baseAngle + (Math.random() - 0.5) * (Math.PI / 2)
+          const speed = 0.4 + Math.random() * 0.9
+          const radius = maxRadius * easeOut * speed
           const px = ePt.x + Math.cos(angle) * radius
           const py = ePt.y + Math.sin(angle) * radius
-          const pSize = (1 - progress) * (4 + Math.random() * 6)
-          const colorChoices = ['#ff0000', '#ff4500', '#ffaa00', '#ffdd00', '#ffffff']
+          const decay = Math.pow(1 - progress, 1.4)
+          const pSize = decay * (3 + Math.random() * 5)
           ctx.fillStyle = colorChoices[i % colorChoices.length]
-          ctx.globalAlpha = (1 - progress) * 0.8
+          ctx.globalAlpha = decay * 0.7
           ctx.beginPath()
           ctx.arc(px, py, pSize, 0, Math.PI * 2)
           ctx.fill()
-        }
-
-        if (progress < 0.5) {
-          const flashAlpha = (1 - progress * 2) * 0.4
-          const flashRadius = 80 + progress * 200
-          const flashGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, flashRadius)
-          flashGrad.addColorStop(0, `rgba(255, 255, 200, ${flashAlpha})`)
-          flashGrad.addColorStop(0.4, `rgba(255, 100, 0, ${flashAlpha * 0.5})`)
-          flashGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
-          ctx.globalAlpha = 1
-          ctx.fillStyle = flashGrad
-          ctx.beginPath()
-          ctx.arc(ePt.x, ePt.y, flashRadius, 0, Math.PI * 2)
-          ctx.fill()
-        }
-
-        if (progress < 0.15) {
-          ctx.globalCompositeOperation = 'source-over'
-          ctx.globalAlpha = (1 - progress / 0.15) * 0.25
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, sw, sh)
         }
 
         if (progress >= 1) {
