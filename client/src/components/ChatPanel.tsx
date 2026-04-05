@@ -135,23 +135,19 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
                   isMe ? 'self-end flex-row-reverse' : 'self-start'
                 }`}
               >
-                {!isMe && (
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] flex-shrink-0 font-bold"
-                    style={{ background: msg.avatar_bg, color: msg.name_color }}
-                  >
-                    {msg.avatar}
-                  </div>
-                )}
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] flex-shrink-0 font-bold"
+                  style={{ background: msg.avatar_bg, color: msg.name_color }}
+                >
+                  {msg.avatar}
+                </div>
                 <div>
-                  {!isMe && (
-                    <div
-                      className="text-[0.6875rem] font-semibold mb-0.5"
-                      style={{ color: msg.name_color }}
-                    >
-                      {msg.nickname}
-                    </div>
-                  )}
+                  <div
+                    className={`text-[0.6875rem] font-semibold mb-0.5 ${isMe ? 'text-right' : ''}`}
+                    style={{ color: msg.name_color }}
+                  >
+                    {msg.nickname}{isMe ? ' (나)' : ''}
+                  </div>
                   <div
                     className={`px-3.5 py-2.5 text-[0.875rem] leading-[1.45] break-words ${
                       isMe
