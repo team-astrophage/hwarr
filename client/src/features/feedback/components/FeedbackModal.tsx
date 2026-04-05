@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useFeedbackSubmit } from '../api/useFeedbackSubmit'
 import type { FeedbackCategory } from '../types'
 import { FEEDBACK_MAX_LEN } from '../types'
@@ -76,7 +77,12 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
     )
   }
 
-  return (
+  // Render via portal so `fixed inset-0` is anchored to the viewport,
+  // not to any ancestor with transform/filter/backdrop-filter (e.g. landing
+  // footer which would otherwise clip the modal).
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <div
       className='fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[20vh] px-4'
       onClick={requestClose}
@@ -201,6 +207,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
