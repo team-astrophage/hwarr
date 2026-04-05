@@ -773,7 +773,7 @@ export function FireCanvas() {
 
           // 크기/알파: 중반에 가장 크고 밝음 → 끝에서 페이드
           const fade = Math.sin(localP * Math.PI)
-          const pSize = 4 + fade * 5
+          const pSize = 2 + fade * 3
           const pAlpha = 0.85 * fade
 
           // 색: 오렌지→빨강 그라디언트
@@ -792,7 +792,7 @@ export function FireCanvas() {
         if (progress > 0.75) {
           const landP = (progress - 0.75) / 0.25
           const landFade = 1 - landP
-          const landR = 6 + landP * 18
+          const landR = 3 + landP * 10
           const landGrad = ctx.createRadialGradient(
             dstPt.x, dstPt.y, 0, dstPt.x, dstPt.y, landR,
           )
