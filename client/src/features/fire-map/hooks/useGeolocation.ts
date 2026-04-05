@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface GeolocationState {
   lat: number | null
   lng: number | null
   error: string | null
   loading: boolean
+  permissionDenied: boolean
+  retry: () => void
 }
 
 // GPS override backdoor for demo
@@ -15,49 +17,46 @@ declare global {
 }
 
 export function useGeolocation(): GeolocationState {
-  const [state, setState] = useState<GeolocationState>({
-    lat: null,
-    lng: null,
-    error: null,
-    loading: true,
-  })
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [permissionDenied, setPermissionDenied] = useState<boolean>(false)
 
-  useEffect(() => {
+  const requestLocation = useCallback(() => {
     // Check backdoor first
     if (window.__MELTTOWN_GPS) {
-      setState({
-        lat: window.__MELTTOWN_GPS.lat,
-        lng: window.__MELTTOWN_GPS.lng,
-        error: null,
-        loading: false,
-      })
+      setLat(window.__MELTTOWN_GPS.lat)
+      setLng(window.__MELTTOWN_GPS.lng)
+      setError(null)
+      setPermissionDenied(false)
+      setLoading(false)
       return
     }
 
     if (!navigator.geolocation) {
-      setState((prev) => ({
-        ...prev,
-        error: 'Geolocation을 지원하지 않는 브라우저입니다',
-        loading: false,
-      }))
+      setError('Geolocation을 지원하지 않는 브라우저입니다')
+      setLoading(false)
       return
     }
 
+    setLoading(true)
+    setError(null)
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setState({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          error: null,
-          loading: false,
-        })
+        setLat(position.coords.latitude)
+        setLng(position.coords.longitude)
+        setError(null)
+        setPermissionDenied(false)
+        setLoading(false)
       },
       (err) => {
-        setState((prev) => ({
-          ...prev,
-          error: err.message,
-          loading: false,
-        }))
+        setError(err.message)
+        setLoading(false)
+        if (err.code === err.PERMISSION_DENIED) {
+          setPermissionDenied(true)
+        }
       },
       {
         enableHighAccuracy: true,
@@ -67,5 +66,24 @@ export function useGeolocation(): GeolocationState {
     )
   }, [])
 
-  return state
+  useEffect(() => {
+    // Pre-check permission state (when supported) so we can show the
+    // "blocked" variant immediately without waiting for a timeout.
+    if (navigator.permissions?.query) {
+      navigator.permissions
+        .query({ name: 'geolocation' as PermissionName })
+        .then((status) => {
+          if (status.state === 'denied') {
+            setPermissionDenied(true)
+          }
+        })
+        .catch(() => {
+          // ignore — fall through to normal getCurrentPosition flow
+        })
+    }
+
+    requestLocation()
+  }, [requestLocation])
+
+  return { lat, lng, error, loading, permissionDenied, retry: requestLocation }
 }

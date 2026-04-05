@@ -13,6 +13,7 @@ import { FireOverlay } from './FireOverlay';
 import { FiretruckOverlay } from './FiretruckOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
 import { Header } from '../../../components/Header';
+import { LocationPermissionModal } from './LocationPermissionModal';
 import 'leaflet/dist/leaflet.css';
 
 const FLAMETHROWER_INTERVAL_MS = 300; // 초당 약 3.3발
@@ -56,7 +57,7 @@ function LocateButton({ lat, lng }: { lat: number; lng: number }) {
 }
 
 export function MapPage() {
-  const { lat, lng, loading, error } = useGeolocation();
+  const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
   const gridId = lat && lng ? getGridId(lat, lng) : null;
 
   useFireSocket();
@@ -150,11 +151,10 @@ export function MapPage() {
       )}
 
       {!loading && error && (
-        <div className='absolute top-16 left-4 right-4 z-[1000]'>
-          <div className='bg-[var(--color-bg-surface)] text-[var(--color-negative)] rounded-[12px] px-4 py-3 text-[0.8125rem] font-bold shadow-[var(--shadow-heavy)] text-center'>
-            위치 권한을 허용해주세요
-          </div>
-        </div>
+        <LocationPermissionModal
+          permissionDenied={permissionDenied}
+          onRetry={retry}
+        />
       )}
 
       {/* 채팅 토글 버튼 */}
