@@ -14,4 +14,6 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
   account_id  = data.aws_caller_identity.current.account_id
   region      = data.aws_region.current.name
+  # SSM Parameter Store prefix for SecureString config (feedback SMTP creds, etc.)
+  ssm_prefix = "/astrophage/hwarr/prod"
 }

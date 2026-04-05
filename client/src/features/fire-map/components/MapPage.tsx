@@ -14,6 +14,7 @@ import { FiretruckOverlay } from './FiretruckOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
 import { Header } from '../../../components/Header';
 import { LocationPermissionModal } from './LocationPermissionModal';
+import { FeedbackButton } from '../../feedback/components/FeedbackButton';
 import 'leaflet/dist/leaflet.css';
 
 const KOREA_CENTER: [number, number] = [36.5, 127.5];
@@ -129,6 +130,13 @@ export function MapPage() {
           permissionDenied={permissionDenied}
           onRetry={retry}
         />
+      )}
+
+      {/* 의견 보내기 버튼 */}
+      {!chatOpen && (
+        <div className='absolute bottom-[244px] right-4 z-[1000]'>
+          <FeedbackButton />
+        </div>
       )}
 
       {/* 채팅 토글 버튼 */}

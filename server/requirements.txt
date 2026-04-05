@@ -5,3 +5,5 @@ python-socketio>=5.12.0
 redis>=5.2.0
 qrcode[pil]>=8.0
 shapely>=2.0.0
+aiosmtplib>=3.0.0
+email-validator>=2.0.0

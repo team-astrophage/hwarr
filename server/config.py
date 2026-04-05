@@ -34,3 +34,14 @@ ADMIN_GEOJSON_PATH = os.getenv(
     "ADMIN_GEOJSON_PATH",
     str(Path(__file__).parent / "data" / "admin_dong.geojson"),
 )
+
+# ---------------------------------------------------------------------------
+# SMTP / feedback email
+# ---------------------------------------------------------------------------
+
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+DEVELOPER_EMAIL = os.getenv("DEVELOPER_EMAIL", "")
+FEEDBACK_RATE_LIMIT_PER_10MIN = int(os.getenv("FEEDBACK_RATE_LIMIT_PER_10MIN", "3"))

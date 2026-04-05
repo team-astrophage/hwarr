@@ -8,7 +8,7 @@ resource "aws_elasticache_serverless_cache" "redis" {
 
   cache_usage_limits {
     data_storage {
-      maximum = 1   # 1 GB — more than enough for ~30 users
+      maximum = 1 # 1 GB — more than enough for ~30 users
       unit    = "GB"
     }
     ecpu_per_second {

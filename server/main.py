@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routes.demo import router as demo_router
+from routes.feedback import router as feedback_router
 from routes.fire import router as fire_router
 from routes.map_config import router as map_config_router
 from routes.news import router as news_router
@@ -90,6 +91,7 @@ app.include_router(map_config_router)
 app.include_router(demo_router)
 app.include_router(stats_router)
 app.include_router(ranking_router)
+app.include_router(feedback_router)
 
 
 @app.get("/health")

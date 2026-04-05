@@ -73,9 +73,9 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
         Resource = "${aws_s3_bucket.frontend.arn}/*"
       },
       {
-        Sid    = "CloudFrontInvalidation"
-        Effect = "Allow"
-        Action = ["cloudfront:CreateInvalidation"]
+        Sid      = "CloudFrontInvalidation"
+        Effect   = "Allow"
+        Action   = ["cloudfront:CreateInvalidation"]
         Resource = aws_cloudfront_distribution.frontend.arn
       },
     ]
@@ -180,6 +180,32 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Allow the execution role to fetch SecureString params from SSM
+# (used by ECS `secrets` block to inject env vars at container start).
+# The managed AmazonECSTaskExecutionRolePolicy does NOT include SSM access.
+resource "aws_iam_role_policy" "ecs_execution_ssm" {
+  name = "${local.name_prefix}-ecs-exec-ssm"
+  role = aws_iam_role.ecs_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "SSMGetParameters"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameters"]
+        Resource = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/*"]
+      },
+      {
+        Sid      = "KMSDecryptForSSM"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = "arn:aws:kms:${local.region}:${local.account_id}:alias/aws/ssm"
+      }
+    ]
+  })
+}
+
 ############################
 # IAM — ECS Task Role
 ############################
@@ -233,7 +259,33 @@ resource "aws_ecs_task_definition" "backend" {
           # ElastiCache Serverless enforces TLS → use rediss:// (double-s)
           name  = "REDIS_URL"
           value = "rediss://${aws_elasticache_serverless_cache.redis.endpoint[0].address}:6379/0"
-        }
+        },
+        # Non-sensitive SMTP config for user feedback forwarding.
+        {
+          name  = "SMTP_HOST"
+          value = "smtp.gmail.com"
+        },
+        {
+          name  = "SMTP_PORT"
+          value = "587"
+        },
+      ]
+
+      # Sensitive values sourced from SSM Parameter Store (SecureString).
+      # Created out-of-band via scripts/put-feedback-secrets.sh.
+      secrets = [
+        {
+          name      = "SMTP_USER"
+          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/smtp_user"
+        },
+        {
+          name      = "SMTP_PASSWORD"
+          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/smtp_password"
+        },
+        {
+          name      = "DEVELOPER_EMAIL"
+          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/developer_email"
+        },
       ]
 
       logConfiguration = {
