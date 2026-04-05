@@ -260,31 +260,14 @@ resource "aws_ecs_task_definition" "backend" {
           name  = "REDIS_URL"
           value = "rediss://${aws_elasticache_serverless_cache.redis.endpoint[0].address}:6379/0"
         },
-        # Non-sensitive SMTP config for user feedback forwarding.
-        {
-          name  = "SMTP_HOST"
-          value = "smtp.gmail.com"
-        },
-        {
-          name  = "SMTP_PORT"
-          value = "587"
-        },
       ]
 
       # Sensitive values sourced from SSM Parameter Store (SecureString).
       # Created out-of-band via scripts/put-feedback-secrets.sh.
       secrets = [
         {
-          name      = "SMTP_USER"
-          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/smtp_user"
-        },
-        {
-          name      = "SMTP_PASSWORD"
-          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/smtp_password"
-        },
-        {
-          name      = "DEVELOPER_EMAIL"
-          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/developer_email"
+          name      = "FEEDBACK_DISCORD_WEBHOOK_URL"
+          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/feedback_discord_webhook_url"
         },
       ]
 

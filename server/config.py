@@ -36,12 +36,8 @@ ADMIN_GEOJSON_PATH = os.getenv(
 )
 
 # ---------------------------------------------------------------------------
-# SMTP / feedback email
+# Feedback (Discord webhook)
 # ---------------------------------------------------------------------------
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-DEVELOPER_EMAIL = os.getenv("DEVELOPER_EMAIL", "")
+FEEDBACK_DISCORD_WEBHOOK_URL = os.getenv("FEEDBACK_DISCORD_WEBHOOK_URL", "")
 FEEDBACK_RATE_LIMIT_PER_10MIN = int(os.getenv("FEEDBACK_RATE_LIMIT_PER_10MIN", "3"))

@@ -1,22 +1,21 @@
-"""User feedback API — forwards user opinion to the developer inbox.
+"""User feedback API — forwards user opinion to the Discord dev channel.
 
-POST /api/feedback — accept bug/idea/etc text, forward as email.
+POST /api/feedback — accept bug/idea/etc text, forward as Discord embed.
 
 Abuse protection: Redis-backed per-IP rate limit (10 min / N requests).
-Emails are sent via aiosmtplib using configured SMTP credentials.
+Messages are sent via Discord incoming webhook.
 """
 
 from __future__ import annotations
 
-import html as html_lib
 import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
-from config import DEVELOPER_EMAIL, FEEDBACK_RATE_LIMIT_PER_10MIN
-from services.mailer import send_mail
+from config import FEEDBACK_DISCORD_WEBHOOK_URL, FEEDBACK_RATE_LIMIT_PER_10MIN
+from services.notifier import send_discord_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 class FeedbackRequest(BaseModel):
     category: Literal["bug", "idea", "etc"] = Field(description="Feedback category")
     message: str = Field(min_length=1, max_length=500, description="User message body")
-    email: Optional[EmailStr] = Field(default=None, description="Optional reply-to email")
+    email: Optional[str] = Field(default=None, max_length=200, description="Optional reply-to email")
     page: Optional[str] = Field(default=None, max_length=200, description="Current page path")
 
 
@@ -61,19 +60,24 @@ def _get_redis():
 # ---------------------------------------------------------------------------
 
 _RL_WINDOW_SEC = 600  # 10 minutes
-_CATEGORY_LABELS = {"bug": "버그", "idea": "제안", "etc": "기타"}
+_CATEGORY_LABELS = {"bug": "🐛 버그", "idea": "💡 제안", "etc": "💬 기타"}
+_CATEGORY_COLORS = {
+    "bug": 0xF3727F,   # negative red
+    "idea": 0x1ED760,  # accent green
+    "etc": 0xFFA42B,   # warning orange
+}
 
 
 @router.post(
     "/feedback",
     response_model=FeedbackResponse,
-    summary="Submit user feedback to the developer",
+    summary="Submit user feedback to the Discord channel",
     status_code=201,
 )
 async def submit_feedback(body: FeedbackRequest, request: Request) -> FeedbackResponse:
-    """Receive feedback, rate-limit by IP, forward to developer via email."""
-    if not DEVELOPER_EMAIL:
-        logger.error("DEVELOPER_EMAIL not configured — rejecting feedback")
+    """Receive feedback, rate-limit by IP, forward to Discord webhook."""
+    if not FEEDBACK_DISCORD_WEBHOOK_URL:
+        logger.error("FEEDBACK_DISCORD_WEBHOOK_URL not configured — rejecting feedback")
         raise HTTPException(status_code=503, detail="feedback_disabled")
 
     # ---- rate limit (soft fail if Redis is unavailable) ----
@@ -92,39 +96,35 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> FeedbackRe
         except Exception:
             logger.exception("feedback rate-limit check failed — allowing through")
 
-    # ---- compose mail ----
-    label = _CATEGORY_LABELS.get(body.category, body.category)
+    # ---- compose discord embed ----
     ua = request.headers.get("user-agent", "-")
-    # first 20 chars for subject preview (no newlines)
-    preview = body.message.replace("\n", " ").strip()[:20]
-    subject = f"[화르르 피드백/{label}] {preview}"
+    label = _CATEGORY_LABELS.get(body.category, body.category)
+    color = _CATEGORY_COLORS.get(body.category, 0x888888)
 
-    safe_msg = html_lib.escape(body.message)
-    safe_page = html_lib.escape(body.page or "-")
-    safe_email = html_lib.escape(body.email or "-")
-    safe_ua = html_lib.escape(ua)
-    safe_ip = html_lib.escape(ip)
+    # Discord embed field values have a 1024 char limit — message is 500 so safe.
+    fields = [
+        {"name": "페이지", "value": body.page or "-", "inline": True},
+        {"name": "답변 이메일", "value": body.email or "-", "inline": True},
+        {"name": "IP", "value": ip, "inline": True},
+    ]
+    # User-Agent tends to be long — stuff into its own non-inline field, truncated.
+    ua_val = ua if len(ua) <= 1024 else ua[:1021] + "..."
+    fields.append({"name": "User-Agent", "value": ua_val, "inline": False})
 
-    html_body = (
-        f"<div style='font-family:system-ui,-apple-system,sans-serif;font-size:14px'>"
-        f"<p><b>카테고리:</b> {label}</p>"
-        f"<p><b>페이지:</b> {safe_page}</p>"
-        f"<p><b>답변 이메일:</b> {safe_email}</p>"
-        f"<p><b>IP:</b> {safe_ip}</p>"
-        f"<p><b>User-Agent:</b> {safe_ua}</p>"
-        f"<hr>"
-        f"<pre style='white-space:pre-wrap;font-family:inherit;font-size:14px'>"
-        f"{safe_msg}"
-        f"</pre>"
-        f"</div>"
-    )
+    embed = {
+        "title": f"화르르 피드백 · {label}",
+        "description": f"```\n{body.message}\n```",
+        "color": color,
+        "fields": fields,
+    }
+    payload = {"embeds": [embed]}
 
     # ---- send ----
     try:
-        await send_mail(to=DEVELOPER_EMAIL, subject=subject, html=html_body)
+        await send_discord_webhook(FEEDBACK_DISCORD_WEBHOOK_URL, payload)
     except Exception:
-        logger.exception("failed to send feedback mail (category=%s)", body.category)
-        raise HTTPException(status_code=502, detail="mail_send_failed")
+        logger.exception("failed to deliver feedback to discord (category=%s)", body.category)
+        raise HTTPException(status_code=502, detail="webhook_failed")
 
     logger.info(
         "feedback received category=%s ip=%s len=%d has_email=%s",
