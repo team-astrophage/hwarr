@@ -1,0 +1,147 @@
+/**
+ * Socket.IO 연결 수명주기 관리
+ *
+ * 책임:
+ * - 앱 전역에서 공유되는 단일 소켓 인스턴스 제공
+ * - 서버 heartbeat 송신 (10초 간격, 서버 reaper timeout=30s)
+ * - 연결/재접속/오프라인 상태를 Zustand 스토어로 노출
+ * - 서버발 `io server disconnect` 시 수동 재접속 (Socket.IO 기본 동작 보정)
+ *
+ * 사용:
+ * - 앱 진입 시 SocketProvider 가 `startSocket()` 을 1회 호출
+ * - 기능별 훅(useFireSocket 등)은 리스너만 등록/해제하고
+ *   소켓 자체의 connect/disconnect 는 건드리지 않음
+ */
+
+import { io, type Socket } from 'socket.io-client'
+import { create } from 'zustand'
+import { SOCKET_URL } from './config'
+
+export type ConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'offline'
+
+interface SocketState {
+  status: ConnectionStatus
+  reconnectAttempt: number
+  setStatus: (s: ConnectionStatus) => void
+  setAttempt: (n: number) => void
+}
+
+export const useSocketStore = create<SocketState>((set) => ({
+  status: 'idle',
+  reconnectAttempt: 0,
+  setStatus: (status) => set({ status }),
+  setAttempt: (n) => set({ reconnectAttempt: n }),
+}))
+
+// 서버 HEARTBEAT_INTERVAL_SEC=10, TIMEOUT=30 에 맞춤
+const HEARTBEAT_MS = 10_000
+const MAX_RECONNECT_ATTEMPTS = 8
+const USER_ID_STORAGE_KEY = 'hwarr:anonUserId'
+
+/**
+ * 재접속 시 세션 복원에 쓰이는 익명 user_id.
+ * 서버 main.py connect 핸들러가 auth.user_id 로 이전 room 구독을 복원한다.
+ */
+function getOrCreateAnonUserId(): string {
+  if (typeof window === 'undefined') return 'anon'
+  try {
+    const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY)
+    if (existing) return existing
+    const fresh =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, fresh)
+    return fresh
+  } catch {
+    // localStorage 접근 실패 (프라이빗 모드 등) 시 세션 한정 ID
+    return `anon-${Date.now()}`
+  }
+}
+
+export const socket: Socket = io(SOCKET_URL, {
+  autoConnect: false,
+  transports: ['polling', 'websocket'],
+  reconnection: true,
+  reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 5_000,
+  auth: (cb) => cb({ user_id: getOrCreateAnonUserId() }),
+})
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let started = false
+
+function startHeartbeat() {
+  if (heartbeatTimer) return
+  // 첫 박동을 즉시 보내 서버 last_heartbeat 를 connect 직후 갱신
+  socket.emit('heartbeat', { ts: Date.now() })
+  heartbeatTimer = setInterval(() => {
+    if (socket.connected) socket.emit('heartbeat', { ts: Date.now() })
+  }, HEARTBEAT_MS)
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+}
+
+/**
+ * 소켓 연결을 시작한다. 앱에서 1회만 호출.
+ * StrictMode 더블마운트 방어를 위해 `started` 가드가 적용돼 있다.
+ */
+export function startSocket(): void {
+  if (started) return
+  started = true
+  const { setStatus, setAttempt } = useSocketStore.getState()
+
+  socket.on('connect', () => {
+    console.log('[Socket] connected', socket.id)
+    setStatus('connected')
+    setAttempt(0)
+    startHeartbeat()
+  })
+
+  socket.on('disconnect', (reason) => {
+    console.log('[Socket] disconnected', reason)
+    stopHeartbeat()
+    setStatus('reconnecting')
+    // Socket.IO 는 'io server disconnect' 시 자동 재접속하지 않음 → 수동 재접속
+    if (reason === 'io server disconnect') {
+      socket.connect()
+    }
+  })
+
+  socket.on('connect_error', (err) => {
+    console.warn('[Socket] connect_error', err.message)
+  })
+
+  socket.io.on('reconnect_attempt', (n) => {
+    setStatus('reconnecting')
+    setAttempt(n)
+  })
+
+  socket.io.on('reconnect_failed', () => {
+    console.warn('[Socket] reconnect_failed — giving up')
+    setStatus('offline')
+  })
+
+  setStatus('connecting')
+  socket.connect()
+}
+
+/** 테스트/HMR 등에서만 사용. 일반 런타임에서는 호출할 일이 없다. */
+export function stopSocket(): void {
+  stopHeartbeat()
+  socket.removeAllListeners()
+  socket.disconnect()
+  started = false
+  useSocketStore.getState().setStatus('idle')
+}
