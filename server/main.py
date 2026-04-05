@@ -22,6 +22,7 @@ from routes.news import router as news_router
 from routes.qr import router as qr_router
 from routes.ranking import router as ranking_router
 from routes.stats import router as stats_router
+from sio.chat_events import CHAT_ROOM, register_chat_events
 from sio.connection_manager import (
     ConnectionManager,
     HEARTBEAT_INTERVAL_SEC,
@@ -132,6 +133,9 @@ async def startup_event():
         # Register fire event handlers with the engine
         register_fire_events(sio, manager, engine)
 
+        # Register global chat event handlers (uses the same Redis client)
+        register_chat_events(sio, manager, redis_client)
+
         # Load admin region resolver for daily ranking (optional)
         from pathlib import Path as _Path
 
@@ -224,10 +228,22 @@ async def disconnect(sid: str):
     Preserves session info in _user_sessions for potential reconnection.
     """
     logger.info("Client disconnecting: %s", sid)
+    info = manager.get(sid)
+    was_in_chat = info is not None and CHAT_ROOM in info.rooms
     await manager.remove(sid)
 
     # Broadcast users:count to all clients (mock server compat)
     await sio.emit("users:count", {"count": manager.active_count})
+
+    # If the disconnecting client was in the global chat room, rebroadcast
+    # the updated presence count to remaining participants.
+    if was_in_chat:
+        try:
+            participants = sio.manager.get_participants("/", CHAT_ROOM)
+            count = sum(1 for _ in participants)
+            await sio.emit("chat:presence", {"count": count}, room=CHAT_ROOM)
+        except Exception:
+            logger.exception("Failed to rebroadcast chat presence on disconnect")
 
     logger.info(
         "Client disconnected: %s (total: %d)", sid, manager.active_count
