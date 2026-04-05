@@ -132,7 +132,15 @@ resource "aws_cloudfront_distribution" "frontend" {
 
     forwarded_values {
       query_string = true
-      headers      = ["Origin", "Access-Control-Request-Headers", "Access-Control-Request-Method"]
+      # User-Agent forwarded so the backend can log the real viewer UA
+      # (CloudFront otherwise replaces it with "Amazon CloudFront").
+      # Caching on /api/* is fully disabled (ttl=0) so this doesn't hurt hit rate.
+      headers = [
+        "Origin",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+        "User-Agent",
+      ]
       cookies {
         forward = "none"
       }

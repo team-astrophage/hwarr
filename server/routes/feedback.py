@@ -9,6 +9,7 @@ Messages are sent via Discord incoming webhook.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -60,12 +61,34 @@ def _get_redis():
 # ---------------------------------------------------------------------------
 
 _RL_WINDOW_SEC = 600  # 10 minutes
-_CATEGORY_LABELS = {"bug": "🐛 버그", "idea": "💡 제안", "etc": "💬 기타"}
+_CATEGORY_LABELS = {
+    "bug": "🐛 버그 제보",
+    "idea": "💡 기능 제안",
+    "etc": "💬 기타 의견",
+}
 _CATEGORY_COLORS = {
     "bug": 0xF3727F,   # negative red
     "idea": 0x1ED760,  # accent green
     "etc": 0xFFA42B,   # warning orange
 }
+_UA_MAX_LEN = 80
+
+
+def _short_ua(ua: str) -> str:
+    """Shorten a User-Agent string for compact display in the embed footer."""
+    if not ua or ua == "-":
+        return "unknown client"
+    # Prefer the trailing product token (browser/os summary) which is usually
+    # more informative than the leading "Mozilla/5.0 (...)" block.
+    # Fall back to a simple head-truncate.
+    if len(ua) <= _UA_MAX_LEN:
+        return ua
+    return ua[: _UA_MAX_LEN - 1] + "…"
+
+
+def _quote_lines(text: str) -> str:
+    """Prefix each line with a Discord blockquote marker for readability."""
+    return "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
 
 
 @router.post(
@@ -80,8 +103,25 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> FeedbackRe
         logger.error("FEEDBACK_DISCORD_WEBHOOK_URL not configured — rejecting feedback")
         raise HTTPException(status_code=503, detail="feedback_disabled")
 
+    # ---- resolve real client IP & UA (CloudFront/ALB-aware) ----
+    # CloudFront prepends the viewer IP to X-Forwarded-For; ALB appends its
+    # own hop. The first entry is the original client.
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        ip = xff.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else "unknown"
+
+    # CloudFront overwrites the incoming User-Agent with "Amazon CloudFront"
+    # unless we explicitly forward it. When forwarded, it is also available
+    # as `cloudfront-viewer-user-agent` (managed origin request policy).
+    ua = (
+        request.headers.get("cloudfront-viewer-user-agent")
+        or request.headers.get("user-agent")
+        or "-"
+    )
+
     # ---- rate limit (soft fail if Redis is unavailable) ----
-    ip = request.client.host if request.client else "unknown"
     redis = _get_redis()
     if redis is not None:
         key = f"feedback:rl:{ip}"
@@ -97,27 +137,30 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> FeedbackRe
             logger.exception("feedback rate-limit check failed — allowing through")
 
     # ---- compose discord embed ----
-    ua = request.headers.get("user-agent", "-")
     label = _CATEGORY_LABELS.get(body.category, body.category)
     color = _CATEGORY_COLORS.get(body.category, 0x888888)
 
-    # Discord embed field values have a 1024 char limit — message is 500 so safe.
-    fields = [
-        {"name": "페이지", "value": body.page or "-", "inline": True},
-        {"name": "답변 이메일", "value": body.email or "-", "inline": True},
-        {"name": "IP", "value": ip, "inline": True},
-    ]
-    # User-Agent tends to be long — stuff into its own non-inline field, truncated.
-    ua_val = ua if len(ua) <= 1024 else ua[:1021] + "..."
-    fields.append({"name": "User-Agent", "value": ua_val, "inline": False})
+    # Only include optional fields when they actually have content — avoids
+    # visual noise from rows of "-" placeholders.
+    fields: list[dict] = []
+    if body.page:
+        fields.append({"name": "페이지", "value": f"`{body.page}`", "inline": True})
+    if body.email:
+        fields.append({"name": "답변 이메일", "value": body.email, "inline": True})
 
     embed = {
-        "title": f"화르르 피드백 · {label}",
-        "description": f"```\n{body.message}\n```",
+        "author": {"name": label},
+        "description": _quote_lines(body.message),
         "color": color,
         "fields": fields,
+        "footer": {"text": f"{ip} · {_short_ua(ua)}"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    payload = {"embeds": [embed]}
+    payload = {
+        "embeds": [embed],
+        # Never ping — user input must not be able to trigger @everyone etc.
+        "allowed_mentions": {"parse": []},
+    }
 
     # ---- send ----
     try:
