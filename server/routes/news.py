@@ -201,21 +201,6 @@ def _build_fire_active(location: str, stage_label: str, count: int, time_ago: st
     )
 
 
-def _build_firefighter(location: str, count: int, time_ago: str, grid_id: str) -> NewsItem:
-    return NewsItem(
-        id=f"news-ff-{grid_id}",
-        icon="🧯",
-        icon_bg="rgba(30,215,96,0.15)",
-        headline_parts=[
-            HeadlinePart(text=location, highlight="accent"),
-            HeadlinePart(text=" "),
-            HeadlinePart(text="소방관 출동", highlight="warning"),
-        ],
-        time=time_ago,
-        detail=f"화재 진압 중 — 잔여 {count}건",
-    )
-
-
 def _build_small_fire(location: str, count: int, time_ago: str, grid_id: str) -> NewsItem:
     return NewsItem(
         id=f"news-sf-{grid_id}",
@@ -279,13 +264,11 @@ async def get_news() -> list[NewsItem]:
         if count <= 0:
             continue
         stage = get_stage(count)
-        has_firefighter = await redis.sismember("firefighter_grids", grid_id)
         ignite_ts = await _get_latest_ignite_ts(redis, grid_id)
         grids.append({
             "grid_id": grid_id,
             "count": count,
             "stage": stage,
-            "has_firefighter": bool(has_firefighter),
             "ignite_ts": ignite_ts or now,
         })
 
@@ -297,14 +280,11 @@ async def get_news() -> list[NewsItem]:
         grid_id = g["grid_id"]
         count = g["count"]
         stage: FireStage = g["stage"]
-        has_ff = g["has_firefighter"]
         time_ago = _format_time_ago(now - g["ignite_ts"])
         location = _get_location_name(grid_id)
         stage_label = STAGE_CONFIGS[stage].label_ko
 
-        if has_ff:
-            items.append(_build_firefighter(location, count, time_ago, grid_id))
-        elif stage.value >= 4:
+        if stage.value >= 4:
             items.append(_build_big_fire(location, stage_label, count, time_ago, grid_id))
         elif stage.value >= 2:
             items.append(_build_fire_active(location, stage_label, count, time_ago, grid_id))

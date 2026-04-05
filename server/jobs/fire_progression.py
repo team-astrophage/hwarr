@@ -5,11 +5,11 @@ Runs as an asyncio background task that periodically:
 2. Removes expired fire events (TTL-based via sorted set scores)
 3. Recalculates fire stage for each grid
 4. Broadcasts stage changes to subscribed clients via Socket.IO
-5. Dispatches firefighter NPCs to suppress fires at stage ≥ 4
+5. Broadcasts firefighter:spawn event at stage ≥ 4 (visual effect only)
 
 The scheduler uses Redis Sorted Sets where:
 - Key:    fire:{gridId}
-- Score:  expiration timestamp (now + 30min at creation)
+- Score:  expiration timestamp (now + FIRE_TTL_SEC at creation)
 - Member: unique event ID
 
 Active fires = members with score > current time.
@@ -40,12 +40,7 @@ from models.fire import (
     should_dispatch_firefighter,
 )
 from models.firefighter import (
-    ACTIVE_FIREFIGHTERS_KEY,
-    FIREFIGHTER_GRID_INDEX_KEY,
-    FIREFIGHTER_KEY_PREFIX,
-    FIREFIGHTER_TTL_SEC,
     FirefighterNPC,
-    FirefighterStatus,
     create_firefighter_npc,
     should_spawn_firefighter,
 )
@@ -78,13 +73,12 @@ class FireProgressionEngine:
     - Cleans expired fire events from Redis sorted sets
     - Tracks previous stage per grid to detect transitions
     - Broadcasts fire:update on stage change
-    - Triggers firefighter:alert and suppression at stage ≥ 4
+    - Broadcasts firefighter:spawn event at stage ≥ 4 (visual effect only)
 
     Args:
         redis: Async Redis client instance.
         broadcaster: Object implementing broadcast_to_room and broadcast.
         scan_interval: Seconds between each progression scan (default: 2s).
-        firefighter_interval: Seconds between firefighter sweeps (default: 30s).
         cleanup_interval: Seconds between deep cleanup runs (default: 60s).
     """
 
@@ -93,13 +87,11 @@ class FireProgressionEngine:
         redis: Redis,
         broadcaster: Broadcaster,
         scan_interval: float = 2.0,
-        firefighter_interval: float = 30.0,
         cleanup_interval: float = 60.0,
     ) -> None:
         self._redis = redis
         self._broadcaster = broadcaster
         self._scan_interval = scan_interval
-        self._firefighter_interval = firefighter_interval
         self._cleanup_interval = cleanup_interval
 
         # Track previous stage per grid to detect transitions
@@ -110,7 +102,6 @@ class FireProgressionEngine:
 
         # Background task references
         self._progression_task: asyncio.Task | None = None
-        self._firefighter_task: asyncio.Task | None = None
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
@@ -140,16 +131,12 @@ class FireProgressionEngine:
         self._progression_task = asyncio.create_task(
             self._progression_loop(), name="fire-progression"
         )
-        self._firefighter_task = asyncio.create_task(
-            self._firefighter_loop(), name="fire-firefighter"
-        )
         self._cleanup_task = asyncio.create_task(
             self._cleanup_loop(), name="fire-cleanup"
         )
         logger.info(
-            "FireProgressionEngine started (scan=%.1fs, firefighter=%.1fs, cleanup=%.1fs)",
+            "FireProgressionEngine started (scan=%.1fs, cleanup=%.1fs)",
             self._scan_interval,
-            self._firefighter_interval,
             self._cleanup_interval,
         )
 
@@ -158,7 +145,7 @@ class FireProgressionEngine:
         self._running = False
         tasks = [
             t
-            for t in (self._progression_task, self._firefighter_task, self._cleanup_task)
+            for t in (self._progression_task, self._cleanup_task)
             if t is not None
         ]
         for task in tasks:
@@ -167,7 +154,6 @@ class FireProgressionEngine:
             await asyncio.gather(*tasks, return_exceptions=True)
 
         self._progression_task = None
-        self._firefighter_task = None
         self._cleanup_task = None
         logger.info("FireProgressionEngine stopped")
 
@@ -315,265 +301,37 @@ class FireProgressionEngine:
         await self._broadcaster.broadcast("fire:update", payload)
 
     # ------------------------------------------------------------------
-    # Firefighter suppression
-    # ------------------------------------------------------------------
-
-    async def _firefighter_loop(self) -> None:
-        """Periodically dispatch firefighters to suppress high-stage fires."""
-        while self._running:
-            try:
-                await self._run_firefighter_sweep()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.exception("Error in firefighter loop")
-            await asyncio.sleep(self._firefighter_interval)
-
-    async def _run_firefighter_sweep(self) -> None:
-        """Sweep all active firefighter NPCs and apply suppression.
-
-        Iterates over every active firefighter NPC (not just grids):
-        - Each NPC decrements its assigned cell's fire count by remove_per_sweep
-        - NPC status transitions: DISPATCHED → ACTIVE → DONE
-        - NPC is removed only when the cell's fire count reaches 0
-        """
-        npc_ids_raw = await self._redis.smembers(ACTIVE_FIREFIGHTERS_KEY)
-        if not npc_ids_raw:
-            return
-
-        for npc_id_raw in npc_ids_raw:
-            npc_id = npc_id_raw.decode() if isinstance(npc_id_raw, bytes) else npc_id_raw
-            npc = await self._load_firefighter(npc_id)
-            if npc is None:
-                # Orphaned entry — clean up
-                await self._redis.srem(ACTIVE_FIREFIGHTERS_KEY, npc_id)
-                continue
-
-            grid_id = npc.grid_id
-            now = time.time()
-            active_count = await self._get_active_count(grid_id, now)
-
-            # If fire is already at 0, retire the NPC
-            if active_count <= 0:
-                await self._retire_firefighter(npc)
-                continue
-
-            # Transition from DISPATCHED → ACTIVE on first sweep
-            if npc.status == FirefighterStatus.DISPATCHED:
-                npc.status = FirefighterStatus.ACTIVE
-                await self._update_firefighter_status(npc)
-
-            # Suppress fires: remove `remove_per_sweep` fires (default 2)
-            removed = await self._suppress_fires(grid_id, npc.remove_per_sweep)
-            if removed > 0:
-                npc.fires_removed += removed
-                await self._update_firefighter_fires_removed(npc)
-
-                # Re-count after suppression
-                new_count = await self._get_active_count(grid_id, time.time())
-                new_stage = get_stage(new_count)
-                prev_ff_stage = self._grid_stages.get(grid_id, FireStage.NONE)
-                self._grid_stages[grid_id] = new_stage
-
-                await self._broadcast_firefighter_alert(grid_id, removed, new_count)
-
-                # Always broadcast fire:update after suppression (count changed)
-                # so clients see the updated fire count even within same stage
-                await self._broadcast_fire_count_update(grid_id, new_count, new_stage)
-
-                # Additionally broadcast stage transition if stage changed
-                if new_stage != prev_ff_stage:
-                    await self._broadcast_stage_change(
-                        grid_id, new_count, new_stage, prev_stage=prev_ff_stage,
-                    )
-
-                logger.info(
-                    "Firefighter sweep: npc=%s grid=%s removed=%d remaining=%d",
-                    npc.npc_id,
-                    grid_id,
-                    removed,
-                    new_count,
-                )
-
-                # Retire firefighter if fire count reached 0
-                if new_count <= 0:
-                    await self._retire_firefighter(npc)
-
-    async def _load_firefighter(self, npc_id: str) -> FirefighterNPC | None:
-        """Load a firefighter NPC from Redis hash.
-
-        Args:
-            npc_id: The firefighter NPC identifier.
-
-        Returns:
-            FirefighterNPC if found, None otherwise.
-        """
-        key = f"{FIREFIGHTER_KEY_PREFIX}{npc_id}"
-        data = {}
-        for field in ("npc_id", "grid_id", "status", "dispatched_at",
-                       "fires_removed", "remove_per_sweep", "target_stage"):
-            val = await self._redis.hget(key, field)
-            if val is None:
-                return None
-            data[field] = val.decode() if isinstance(val, bytes) else val
-
-        return FirefighterNPC(
-            npc_id=data["npc_id"],
-            grid_id=data["grid_id"],
-            status=FirefighterStatus(data["status"]),
-            dispatched_at=float(data["dispatched_at"]),
-            fires_removed=int(data["fires_removed"]),
-            remove_per_sweep=int(data["remove_per_sweep"]),
-            target_stage=int(data["target_stage"]),
-        )
-
-    async def _update_firefighter_status(self, npc: FirefighterNPC) -> None:
-        """Update the status field of a firefighter NPC in Redis."""
-        key = f"{FIREFIGHTER_KEY_PREFIX}{npc.npc_id}"
-        await self._redis.hset(key, mapping={"status": npc.status.value})
-
-    async def _update_firefighter_fires_removed(self, npc: FirefighterNPC) -> None:
-        """Update the fires_removed field of a firefighter NPC in Redis."""
-        key = f"{FIREFIGHTER_KEY_PREFIX}{npc.npc_id}"
-        await self._redis.hset(key, mapping={"fires_removed": str(npc.fires_removed)})
-
-    async def _retire_firefighter(self, npc: FirefighterNPC) -> None:
-        """Retire a firefighter NPC: mark as DONE, broadcast, and clean up.
-
-        Args:
-            npc: The firefighter NPC to retire.
-        """
-        npc.status = FirefighterStatus.DONE
-        await self._broadcast_firefighter_retire(npc)
-        await self._remove_firefighter(npc.npc_id, npc.grid_id)
-        logger.info(
-            "Firefighter retired: npc_id=%s grid=%s fires_removed=%d",
-            npc.npc_id,
-            npc.grid_id,
-            npc.fires_removed,
-        )
-
-    async def _broadcast_firefighter_retire(self, npc: FirefighterNPC) -> None:
-        """Broadcast firefighter:retire event when an NPC finishes suppression."""
-        payload = npc.to_broadcast_payload()
-        await self._broadcaster.broadcast_to_room(
-            "firefighter:retire", payload, room=npc.grid_id
-        )
-        await self._broadcaster.broadcast("firefighter:retire", payload)
-
-    async def _retire_firefighter_for_grid(self, grid_id: str) -> None:
-        """Retire and clean up the firefighter NPC assigned to a grid."""
-        # Find the NPC for this grid
-        npc_ids = await self._redis.smembers(ACTIVE_FIREFIGHTERS_KEY)
-        for npc_id_raw in npc_ids:
-            npc_id = npc_id_raw.decode() if isinstance(npc_id_raw, bytes) else npc_id_raw
-            npc = await self._load_firefighter(npc_id)
-            if npc is not None and npc.grid_id == grid_id:
-                await self._retire_firefighter(npc)
-                break
-
-    async def _suppress_fires(self, grid_id: str, count: int) -> int:
-        """Remove the oldest fire events from a grid (firefighter action).
-
-        Uses ZPOPMIN to remove the fires with the earliest expiry
-        (i.e., the oldest fires).
-
-        Args:
-            grid_id: Grid cell to suppress.
-            count: Number of fires to remove.
-
-        Returns:
-            Actual number of fires removed.
-        """
-        key = f"{FIRE_KEY_PREFIX}{grid_id}"
-        removed = await self._redis.zpopmin(key, count)
-        return len(removed)
-
-    async def _broadcast_firefighter_alert(
-        self, grid_id: str, removed_count: int, remaining_count: int
-    ) -> None:
-        """Broadcast firefighter:alert event to grid room and globally."""
-        import time as _time
-
-        payload = {
-            "grid_id": grid_id,
-            "removed_count": removed_count,
-            "remaining_count": remaining_count,
-            "stage": int(get_stage(remaining_count)),
-            "timestamp": _time.time(),
-        }
-        # Room-scoped for viewport subscribers
-        await self._broadcaster.broadcast_to_room(
-            "firefighter:alert", payload, room=grid_id
-        )
-        # Global for map overview clients
-        await self._broadcaster.broadcast("firefighter:alert", payload)
-
-    # ------------------------------------------------------------------
-    # Firefighter NPC spawning
+    # Firefighter spawn (visual effect only)
     # ------------------------------------------------------------------
 
     async def check_and_spawn_firefighter(self, grid_id: str, active_count: int) -> FirefighterNPC | None:
-        """Check if a grid cell needs a firefighter NPC and spawn one if so.
+        """Broadcast firefighter:spawn event when a grid reaches stage 4+.
 
-        This is the main trigger detection entry point. Called whenever a
-        fire event is registered or a stage change is detected. If the cell
-        has reached stage 4+ (대화재) and doesn't already have an active
-        firefighter, a new NPC is spawned and tracked in Redis.
+        Visual-effect only — no Redis state is persisted and no suppression
+        is applied. Callers already gate by stage transition, so dedup is
+        handled at the call site.
 
         Args:
             grid_id: Grid cell to check.
             active_count: Current active fire count.
 
         Returns:
-            The spawned FirefighterNPC, or None if no spawn needed.
+            The spawned FirefighterNPC (payload holder), or None if no spawn needed.
         """
         if not should_spawn_firefighter(active_count):
             return None
 
-        # Check if this grid already has an active firefighter
-        if await self._grid_has_firefighter(grid_id):
-            return None
-
-        # Spawn a new firefighter NPC
         npc = create_firefighter_npc(grid_id, active_count)
-        await self._store_firefighter(npc)
         await self._broadcast_firefighter_spawn(npc)
 
         logger.info(
-            "Firefighter NPC spawned: npc_id=%s grid=%s stage=%d remove_per_sweep=%d",
+            "Firefighter spawn broadcast: npc_id=%s grid=%s stage=%d",
             npc.npc_id,
             grid_id,
             npc.target_stage,
-            npc.remove_per_sweep,
         )
 
         return npc
-
-    async def _grid_has_firefighter(self, grid_id: str) -> bool:
-        """Check if a grid cell already has an assigned firefighter NPC."""
-        return await self._redis.sismember(FIREFIGHTER_GRID_INDEX_KEY, grid_id)
-
-    async def _store_firefighter(self, npc: FirefighterNPC) -> None:
-        """Store a firefighter NPC in Redis with TTL.
-
-        Stores NPC data as a Redis hash and adds to tracking sets.
-        """
-        key = f"{FIREFIGHTER_KEY_PREFIX}{npc.npc_id}"
-        data = npc.to_broadcast_payload()
-        # Store as hash
-        await self._redis.hset(key, mapping={k: str(v) for k, v in data.items()})
-        await self._redis.expire(key, FIREFIGHTER_TTL_SEC)
-        # Track in active sets
-        await self._redis.sadd(ACTIVE_FIREFIGHTERS_KEY, npc.npc_id)
-        await self._redis.sadd(FIREFIGHTER_GRID_INDEX_KEY, npc.grid_id)
-
-    async def _remove_firefighter(self, npc_id: str, grid_id: str) -> None:
-        """Remove a firefighter NPC from Redis tracking."""
-        key = f"{FIREFIGHTER_KEY_PREFIX}{npc_id}"
-        await self._redis.delete(key)
-        await self._redis.srem(ACTIVE_FIREFIGHTERS_KEY, npc_id)
-        await self._redis.srem(FIREFIGHTER_GRID_INDEX_KEY, grid_id)
 
     async def _broadcast_firefighter_spawn(self, npc: FirefighterNPC) -> None:
         """Broadcast firefighter:spawn event when a new NPC is dispatched."""

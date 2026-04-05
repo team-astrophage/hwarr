@@ -126,7 +126,6 @@ async def startup_event():
             redis=redis_client,
             broadcaster=manager,
             scan_interval=2.0,
-            firefighter_interval=30.0,
             cleanup_interval=60.0,
         )
 

@@ -1,14 +1,14 @@
 """Tests for state-change event broadcasting via Socket.IO.
 
-Verifies that fire ignition, stage escalation, and firefighter actions
-publish updates to all connected clients via the connection manager.
+Verifies that fire ignition and stage escalation publish updates to all
+connected clients via the connection manager.
 
 Tests cover:
 1. fire:ignite — broadcasts ignition event to grid room + global
 2. subscribe:viewport — joins rooms and returns current state
 3. fire:state — returns current fire state on request
 4. Stage transitions trigger fire:update broadcasts
-5. Firefighter actions trigger firefighter:spawn/alert/retire broadcasts
+5. Stage 4 escalation triggers firefighter:spawn broadcast (visual only)
 6. Multiple clients receive broadcasts simultaneously
 """
 
@@ -209,7 +209,6 @@ def engine(redis, recording_broadcaster):
         redis=redis,
         broadcaster=recording_broadcaster,
         scan_interval=0.1,
-        firefighter_interval=0.2,
         cleanup_interval=0.3,
     )
 
@@ -571,54 +570,6 @@ class TestBroadcastFlow:
         t = transitions[0][1]
         assert t["prev_stage"] == 1  # BULSSSI
         assert t["new_stage"] == 2   # MODAKBUL
-
-    @pytest.mark.asyncio
-    async def test_firefighter_lifecycle_broadcasts(
-        self, handlers, engine, recording_broadcaster
-    ):
-        """Full firefighter lifecycle should produce spawn, alert, and retire broadcasts."""
-        ignite = handlers["fire:ignite"]
-
-        # Escalate to stage 4 (30 fires)
-        for i in range(30):
-            await ignite(f"c-{i}", {"lat": 37.5665, "lng": 126.9780})
-
-        # Should have firefighter:spawn
-        spawn_events = recording_broadcaster.get_events("firefighter:spawn")
-        assert len(spawn_events) >= 1
-
-        recording_broadcaster.clear()
-
-        # Run a firefighter sweep — should produce firefighter:alert
-        await engine._run_firefighter_sweep()
-
-        alerts = recording_broadcaster.get_events("firefighter:alert")
-        assert len(alerts) >= 1
-        assert alerts[0][1]["removed_count"] > 0
-
-    @pytest.mark.asyncio
-    async def test_firefighter_alert_broadcasts_globally(
-        self, handlers, engine, recording_broadcaster
-    ):
-        """Firefighter alert should broadcast to room AND globally."""
-        ignite = handlers["fire:ignite"]
-
-        # Escalate to stage 4 (30 fires)
-        for i in range(30):
-            await ignite(f"c-{i}", {"lat": 37.5665, "lng": 126.9780})
-
-        recording_broadcaster.clear()
-
-        # Run firefighter sweep
-        await engine._run_firefighter_sweep()
-
-        alerts = recording_broadcaster.get_events("firefighter:alert")
-        # Should have at least 2: one room-scoped, one global
-        assert len(alerts) >= 2
-        room_alerts = [a for a in alerts if a[2] is not None]
-        global_alerts = [a for a in alerts if a[2] is None]
-        assert len(room_alerts) >= 1
-        assert len(global_alerts) >= 1
 
     @pytest.mark.asyncio
     async def test_no_duplicate_broadcasts_same_stage(
