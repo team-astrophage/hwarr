@@ -15,6 +15,7 @@ import { ChatPanel } from '../../../components/ChatPanel';
 import { Header } from '../../../components/Header';
 import 'leaflet/dist/leaflet.css';
 
+const FLAMETHROWER_INTERVAL_MS = 300; // 초당 약 3.3발
 const KOREA_CENTER: [number, number] = [36.5, 127.5];
 const KOREA_BOUNDS: [[number, number], [number, number]] = [
   [33.0, 124.5],
@@ -83,10 +84,10 @@ export function MapPage() {
     if (!lat || !lng || !gridId) return;
     startFlamethrower(gridId);
     fire(lat, lng);
-    // 200ms 간격으로 연속 발사
+    // 300ms 간격으로 연속 발사
     flamethrowerIntervalRef.current = setInterval(() => {
       fire(lat, lng);
-    }, 200);
+    }, FLAMETHROWER_INTERVAL_MS);
   }, [lat, lng, gridId, startFlamethrower, fire]);
 
   // long press 종료
