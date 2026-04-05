@@ -1,5 +1,5 @@
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet';
-import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import L from 'leaflet';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { useFireSocket } from '../hooks/useFireSocket';
@@ -16,7 +16,6 @@ import { Header } from '../../../components/Header';
 import { LocationPermissionModal } from './LocationPermissionModal';
 import 'leaflet/dist/leaflet.css';
 
-const FLAMETHROWER_INTERVAL_MS = 300; // 초당 약 3.3발
 const KOREA_CENTER: [number, number] = [36.5, 127.5];
 const KOREA_BOUNDS: [[number, number], [number, number]] = [
   [33.0, 124.5],
@@ -64,11 +63,6 @@ export function MapPage() {
   const { fire } = useFire();
 
   const throwMatch = useAnimationStore((s) => s.throwMatch);
-  const startFlamethrower = useAnimationStore((s) => s.startFlamethrower);
-  const stopFlamethrower = useAnimationStore((s) => s.stopFlamethrower);
-  const flamethrowerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
   const [chatOpen, setChatOpen] = useState(false);
   const { parts } = useReverseGeocode(lat, lng);
 
@@ -79,26 +73,6 @@ export function MapPage() {
       fire(lat, lng);
     }
   }, [lat, lng, gridId, throwMatch, fire]);
-
-  // long press 시작 → 화염방사기 + 연속 불 이벤트
-  const handleLongPressFire = useCallback(() => {
-    if (!lat || !lng || !gridId) return;
-    startFlamethrower(gridId);
-    fire(lat, lng);
-    // 300ms 간격으로 연속 발사
-    flamethrowerIntervalRef.current = setInterval(() => {
-      fire(lat, lng);
-    }, FLAMETHROWER_INTERVAL_MS);
-  }, [lat, lng, gridId, startFlamethrower, fire]);
-
-  // long press 종료
-  const handleLongPressEnd = useCallback(() => {
-    stopFlamethrower();
-    if (flamethrowerIntervalRef.current) {
-      clearInterval(flamethrowerIntervalRef.current);
-      flamethrowerIntervalRef.current = null;
-    }
-  }, [stopFlamethrower]);
 
   return (
     <div className='relative h-svh w-full'>
@@ -183,8 +157,6 @@ export function MapPage() {
       <BottomPanel
         gridId={gridId}
         onFire={handleFire}
-        onLongPressFire={handleLongPressFire}
-        onLongPressEnd={handleLongPressEnd}
         disabled={!lat || !lng}
       />
     </div>

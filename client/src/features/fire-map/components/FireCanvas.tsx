@@ -196,88 +196,6 @@ const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환 (�
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
 
-/** 화염방사기: 연속 fire tongue 그리기 */
-function drawFlameStream(
-  ctx: CanvasRenderingContext2D,
-  sx: number, sy: number,
-  tx: number, ty: number,
-  frame: number,
-) {
-  const dx = tx - sx
-  const dy = ty - sy
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const segments = 38
-  const perpX = -dy / dist
-  const perpY = dx / dist
-
-  ctx.save()
-  ctx.globalCompositeOperation = 'lighter'
-
-  const layers = [
-    { width: 50, stops: ['rgba(255,60,0,0.22)', 'rgba(180,20,0,0)'] },
-    { width: 30, stops: ['rgba(255,100,10,0.55)', 'rgba(220,40,0,0)'] },
-    { width: 16, stops: ['rgba(255,200,60,0.8)', 'rgba(255,80,0,0)'] },
-    { width: 7,  stops: ['rgba(255,255,230,0.95)', 'rgba(255,200,60,0)'] },
-  ]
-
-  for (const layer of layers) {
-    ctx.beginPath()
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments
-      const baseX = sx + dx * t
-      const baseY = sy + dy * t
-      const wave = Math.sin(t * 14 + frame * 0.18) * (1 - t * 0.3) * layer.width * 0.45
-      const flicker = Math.sin(t * 23 + frame * 0.31 + i) * layer.width * 0.12
-      const px = baseX + perpX * (wave + flicker)
-      const py = baseY + perpY * (wave + flicker)
-      if (i === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-    }
-    for (let i = segments; i >= 0; i--) {
-      const t = i / segments
-      const baseX = sx + dx * t
-      const baseY = sy + dy * t
-      const wave = Math.sin(t * 14 + frame * 0.18 + 3.14) * (1 - t * 0.3) * layer.width * 0.45
-      const flicker = Math.sin(t * 23 + frame * 0.31 + i + 2) * layer.width * 0.12
-      const px = baseX + perpX * (wave + flicker)
-      const py = baseY + perpY * (wave + flicker)
-      ctx.lineTo(px, py)
-    }
-    ctx.closePath()
-
-    const grad = ctx.createLinearGradient(sx, sy, tx, ty)
-    grad.addColorStop(0, layer.stops[0])
-    grad.addColorStop(0.7, layer.stops[0])
-    grad.addColorStop(1, layer.stops[1])
-    ctx.fillStyle = grad
-    ctx.fill()
-  }
-
-  // 화구 글로우
-  const muzzleR = 28
-  const mg = ctx.createRadialGradient(sx, sy, 0, sx, sy, muzzleR)
-  mg.addColorStop(0, 'rgba(255,255,200,0.7)')
-  mg.addColorStop(0.3, 'rgba(255,160,40,0.35)')
-  mg.addColorStop(1, 'rgba(255,60,0,0)')
-  ctx.fillStyle = mg
-  ctx.beginPath()
-  ctx.arc(sx, sy, muzzleR, 0, Math.PI * 2)
-  ctx.fill()
-
-  // 임팩트 글로우
-  const impR = 36 + Math.sin(frame * 0.25) * 8
-  const ig = ctx.createRadialGradient(tx, ty, 0, tx, ty, impR)
-  ig.addColorStop(0, 'rgba(255,230,140,0.6)')
-  ig.addColorStop(0.35, 'rgba(255,80,0,0.3)')
-  ig.addColorStop(1, 'rgba(200,20,0,0)')
-  ctx.fillStyle = ig
-  ctx.beginPath()
-  ctx.arc(tx, ty, impR, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.restore()
-}
-
 // ── 파티클 생성 ──
 
 function spawnFlame(cfg: StageCfg): Flame {
@@ -318,7 +236,6 @@ export function FireCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const flamesRef = useRef<Map<string, Flame[]>>(new Map())
   const smokesRef = useRef<Map<string, Smoke[]>>(new Map())
-  // streamRef 제거됨 — 화염방사기는 drawFlameStream 직접 렌더
   const animRef = useRef<number>(0)
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
@@ -331,19 +248,19 @@ export function FireCanvas() {
   const removeMatchRef = useRef(removeMatch)
   removeMatchRef.current = removeMatch
 
-  const flamethrowerActive = useAnimationStore((s) => s.flamethrowerActive)
-  const flamethrowerRef = useRef(flamethrowerActive)
-  flamethrowerRef.current = flamethrowerActive
-  const targetGridId = useAnimationStore((s) => s.targetGridId)
-  const targetGridRef = useRef(targetGridId)
-  targetGridRef.current = targetGridId
-
   const explosions = useAnimationStore((s) => s.explosions)
   const explosionsRef = useRef(explosions)
   explosionsRef.current = explosions
   const removeExplosion = useAnimationStore((s) => s.removeExplosion)
   const removeExplosionRef = useRef(removeExplosion)
   removeExplosionRef.current = removeExplosion
+
+  const trajectories = useAnimationStore((s) => s.trajectories)
+  const trajectoriesRef = useRef(trajectories)
+  trajectoriesRef.current = trajectories
+  const removeTrajectory = useAnimationStore((s) => s.removeTrajectory)
+  const removeTrajectoryRef = useRef(removeTrajectory)
+  removeTrajectoryRef.current = removeTrajectory
 
   useEffect(() => {
     const container = map.getContainer()
@@ -717,20 +634,6 @@ export function FireCanvas() {
         }
       }
 
-      // ── 화염방사기 — 연속 화염줄기 렌더 ──
-      if (flamethrowerRef.current && targetGridRef.current) {
-        const gid = targetGridRef.current
-        const [fLatStr, fLngStr] = gid.split(':')
-        const fLat = Number(fLatStr) * LAT_UNIT + LAT_UNIT / 2
-        const fLng = Number(fLngStr) * LNG_UNIT + LNG_UNIT / 2
-        const ftTarget = map.latLngToContainerPoint(L.latLng(fLat, fLng))
-
-        const srcX = sw / 2
-        const srcY = sh - 80
-
-        drawFlameStream(ctx, srcX, srcY, ftTarget.x, ftTarget.y, frameCount)
-      }
-
       // ── 전소 폭발 이펙트 ("빵!" 느낌) ──
       const EXPLOSION_DURATION = 700
 
@@ -826,6 +729,85 @@ export function FireCanvas() {
 
         if (progress >= 1) {
           removeExplosionRef.current(exp.id)
+        }
+      }
+
+      // ── 불 확산 궤적 (500 하드캡 초과 → 이웃 그리드로) ──
+      const TRAJECTORY_DURATION = 400
+      const TRAJECTORY_PARTICLES = 6
+      const TRAJECTORY_ARC = 0.35  // 포물선 꼭대기 높이 (이동 거리 대비)
+
+      for (const traj of trajectoriesRef.current) {
+        const elapsed = now - traj.startTime
+        const progress = Math.min(elapsed / TRAJECTORY_DURATION, 1)
+
+        const [fromLatStr, fromLngStr] = traj.fromGridId.split(':')
+        const [toLatStr, toLngStr] = traj.toGridId.split(':')
+        const fromLat = Number(fromLatStr) * LAT_UNIT + LAT_UNIT / 2
+        const fromLng = Number(fromLngStr) * LNG_UNIT + LNG_UNIT / 2
+        const toLat = Number(toLatStr) * LAT_UNIT + LAT_UNIT / 2
+        const toLng = Number(toLngStr) * LNG_UNIT + LNG_UNIT / 2
+
+        const srcPt = map.latLngToContainerPoint(L.latLng(fromLat, fromLng))
+        const dstPt = map.latLngToContainerPoint(L.latLng(toLat, toLng))
+
+        const dx = dstPt.x - srcPt.x
+        const dy = dstPt.y - srcPt.y
+        const dist = Math.hypot(dx, dy)
+
+        ctx.globalCompositeOperation = 'lighter'
+
+        // 파편 여러 개가 조금씩 시차를 두고 날아감
+        for (let i = 0; i < TRAJECTORY_PARTICLES; i++) {
+          const stagger = i * 0.06  // 각 파편은 60ms씩 지연
+          const localP = Math.min(Math.max(progress - stagger, 0), 1)
+          if (localP <= 0 || localP >= 1) continue
+
+          // ease-out으로 자연스럽게 도달
+          const eased = 1 - Math.pow(1 - localP, 2)
+          // 포물선: y = -4h*t*(1-t) (t=0과 1에서 0, t=0.5에서 -h)
+          const arcOffset = -4 * TRAJECTORY_ARC * dist * eased * (1 - eased)
+          const jitter = (Math.sin(i * 1.7) + Math.cos(i * 2.3)) * 4
+          const px = srcPt.x + dx * eased + jitter
+          const py = srcPt.y + dy * eased + arcOffset
+
+          // 크기/알파: 중반에 가장 크고 밝음 → 끝에서 페이드
+          const fade = Math.sin(localP * Math.PI)
+          const pSize = 4 + fade * 5
+          const pAlpha = 0.85 * fade
+
+          // 색: 오렌지→빨강 그라디언트
+          const grad = ctx.createRadialGradient(px, py, 0, px, py, pSize * 2)
+          grad.addColorStop(0, `rgba(255, 230, 140, ${pAlpha})`)
+          grad.addColorStop(0.4, `rgba(255, 140, 40, ${pAlpha * 0.85})`)
+          grad.addColorStop(1, 'rgba(180, 40, 0, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.arc(px, py, pSize * 2, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // 도착 지점 작은 파편 폭발 (마지막 25%)
+        if (progress > 0.75) {
+          const landP = (progress - 0.75) / 0.25
+          const landFade = 1 - landP
+          const landR = 6 + landP * 18
+          const landGrad = ctx.createRadialGradient(
+            dstPt.x, dstPt.y, 0, dstPt.x, dstPt.y, landR,
+          )
+          landGrad.addColorStop(0, `rgba(255, 220, 130, ${landFade * 0.9})`)
+          landGrad.addColorStop(0.5, `rgba(255, 120, 40, ${landFade * 0.6})`)
+          landGrad.addColorStop(1, 'rgba(180, 40, 0, 0)')
+          ctx.globalAlpha = 1
+          ctx.fillStyle = landGrad
+          ctx.beginPath()
+          ctx.arc(dstPt.x, dstPt.y, landR, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        if (progress >= 1) {
+          removeTrajectoryRef.current(traj.id)
         }
       }
 

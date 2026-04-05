@@ -1,8 +1,9 @@
 /**
- * 성냥 던지기 & 화염방사기 애니메이션 상태 (Zustand)
+ * 성냥 던지기 애니메이션 상태 (Zustand)
  *
  * - matchThrow: 탭 시 성냥 포물선 애니메이션 트리거
- * - flamethrower: long press 시 스트림형 파티클 분사 상태
+ * - explosions: 전소 도달 시 폭발 이펙트
+ * - trajectories: 500 하드캡 초과 시 이웃 그리드로 번지는 궤적
  */
 
 import { create } from 'zustand'
@@ -21,6 +22,15 @@ interface Explosion {
   gridId: string
 }
 
+interface SpreadTrajectory {
+  id: number
+  startTime: number
+  /** 소스 격자 ID (불이 출발한 곳) */
+  fromGridId: string
+  /** 타겟 격자 ID (불이 착륙한 곳) */
+  toGridId: string
+}
+
 /** 랜덤 폭발 간격 최소 (탭 횟수) */
 const RANDOM_EXPLOSION_INTERVAL_MIN = 20
 /** 랜덤 폭발 간격 최대 (탭 횟수) */
@@ -29,10 +39,6 @@ const RANDOM_EXPLOSION_INTERVAL_MAX = 30
 interface AnimationState {
   /** 활성 성냥 애니메이션 목록 */
   matches: MatchThrow[]
-  /** 화염방사기 활성 여부 */
-  flamethrowerActive: boolean
-  /** 대상 격자 ID */
-  targetGridId: string | null
   /** 전소 폭발 이펙트 목록 */
   explosions: Explosion[]
   /** 전소 달성한 격자 추적 (중복 방지) */
@@ -41,13 +47,15 @@ interface AnimationState {
   postExplodeTapCount: number
   /** 다음 랜덤 폭발이 발동될 탭 카운트 (postExplodeTapCount 기준) */
   nextRandomExplosionAt: number
+  /** 불 확산 궤적 애니메이션 목록 */
+  trajectories: SpreadTrajectory[]
 
   throwMatch: (gridId: string) => void
   removeMatch: (id: number) => void
-  startFlamethrower: (gridId: string) => void
-  stopFlamethrower: () => void
   triggerExplosion: (gridId: string) => void
   removeExplosion: (id: number) => void
+  addTrajectory: (fromGridId: string, toGridId: string) => void
+  removeTrajectory: (id: number) => void
 }
 
 const pickNextRandomInterval = () =>
@@ -61,12 +69,11 @@ let matchIdCounter = 0
 
 export const useAnimationStore = create<AnimationState>((set) => ({
   matches: [],
-  flamethrowerActive: false,
-  targetGridId: null,
   explosions: [],
   explodedGrids: new Set(),
   postExplodeTapCount: 0,
   nextRandomExplosionAt: pickNextRandomInterval(),
+  trajectories: [],
 
   throwMatch: (gridId) =>
     set((state) => {
@@ -113,12 +120,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       matches: state.matches.filter((m) => m.id !== id),
     })),
 
-  startFlamethrower: (gridId) =>
-    set({ flamethrowerActive: true, targetGridId: gridId }),
-
-  stopFlamethrower: () =>
-    set({ flamethrowerActive: false }),
-
   triggerExplosion: (gridId) =>
     set((state) => {
       if (state.explodedGrids.has(gridId)) return state
@@ -140,5 +141,23 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   removeExplosion: (id) =>
     set((state) => ({
       explosions: state.explosions.filter((e) => e.id !== id),
+    })),
+
+  addTrajectory: (fromGridId, toGridId) =>
+    set((state) => ({
+      trajectories: [
+        ...state.trajectories,
+        {
+          id: ++matchIdCounter,
+          startTime: performance.now(),
+          fromGridId,
+          toGridId,
+        },
+      ],
+    })),
+
+  removeTrajectory: (id) =>
+    set((state) => ({
+      trajectories: state.trajectories.filter((t) => t.id !== id),
     })),
 }))

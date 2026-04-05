@@ -13,7 +13,7 @@ KST = ZoneInfo("Asia/Seoul")
 # TTL settings (seconds)
 # ---------------------------------------------------------------------------
 
-FIRE_TTL_SEC = int(os.getenv("FIRE_TTL_SEC", 21600))              # 6 hours
+FIRE_TTL_SEC = int(os.getenv("FIRE_TTL_SEC", 2400))               # 40 minutes
 NEWS_TTL_SEC = int(os.getenv("NEWS_TTL_SEC", 86400))              # 1 day
 
 # ---------------------------------------------------------------------------

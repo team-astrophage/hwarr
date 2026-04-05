@@ -12,8 +12,15 @@
 
 import { useEffect } from 'react'
 import { socket } from '../../../lib/socket'
+import { useAnimationStore } from '../stores/animationStore'
 import { useFireStore } from '../stores/fireStore'
 import type { FireCell } from '../stores/fireStore'
+
+interface FireSpreadPayload {
+  path: { from: string; to: string }[]
+  event_id?: string
+  timestamp?: number
+}
 
 export function useFireSocket() {
   const updateFire = useFireStore((s) => s.updateFire)
@@ -27,6 +34,12 @@ export function useFireSocket() {
     const onFireUpdate = (data: FireCell) => updateFire(data)
     const onFiresSync = (data: FireCell[]) => syncFires(data)
     const onUsersCount = (data: { count: number }) => setOnlineUsers(data.count)
+    const onFireSpread = (data: FireSpreadPayload) => {
+      const addTrajectory = useAnimationStore.getState().addTrajectory
+      for (const segment of data.path) {
+        addTrajectory(segment.from, segment.to)
+      }
+    }
 
     // 이미 연결되어 있으면 즉시 초기 동기화 요청
     if (socket.connected) requestSync()
@@ -35,12 +48,14 @@ export function useFireSocket() {
     socket.on('fire:update', onFireUpdate)
     socket.on('fires:sync', onFiresSync)
     socket.on('users:count', onUsersCount)
+    socket.on('fire:spread', onFireSpread)
 
     return () => {
       socket.off('connect', requestSync)
       socket.off('fire:update', onFireUpdate)
       socket.off('fires:sync', onFiresSync)
       socket.off('users:count', onUsersCount)
+      socket.off('fire:spread', onFireSpread)
     }
   }, [updateFire, syncFires, setOnlineUsers])
 }

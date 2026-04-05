@@ -131,8 +131,15 @@ async def ignite_fire(body: FireIgniteRequest) -> FireIgniteResponse:
     event_id = f"fire-{uuid.uuid4().hex[:12]}"
     expire_at = time.time() + FIRE_TTL_SEC
 
-    # 3. Register in Redis — engine handles stage detection & firefighter spawn
-    active_count = await engine.register_fire(grid_id, event_id, expire_at)
+    # 3. Register in Redis — engine handles neighbor-spreading, stage detection,
+    #    and firefighter spawn. The landing grid may differ if the source was
+    #    at/over the 500 spread threshold.
+    registration = await engine.register_fire(grid_id, event_id, expire_at)
+    # If the fire spread to a neighbor, use that grid's center for lat/lng
+    if registration.grid_id != grid_id:
+        lat, lng = grid_id_to_center(registration.grid_id)
+    grid_id = registration.grid_id
+    active_count = registration.active_count
 
     # 4. Build grid state for response and broadcast
     state = build_grid_state(

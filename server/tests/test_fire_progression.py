@@ -12,6 +12,7 @@ import pytest
 from jobs.fire_progression import (
     ACTIVE_GRIDS_KEY,
     FIRE_KEY_PREFIX,
+    FIRE_SPREAD_THRESHOLD,
     FireProgressionEngine,
 )
 from models.fire import FireStage, get_stage
@@ -53,6 +54,17 @@ class FakeRedis:
         self._sets: dict[str, set[str]] = {}
         self._hashes: dict[str, dict[str, str]] = {}
         self._ttls: dict[str, float] = {}
+        self._counters: dict[str, int] = {}
+
+    async def incr(self, key: str) -> int:
+        self._counters[key] = self._counters.get(key, 0) + 1
+        return self._counters[key]
+
+    async def zincrby(self, key: str, amount: float, member: str) -> float:
+        if key not in self._sorted_sets:
+            self._sorted_sets[key] = {}
+        self._sorted_sets[key][member] = self._sorted_sets[key].get(member, 0.0) + amount
+        return self._sorted_sets[key][member]
 
     async def zadd(self, key: str, mapping: dict[str, float]) -> int:
         if key not in self._sorted_sets:
@@ -177,9 +189,11 @@ class TestRegisterFire:
     async def test_register_first_fire(self, engine, redis):
         """Registering first fire should return count=1 and track grid."""
         expire_at = time.time() + 1800  # 30 min from now
-        count = await engine.register_fire("10:20", "evt-001", expire_at)
+        result = await engine.register_fire("10:20", "evt-001", expire_at)
 
-        assert count == 1
+        assert result.active_count == 1
+        assert result.grid_id == "10:20"
+        assert result.spread_path == []
         assert "10:20" in await redis.smembers(ACTIVE_GRIDS_KEY)
 
     @pytest.mark.asyncio
@@ -188,9 +202,11 @@ class TestRegisterFire:
         expire_at = time.time() + 1800
         await engine.register_fire("10:20", "evt-001", expire_at)
         await engine.register_fire("10:20", "evt-002", expire_at)
-        count = await engine.register_fire("10:20", "evt-003", expire_at)
+        result = await engine.register_fire("10:20", "evt-003", expire_at)
 
-        assert count == 3
+        assert result.active_count == 3
+        assert result.grid_id == "10:20"
+        assert result.spread_path == []
 
     @pytest.mark.asyncio
     async def test_stage_change_broadcasts(self, engine, broadcaster):
@@ -222,9 +238,10 @@ class TestRegisterFire:
         """Fires should escalate through stages as count increases."""
         expire_at = time.time() + 1800
 
-        # Add fires to cross stage boundaries
+        # Add fires to cross stage boundaries — thresholds: 1/10/40/120/280
+        # Stay under FIRE_SPREAD_THRESHOLD (500) so all fires land on "1:1"
         stages_seen = []
-        for i in range(1, 51):
+        for i in range(1, 300):
             broadcaster.clear()
             await engine.register_fire("1:1", f"evt-{i:03d}", expire_at)
             updates = broadcaster.get_events("fire:update")
@@ -417,3 +434,88 @@ class TestGridStages:
         stages["t:2"] = FireStage.JEONSO  # mutate copy
 
         assert engine.grid_stages["t:2"] == FireStage.BULSSSI  # original unchanged
+
+
+# ---------------------------------------------------------------------------
+# Tests: fire spreading to neighbor grids (500 hard cap)
+# ---------------------------------------------------------------------------
+
+
+class TestFireSpread:
+    """Test the 500-click spread-to-neighbor mechanic."""
+
+    @pytest.mark.asyncio
+    async def test_lands_at_source_when_under_threshold(self, engine, redis):
+        """Below FIRE_SPREAD_THRESHOLD, fires land at the requested grid."""
+        expire_at = time.time() + 1800
+        result = await engine.register_fire("50:50", "evt-a", expire_at)
+
+        assert result.grid_id == "50:50"
+        assert result.spread_path == []
+        assert result.active_count == 1
+
+    @pytest.mark.asyncio
+    async def test_spreads_to_neighbor_at_threshold(self, engine, redis, broadcaster):
+        """At FIRE_SPREAD_THRESHOLD, next fire spreads to a random neighbor."""
+        expire_at = time.time() + 1800
+        # Prefill the source grid to the threshold
+        for i in range(FIRE_SPREAD_THRESHOLD):
+            await redis.zadd(f"{FIRE_KEY_PREFIX}50:50", {f"evt-pre-{i}": expire_at})
+        await redis.sadd(ACTIVE_GRIDS_KEY, "50:50")
+        broadcaster.clear()
+
+        result = await engine.register_fire("50:50", "evt-over", expire_at)
+
+        # Source tile unchanged at threshold
+        source_count = await redis.zcount(
+            f"{FIRE_KEY_PREFIX}50:50", time.time(), "+inf",
+        )
+        assert source_count == FIRE_SPREAD_THRESHOLD
+        # Landing grid is a neighbor (one of the 8 adjacent)
+        assert result.grid_id != "50:50"
+        assert len(result.spread_path) == 1
+        src, dst = result.spread_path[0]
+        assert src == "50:50"
+        assert dst == result.grid_id
+        # Neighbor is exactly one step away in lat/lng indices
+        src_lat, src_lng = (int(x) for x in src.split(":"))
+        dst_lat, dst_lng = (int(x) for x in dst.split(":"))
+        assert abs(dst_lat - src_lat) <= 1
+        assert abs(dst_lng - src_lng) <= 1
+        assert not (dst_lat == src_lat and dst_lng == src_lng)
+        # Broadcast fired
+        spreads = broadcaster.get_events("fire:spread")
+        assert len(spreads) == 1
+        assert spreads[0][1]["path"] == [{"from": src, "to": dst}]
+
+    @pytest.mark.asyncio
+    async def test_no_spread_broadcast_when_under_threshold(
+        self, engine, broadcaster,
+    ):
+        """No fire:spread event when fire lands at the requested grid."""
+        expire_at = time.time() + 1800
+        await engine.register_fire("70:70", "evt-a", expire_at)
+        spreads = broadcaster.get_events("fire:spread")
+        assert spreads == []
+
+    @pytest.mark.asyncio
+    async def test_cascades_through_full_neighbors(self, engine, redis):
+        """If a neighbor is also full, fire cascades onward."""
+        expire_at = time.time() + 1800
+        # Saturate an entire 3x3 area around (100, 100) so the first hop
+        # lands on another saturated grid and must cascade again.
+        for dlat in (-1, 0, 1):
+            for dlng in (-1, 0, 1):
+                key = f"{FIRE_KEY_PREFIX}{100 + dlat}:{100 + dlng}"
+                for i in range(FIRE_SPREAD_THRESHOLD):
+                    await redis.zadd(key, {f"evt-sat-{dlat}-{dlng}-{i}": expire_at})
+                await redis.sadd(
+                    ACTIVE_GRIDS_KEY, f"{100 + dlat}:{100 + dlng}",
+                )
+
+        result = await engine.register_fire("100:100", "evt-cascade", expire_at)
+
+        # Must have hopped at least twice (source → neighbor → somewhere)
+        assert len(result.spread_path) >= 2
+        # Final landing grid is different from source
+        assert result.grid_id != "100:100"

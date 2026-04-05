@@ -85,6 +85,30 @@ def grid_id_to_center(grid_id: str) -> tuple[float, float]:
     return (center_lat, center_lng)
 
 
+def get_neighbors_8(grid_id: str) -> list[str]:
+    """Return the 8 neighboring grid IDs (orthogonal + diagonal).
+
+    hwarr uses an unbounded sparse grid, so no boundary filtering is applied —
+    every neighbor coordinate is a valid grid ID regardless of whether it
+    currently holds any fires.
+
+    Args:
+        grid_id: Grid ID in format "grid_lat:grid_lng".
+
+    Returns:
+        List of 8 neighbor grid ID strings.
+    """
+    parts = grid_id.split(":")
+    grid_lat = int(parts[0])
+    grid_lng = int(parts[1])
+    return [
+        f"{grid_lat + dlat}:{grid_lng + dlng}"
+        for dlat in (-1, 0, 1)
+        for dlng in (-1, 0, 1)
+        if not (dlat == 0 and dlng == 0)
+    ]
+
+
 def get_grids_in_viewport(
     ne_lat: float, ne_lng: float, sw_lat: float, sw_lng: float
 ) -> list[str]:

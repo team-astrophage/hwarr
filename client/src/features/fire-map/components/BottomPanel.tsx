@@ -1,22 +1,15 @@
 import { useRef, useCallback } from 'react'
 import { useFireStore } from '../stores/fireStore'
 
-/** long press 판정 기준 (ms) */
-const LONG_PRESS_MS = 500
-
 interface BottomPanelProps {
   gridId: string | null
   onFire: () => void
-  onLongPressFire: () => void
-  onLongPressEnd: () => void
   disabled: boolean
 }
 
 export function BottomPanel({
   gridId,
   onFire,
-  onLongPressFire,
-  onLongPressEnd,
   disabled,
 }: BottomPanelProps) {
   const fires = useFireStore((s) => s.fires)
@@ -24,15 +17,11 @@ export function BottomPanel({
 
   const activeGrids = fires.size
 
-  // tap vs long press 분기
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isLongRef = useRef(false)
   // 멀티터치 방지: 첫 번째 pointerId만 추적
   const activePointerIdRef = useRef<number | null>(null)
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     if (disabled) return
-    // 이미 활성 pointer 가 있으면 추가 터치는 완전 무시
     if (activePointerIdRef.current !== null) return
     activePointerIdRef.current = e.pointerId
     try {
@@ -40,55 +29,18 @@ export function BottomPanel({
     } catch {
       // 일부 브라우저에서 실패 가능 — 무시
     }
-    isLongRef.current = false
-    timerRef.current = setTimeout(() => {
-      isLongRef.current = true
-      onLongPressFire()
-    }, LONG_PRESS_MS)
-  }, [disabled, onLongPressFire])
+  }, [disabled])
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerId !== activePointerIdRef.current) return
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if (isLongRef.current) {
-      // long press 종료
-      onLongPressEnd()
-      isLongRef.current = false
-    } else {
-      // tap → 성냥 던지기
-      onFire()
-    }
     activePointerIdRef.current = null
-  }, [onFire, onLongPressEnd])
-
-  const handlePointerLeave = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.pointerId !== activePointerIdRef.current) return
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if (isLongRef.current) {
-      onLongPressEnd()
-      isLongRef.current = false
-    }
-    activePointerIdRef.current = null
-  }, [onLongPressEnd])
+    onFire()
+  }, [onFire])
 
   const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerId !== activePointerIdRef.current) return
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if (isLongRef.current) {
-      onLongPressEnd()
-      isLongRef.current = false
-    }
     activePointerIdRef.current = null
-  }, [onLongPressEnd])
+  }, [])
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-[1000] p-4 pb-8">
@@ -137,12 +89,11 @@ export function BottomPanel({
           </div>
         </div>
 
-        {/* Fire button — tap: 성냥, long press: 화염방사기 */}
+        {/* Fire button — tap으로 성냥 던지기 */}
         <button
           disabled={disabled}
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
           onPointerCancel={handlePointerCancel}
           onContextMenu={(e) => e.preventDefault()}
           className="flex h-12 w-full select-none touch-none items-center justify-center pl-2 pr-2 text-center no-underline gap-2 rounded-[14px] bg-[#e4531b] font-bold tracking-wide text-[0.8125rem] text-white shadow-[var(--shadow-medium)] transition-[transform,filter] duration-150 active:scale-[0.97] active:brightness-[0.92] disabled:cursor-not-allowed disabled:opacity-35"

@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from config import FIRE_TTL_SEC
-from grid import to_grid_id
+from grid import grid_id_to_center, to_grid_id
 from models.fire import build_grid_state
 from routes.map_config import _PREDEFINED_LOCATIONS, FIRE_LOCATIONS, FireLocation
 
@@ -251,8 +251,12 @@ async def ignite_demo_fire(
     event_id = f"fire-demo-{uuid.uuid4().hex[:12]}"
     expire_at = time.time() + FIRE_TTL_SEC
 
-    # Register in Redis
-    active_count = await engine.register_fire(grid_id, event_id, expire_at)
+    # Register in Redis (landing grid may differ if source reached spread threshold)
+    registration = await engine.register_fire(grid_id, event_id, expire_at)
+    if registration.grid_id != grid_id:
+        lat, lng = grid_id_to_center(registration.grid_id)
+    grid_id = registration.grid_id
+    active_count = registration.active_count
 
     # Build state
     state = build_grid_state(

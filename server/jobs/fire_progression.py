@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 
 from config import (
     KST,
@@ -31,7 +32,7 @@ from config import (
     STATS_DAILY_RANKING_TTL_SEC,
     STATS_TOTAL_FIRES_KEY,
 )
-from grid import grid_id_to_center
+from grid import get_neighbors_8, grid_id_to_center
 from models.fire import (
     FireStage,
     build_grid_state,
@@ -57,6 +58,21 @@ FIRE_KEY_PREFIX = "fire:"
 
 # Key tracking all active grid IDs (a Redis Set)
 ACTIVE_GRIDS_KEY = "active_grids"
+
+# Per-tile hard cap — beyond this, additional clicks spread to a random neighbor
+FIRE_SPREAD_THRESHOLD = 500
+
+# Safety cap on cascade depth (prevents pathological infinite spread loops;
+# reaching this depth requires FIRE_SPREAD_THRESHOLD neighbors to all be full)
+FIRE_MAX_CASCADE_DEPTH = 8
+
+
+class FireRegistration(NamedTuple):
+    """Result of registering a fire event (after any neighbor spreading)."""
+
+    grid_id: str            # final landing grid (may differ from requested)
+    active_count: int       # active count at the landing grid
+    spread_path: list[tuple[str, str]]  # [(from, to), ...] segments if spread occurred
 
 
 class Broadcaster(Protocol):
@@ -385,27 +401,50 @@ class FireProgressionEngine:
     # Public helpers (for use by fire API when adding new fires)
     # ------------------------------------------------------------------
 
-    async def register_fire(self, grid_id: str, event_id: str, expire_at: float) -> int:
-        """Register a new fire event and return updated active count.
+    async def register_fire(
+        self, grid_id: str, event_id: str, expire_at: float,
+    ) -> FireRegistration:
+        """Register a new fire event, spreading to neighbors if the source is full.
 
-        Called by the fire API when a user ignites a fire.
+        Called by the fire API when a user ignites a fire. If the requested
+        grid is at or above FIRE_SPREAD_THRESHOLD, the fire "spreads" to a
+        random 8-direction neighbor. Cascading is allowed up to
+        FIRE_MAX_CASCADE_DEPTH hops.
 
         Args:
-            grid_id: Grid cell where the fire was ignited.
+            grid_id: Grid cell where the fire was ignited (requested target).
             event_id: Unique fire event identifier.
             expire_at: Expiration timestamp (score in sorted set).
 
         Returns:
-            Current active fire count after registration.
+            FireRegistration with the final landing grid, active count, and
+            the spread path (empty if the fire landed on the requested grid).
         """
-        key = f"{FIRE_KEY_PREFIX}{grid_id}"
         now = time.time()
+        spread_path: list[tuple[str, str]] = []
+        current_grid = grid_id
 
-        # Add fire event to sorted set
-        await self._redis.zadd(key, {event_id: expire_at})
+        # Walk the cascade: at each step, either land here or spread to a neighbor.
+        for _ in range(FIRE_MAX_CASCADE_DEPTH):
+            key = f"{FIRE_KEY_PREFIX}{current_grid}"
+            count = await self._redis.zcount(key, now, "+inf")
+            if count < FIRE_SPREAD_THRESHOLD:
+                break  # capacity here — land at current_grid
+            # At or over threshold — spread to a random 8-direction neighbor.
+            neighbors = get_neighbors_8(current_grid)
+            next_grid = random.choice(neighbors)
+            spread_path.append((current_grid, next_grid))
+            current_grid = next_grid
+        # Fell through (reached max cascade depth): force-land at current_grid
+        # even if it's also at/over the threshold. This should be practically
+        # unreachable (requires 8 hops of saturated neighbors).
 
-        # Track this grid as active
-        await self._redis.sadd(ACTIVE_GRIDS_KEY, grid_id)
+        landing_grid = current_grid
+        landing_key = f"{FIRE_KEY_PREFIX}{landing_grid}"
+
+        # Add fire event to the landing grid's sorted set
+        await self._redis.zadd(landing_key, {event_id: expire_at})
+        await self._redis.sadd(ACTIVE_GRIDS_KEY, landing_grid)
 
         # Increment cumulative fire counter
         await self._redis.incr(STATS_TOTAL_FIRES_KEY)
@@ -416,32 +455,51 @@ class FireProgressionEngine:
         await self._redis.incr(today_key)
         await self._redis.expire(today_key, STATS_DAILY_FIRES_TTL_SEC)
 
-        # Increment today's region ranking (skip if resolver absent or point
-        # falls outside any admin polygon — cumulative/daily counters stay intact)
+        # Increment today's region ranking based on the LANDING grid (where the
+        # fire actually ends up burning). Skip if resolver absent or point
+        # falls outside any admin polygon — cumulative/daily counters stay intact.
         if self._resolver is not None:
-            lat, lng = grid_id_to_center(grid_id)
+            lat, lng = grid_id_to_center(landing_grid)
             region = self._resolver.resolve(lat, lng)
             if region:
                 rank_key = f"{STATS_DAILY_RANKING_PREFIX}{today_str}"
                 await self._redis.zincrby(rank_key, 1, region)
                 await self._redis.expire(rank_key, STATS_DAILY_RANKING_TTL_SEC)
 
-        # Get current active count
-        active_count = await self._redis.zcount(key, now, "+inf")
+        # Get current active count at the landing grid
+        active_count = await self._redis.zcount(landing_key, now, "+inf")
 
-        # Update stage tracking
+        # Update stage tracking for the landing grid
         new_stage = get_stage(active_count)
-        prev_stage = self._grid_stages.get(grid_id, FireStage.NONE)
-        self._grid_stages[grid_id] = new_stage
+        prev_stage = self._grid_stages.get(landing_grid, FireStage.NONE)
+        self._grid_stages[landing_grid] = new_stage
 
         # Broadcast immediately on stage change (don't wait for scan)
         if new_stage != prev_stage:
             await self._broadcast_stage_change(
-                grid_id, active_count, new_stage, prev_stage=prev_stage,
+                landing_grid, active_count, new_stage, prev_stage=prev_stage,
             )
 
             # Spawn firefighter NPC on immediate escalation to stage 4+
             if new_stage >= FireStage.DAEHWAJAE:
-                await self.check_and_spawn_firefighter(grid_id, active_count)
+                await self.check_and_spawn_firefighter(landing_grid, active_count)
 
-        return active_count
+        # Broadcast spread animation event if the fire moved to a neighbor.
+        if spread_path:
+            await self._broadcaster.broadcast("fire:spread", {
+                "path": [
+                    {"from": src, "to": dst} for src, dst in spread_path
+                ],
+                "event_id": event_id,
+                "timestamp": now,
+            })
+            logger.info(
+                "fire spread: %s → %s (depth=%d, event=%s)",
+                grid_id, landing_grid, len(spread_path), event_id,
+            )
+
+        return FireRegistration(
+            grid_id=landing_grid,
+            active_count=active_count,
+            spread_path=spread_path,
+        )

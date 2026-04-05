@@ -93,12 +93,18 @@ def register_fire_events(
             logger.warning("fire:ignite from %s invalid coords: %s", sid, data)
             return {"error": "lat and lng must be numbers"}
 
-        grid_id = to_grid_id(lat, lng)
+        requested_grid_id = to_grid_id(lat, lng)
         event_id = f"fire-{uuid.uuid4().hex[:12]}"
         expire_at = time.time() + FIRE_TTL_SEC
 
-        # Register fire — engine handles stage detection and broadcasting
-        active_count = await engine.register_fire(grid_id, event_id, expire_at)
+        # Register fire — engine handles neighbor-spreading, stage detection,
+        # and broadcasting. The landing grid may differ from the requested one.
+        registration = await engine.register_fire(requested_grid_id, event_id, expire_at)
+        grid_id = registration.grid_id
+        active_count = registration.active_count
+        spread_path = [
+            {"from": src, "to": dst} for src, dst in registration.spread_path
+        ]
 
         # Build response for the igniting client
         state = build_grid_state(
@@ -133,17 +139,19 @@ def register_fire_events(
         })
 
         logger.info(
-            "fire:ignite sid=%s grid=%s count=%d stage=%d",
-            sid, grid_id, active_count, state.stage,
+            "fire:ignite sid=%s requested=%s landed=%s count=%d stage=%d spread=%d",
+            sid, requested_grid_id, grid_id, active_count, state.stage, len(spread_path),
         )
 
         result = {
             "status": "ok",
             "grid_id": grid_id,
+            "requested_grid_id": requested_grid_id,
             "event_id": event_id,
             "active_count": active_count,
             "stage": state.stage,
             "stage_info": state.stage_info.model_dump(),
+            "spread_path": spread_path,
         }
         if demo:
             result["demo"] = True
@@ -264,11 +272,18 @@ def register_fire_events(
         except (TypeError, ValueError):
             return
 
-        grid_id = to_grid_id(lat, lng)
+        requested_grid_id = to_grid_id(lat, lng)
         event_id = f"fire-{uuid.uuid4().hex[:12]}"
         expire_at = time.time() + FIRE_TTL_SEC
 
-        active_count = await engine.register_fire(grid_id, event_id, expire_at)
+        registration = await engine.register_fire(requested_grid_id, event_id, expire_at)
+        grid_id = registration.grid_id
+        active_count = registration.active_count
+        # Use the landing grid's center for lat/lng when the fire spread to a
+        # neighbor; this keeps the camelCase broadcast consistent with grid_id.
+        if grid_id != requested_grid_id:
+            from grid import grid_id_to_center
+            lat, lng = grid_id_to_center(grid_id)
         state = build_grid_state(
             grid_id=grid_id, active_count=active_count, lat=lat, lng=lng,
         )
@@ -283,8 +298,9 @@ def register_fire_events(
         })
 
         logger.info(
-            "fire (compat) sid=%s grid=%s count=%d stage=%d",
-            sid, grid_id, active_count, state.stage,
+            "fire (compat) sid=%s requested=%s landed=%s count=%d stage=%d spread=%d",
+            sid, requested_grid_id, grid_id, active_count, state.stage,
+            len(registration.spread_path),
         )
 
     @sio.on("get_fires")
