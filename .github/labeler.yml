@@ -1,0 +1,22 @@
+scope/client:
+  - changed-files:
+      - any-glob-to-any-file:
+          - client/**
+
+scope/server:
+  - changed-files:
+      - any-glob-to-any-file:
+          - server/**
+
+scope/infra:
+  - changed-files:
+      - any-glob-to-any-file:
+          - infra/**
+          - .github/workflows/**
+          - Dockerfile
+          - docker-compose*.yml
+
+scope/docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
