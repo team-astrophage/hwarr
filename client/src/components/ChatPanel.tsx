@@ -5,7 +5,7 @@
  * 메시지는 서버에서 1시간 TTL + 최대 100개 보관.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { getChatIdentity } from '../features/chat/identity'
 import { useChat, useSendChatMessage } from '../features/chat/useChat'
 import { useChatStore } from '../features/chat/useChatStore'
@@ -33,7 +33,45 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
   const identity = useMemo(() => getChatIdentity(), [])
   const [inputValue, setInputValue] = useState('')
   const [isComposing, setIsComposing] = useState(false)
+  const [panelHeight, setPanelHeight] = useState(55)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
+
+  const MIN_HEIGHT = 30
+  const MAX_HEIGHT = 85
+
+  const handleDragStart = useCallback((clientY: number) => {
+    dragRef.current = { startY: clientY, startHeight: panelHeight }
+  }, [panelHeight])
+
+  const handleDragMove = useCallback((clientY: number) => {
+    if (!dragRef.current) return
+    const deltaVh = ((dragRef.current.startY - clientY) / window.innerHeight) * 100
+    const next = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragRef.current.startHeight + deltaVh))
+    setPanelHeight(next)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragRef.current = null
+  }, [])
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientY)
+    const onMouseUp = () => handleDragEnd()
+    const onTouchMove = (e: TouchEvent) => handleDragMove(e.touches[0].clientY)
+    const onTouchEnd = () => handleDragEnd()
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('touchend', onTouchEnd)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [handleDragMove, handleDragEnd])
 
   // 새 메시지 도착 시 최하단으로 자동 스크롤
   useEffect(() => {
@@ -67,43 +105,39 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
   if (!visible) return null
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-[1100] flex flex-col max-h-[55vh]">
+    <div
+      className="absolute bottom-0 left-0 right-0 z-[1100] flex flex-col"
+      style={{ height: `${panelHeight}vh` }}
+    >
       {/* 바텀시트 */}
       <div className="bg-[var(--color-bg-surface)] rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden flex-1">
-        {/* 드래그 핸들 + 닫기 */}
-        <div className="flex justify-center pt-2.5 pb-1.5 relative">
-          <div className="w-9 h-1 bg-[#444] rounded-[2px]" />
-          <button
-            onClick={onClose}
-            className="absolute right-3 top-1.5 w-7 h-7 flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text-base)]"
-          >
-            ✕
-          </button>
+        {/* 드래그 핸들 */}
+        <div
+          className="flex justify-center pt-2.5 pb-1 cursor-row-resize touch-none select-none"
+          onMouseDown={(e) => handleDragStart(e.clientY)}
+          onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
+        >
+          <div className="w-9 h-1 bg-[var(--color-border)] rounded-full" />
         </div>
 
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 pb-3 border-b border-[rgba(255,255,255,0.06)]">
           <div className="flex items-center gap-2">
-            <span className="text-[0.625rem] font-bold text-[var(--color-warning)] bg-[rgba(255,140,0,0.12)] px-2.5 py-0.5 rounded-[var(--radius-pill)] uppercase tracking-[0.5px]">
-              LIVE
+            <span className="text-[0.875rem] font-bold text-[var(--color-text-base)]">
+              실시간 화재 공유방
             </span>
-            <span className="text-[0.8125rem] font-bold text-[var(--color-text-base)]">
-              전국 불판 채팅
+            <span className="text-[0.625rem] font-bold text-[var(--color-warning)] bg-[rgba(255,140,0,0.12)] px-2 py-0.5 rounded-full uppercase tracking-wide">
+              {connected ? `LIVE ${presenceCount}` : '연결 중…'}
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[0.6875rem] text-[var(--color-text-secondary)]">
-            {connected ? (
-              <>
-                <span className="w-1.5 h-1.5 bg-[var(--color-accent)] rounded-full" />
-                {presenceCount}명 관전 중
-              </>
-            ) : (
-              <>
-                <span className="w-1.5 h-1.5 bg-[var(--color-warning)] rounded-full animate-pulse" />
-                연결 중…
-              </>
-            )}
-          </div>
+          <button
+            onClick={() => { setPanelHeight(MIN_HEIGHT); onClose() }}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-bg-elevated)] transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         {/* TTL 안내 */}
@@ -174,7 +208,7 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
         <div className="flex gap-2 items-end px-4 pt-2.5 pb-7 border-t border-[rgba(255,255,255,0.06)]">
           <input
             className="flex-1 px-4 py-2.5 bg-[var(--color-bg-elevated)] border border-transparent rounded-[22px] text-[var(--color-text-base)] text-[0.875rem] outline-none transition-colors placeholder:text-[#555] focus:border-[var(--color-accent)] disabled:opacity-50"
-            placeholder={connected ? '메시지를 입력하세요...' : '연결 중입니다...'}
+            placeholder={connected ? '부적절한 언행은 제재될 수 있습니다' : '연결 중입니다...'}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value.slice(0, 300))}
             onKeyDown={handleKeyDown}
