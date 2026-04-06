@@ -93,7 +93,10 @@ interface ChatPanelProps {
 - **위치**: `absolute bottom-0 left-0 right-0` -- 화면 하단 전체 너비
 - **z-index**: `1100`
 - **레이아웃**: `flex flex-col`
-- **최대 높이**: `max-h-[55vh]` (뷰포트 높이의 55%)
+- **높이**: 사용자가 드래그로 조절 가능, `style={{ height: \`${panelHeight}vh\` }}`
+  - **기본값**: `55vh`
+  - **최소**: `30vh` (`MIN_HEIGHT`)
+  - **최대**: `85vh` (`MAX_HEIGHT`)
 
 ### 3.3 바텀시트 래퍼
 
@@ -105,13 +108,15 @@ interface ChatPanelProps {
 
 ### 3.4 드래그 핸들 + 닫기 버튼
 
-- **드래그 핸들**: `w-9 h-1 bg-[#444] rounded-[2px]` (너비 36px, 높이 4px, 회색 바)
-- **컨테이너 패딩**: `pt-2.5 pb-1.5` (상단 10px, 하단 6px)
+- **드래그 핸들**: `w-9 h-1 bg-[var(--color-border)] rounded-full` (너비 36px, 높이 4px)
+  - `cursor-row-resize touch-none select-none`
+  - mouse/touch 이벤트로 패널 높이 조절 (`handleDragStart/Move/End`)
 - **닫기 버튼**:
-  - 위치: `absolute right-3 top-1.5` (우측 상단)
-  - 크기: `w-7 h-7` (28x28px)
-  - 텍스트: `✕` (곱셈 기호)
-  - 색상: `text-[var(--color-text-secondary)]`, hover 시 `text-[var(--color-text-base)]`
+  - 위치: 헤더 우측
+  - 크기: `w-8 h-8` (32x32px)
+  - 아이콘: SVG X 마크 (`stroke=var(--color-text-secondary)`)
+  - 배경: hover 시 `bg-[var(--color-bg-elevated)]`
+  - 동작: 패널 높이를 `MIN_HEIGHT`로 리셋 후 `onClose` 호출
 
 ### 3.5 헤더 영역
 
@@ -119,29 +124,25 @@ interface ChatPanelProps {
 - **하단 경계선**: `border-b border-[rgba(255,255,255,0.06)]`
 - **레이아웃**: `flex items-center justify-between`
 
-#### 3.5.1 왼쪽: LIVE 뱃지 + 제목
+#### 3.5.1 왼쪽: 제목 + LIVE 뱃지
 
-- **LIVE 뱃지**:
-  - 텍스트: `LIVE` (uppercase, tracking `0.5px`)
-  - 폰트: `text-[0.625rem] font-bold` (10px, 굵게)
+- **제목**:
+  - 텍스트: `"실시간 화재 공유방"`
+  - 폰트: `text-[0.875rem] font-bold` (14px, 굵게)
+  - 색상: `text-[var(--color-text-base)]`
+- **LIVE 뱃지** (제목 옆):
+  - connected 상태: `LIVE {presenceCount}` (예: `LIVE 25`)
+  - connecting 상태: `연결 중…`
+  - 폰트: `text-[0.625rem] font-bold uppercase tracking-wide` (10px)
   - 색상: `text-[var(--color-warning)]` (주황 계열)
   - 배경: `bg-[rgba(255,140,0,0.12)]` (주황 12% 투명도)
-  - 패딩: `px-2.5 py-0.5` (좌우 10px, 상하 2px)
-  - 모서리: `rounded-[var(--radius-pill)]` (완전 라운드, pill 형태)
-- **제목**:
-  - 텍스트: `"전국 불판 채팅"`
-  - 폰트: `text-[0.8125rem] font-bold` (13px, 굵게)
-  - 색상: `text-[var(--color-text-base)]`
+  - 패딩: `px-2 py-0.5`
+  - 모서리: `rounded-full` (pill 형태)
 
-#### 3.5.2 오른쪽: 접속 상태
+#### 3.5.2 오른쪽: 닫기 버튼
 
-- 공통: `text-[0.6875rem] text-[var(--color-text-secondary)]` (11px)
-- **connected 상태**:
-  - 인디케이터: `w-1.5 h-1.5` (6x6px) 원형, `bg-[var(--color-accent)]` (초록 계열), `rounded-full`
-  - 텍스트: `{presenceCount}명 관전 중`
-- **connecting 상태**:
-  - 인디케이터: `w-1.5 h-1.5` 원형, `bg-[var(--color-warning)]` (주황 계열), `rounded-full`, `animate-pulse` (깜빡임)
-  - 텍스트: `"연결 중..."`
+- SVG X 아이콘 (`w-8 h-8`, `rounded-full`)
+- 동작: 패널 높이 리셋 + `onClose` 호출
 
 ### 3.6 TTL 안내 문구
 
@@ -235,7 +236,7 @@ interface ChatPanelProps {
 - **모서리**: `rounded-[22px]` (pill 형태)
 - **폰트**: `text-[0.875rem]` (14px), `text-[var(--color-text-base)]`
 - **placeholder**:
-  - connected 상태: `"메시지를 입력하세요..."`
+  - connected 상태: `"부적절한 언행은 제재될 수 있습니다"`
   - connecting 상태: `"연결 중입니다..."`
   - 색상: `placeholder:text-[#555]`
 - **최대 글자수**: `maxLength={300}` (HTML 속성) + `onChange`에서 `e.target.value.slice(0, 300)` 이중 제한

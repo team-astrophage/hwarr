@@ -27,7 +27,7 @@ Fire Map은 화르르 서비스의 핵심 페이지로, 사용자가 자신의 �
 | 하단 패널 | `BottomPanel` | 통계 + 불 지르기 버튼 |
 | 채팅 | `ChatPanel` | 글로벌 익명 채팅 바텀시트 |
 | 위치 권한 | `LocationPermissionModal` | 위치 권한 요청/차단 안내 |
-| 피드백 | `FeedbackButton` | 의견 보내기 플로팅 버튼 |
+| 면책 고지 | `DisclaimerModal` | 첫 접속 시 면책 확인 팝업 |
 
 ---
 
@@ -42,7 +42,7 @@ Fire Map은 화르르 서비스의 핵심 페이지로, 사용자가 자신의 �
 | `center` | `[36.5, 127.5]` (`KOREA_CENTER`) | 대한민국 중앙 좌표 |
 | `zoom` | `13` | 초기 줌 레벨 |
 | `zoomControl` | `false` | 기본 줌 컨트롤 숨김 (커스텀 사용) |
-| `maxBounds` | `[[33.0, 124.5], [39.0, 132.0]]` (`KOREA_BOUNDS`) | 대한민국 전체 영역으로 pan 제한 |
+| `maxBounds` | `[[32.0, 124.0], [39.5, 132.5]]` (`KOREA_BOUNDS`) | 대한민국 전체 영역 (제주도 포함) |
 | `maxBoundsViscosity` | `1.0` | bounds 밖으로 드래그 완전 차단 (1.0 = solid wall) |
 | `minZoom` | `7` | 최소 줌 (대한민국 전체 보기) |
 | `maxZoom` | `18` | 최대 줌 (건물 수준) |
@@ -318,7 +318,7 @@ interface ReverseGeocodeState {
 | 글자색 | `text-white` |
 | 둥근 모서리 | `rounded-[14px]` |
 | 폰트 | `font-bold tracking-wide text-[0.8125rem]` |
-| active 축소 | `active:scale-[0.97]` |
+| active 축소 | `active:scale-[0.96]` |
 | active 밝기 | `active:brightness-[0.92]` |
 | disabled 상태 | `opacity-35`, `cursor-not-allowed` |
 | 그림자 | `shadow-[var(--shadow-medium)]` |
@@ -328,6 +328,7 @@ interface ReverseGeocodeState {
 
 | 조건 | 텍스트 |
 |------|--------|
+| `noLocation` | `위치를 찾을 수 없어요` |
 | `gridId` 존재 | `현재 위치에 불 지르기` |
 | `gridId` 없음 | `위치 감지 중...` |
 
@@ -803,27 +804,34 @@ Icon 크기: `32x32`, anchor: `[16, 28]` (하단 중앙)
 
 ### 통계 행
 
-두 통계를 가로로 배치 (`flex items-center gap-4 mb-5`), 중간에 구분선 (`w-px h-8 bg-[var(--color-border)]`).
+두 통계를 가로로 배치 (`flex items-center gap-4 mb-4`), 중간에 구분선 (`w-px h-8 bg-[var(--color-border)]`).
 
-#### 온라인 방화범 수
-
-| 요소 | 상세 |
-|------|------|
-| **데이터 소스** | `useFireStore((s) => s.onlineUsers)` |
-| **아이콘** | SVG 불꽃, `fill=var(--color-accent)`, `16x16` |
-| **아이콘 배경** | `w-9 h-9 bg-[var(--color-bg-elevated)] rounded-[10px]` |
-| **숫자 폰트** | `text-[1.125rem] font-bold text-[var(--color-text-base)] leading-none`, `fontVariantNumeric: 'tabular-nums'` |
-| **라벨** | `방화범`, `text-[0.6875rem] text-[var(--color-text-secondary)] mt-0.5` |
-
-#### 화재 지역 수
+#### 실시간 화재 지역 수 (좌측)
 
 | 요소 | 상세 |
 |------|------|
+| **컨테이너** | `<button>` — 클릭 시 `onVisit` 호출 (랜덤 화재 지역으로 flyTo) |
 | **데이터 소스** | `fires.size` (Map의 엔트리 수) |
-| **아이콘** | SVG 격자 (rect + 십자선), `stroke=var(--color-accent)`, `strokeWidth=2`, `16x16` |
-| **아이콘 배경** | 방화범과 동일 |
-| **숫자 폰트** | 방화범과 동일 |
-| **라벨** | `화재 지역` |
+| **아이콘** | SVG 지도 핀, `stroke=var(--color-text-secondary)`, `strokeWidth=2`, `14x14` |
+| **아이콘 배경** | `w-8 h-8 bg-[var(--color-bg-elevated)] rounded-[10px]` |
+| **숫자 폰트** | `text-[1rem] font-bold text-[var(--color-text-base)] leading-none`, `fontVariantNumeric: 'tabular-nums'` |
+| **라벨** | `실시간 화재 지역 →`, `text-[0.6875rem] text-[var(--color-accent)] mt-0.5` |
+| **비활성 조건** | `activeGrids === 0` |
+
+#### 현재 위치 화재 단계 (우측)
+
+| 요소 | 상세 |
+|------|------|
+| **데이터 소스** | `currentCell?.stage ?? 0` (현재 위치 grid의 화재 단계) |
+| **단계 표시** | `STAGE_LABELS` 매핑: 0=안전, 1=1단계·불씨, 2=2단계·모닥불, 3=3단계·불기둥, 4=4단계·불바다, 5=MAX·불지옥 |
+| **아이콘** | SVG 불꽃, `fill={stageInfo.color}`, `14x14` |
+| **아이콘 배경** | `color-mix(in srgb, {stageInfo.color} 15%, transparent)` |
+| **단계명 폰트** | `text-[0.8125rem] font-bold`, 색상은 단계별 동적 |
+| **라벨** | `현재 위치 화재 단계`, `text-[0.6875rem] text-[var(--color-text-secondary)]` |
+
+### 이벤트 버블링 방지
+
+컨테이너 div에서 `onPointerDown/Up/Move` 이벤트를 `stopPropagation()`하여 Leaflet 지도로의 이벤트 전파를 차단한다. 불 지르기 버튼은 `setPointerCapture`와 `isPrimary` 검증으로 멀티터치를 방지하고, `pointerUp` 시 버튼 영역 내 좌표 검증을 수행한다.
 
 ### 불 지르기 버튼
 
@@ -831,25 +839,9 @@ Icon 크기: `32x32`, anchor: `[16, 28]` (하단 중앙)
 
 ---
 
-## 10. 채팅/피드백 플로팅 버튼
+## 10. 채팅 플로팅 버튼
 
-> 소스: `client/src/features/fire-map/components/MapPage.tsx` (136-161행)
-> `client/src/features/feedback/components/FeedbackButton.tsx`
-
-### 피드백 버튼 (의견 보내기)
-
-| 항목 | 값 |
-|------|-----|
-| **위치** | `absolute bottom-[244px] right-4 z-[1000]` |
-| **가시성 조건** | `!chatOpen` (채팅 패널이 닫혀있을 때) |
-| **크기** | `w-12 h-12` |
-| **배경** | `bg-[var(--color-bg-surface)]` |
-| **모양** | `rounded-full` |
-| **그림자** | `shadow-[var(--shadow-heavy)]` |
-| **아이콘** | SVG 편지 봉투 (`width=20 height=20`, `stroke=var(--color-text-secondary)`, `strokeWidth=2`) |
-| **active** | `active:scale-90` |
-| **hover** | `bg-[var(--color-bg-elevated)]` |
-| **aria-label** | `의견 보내기` |
+> 소스: `client/src/features/fire-map/components/MapPage.tsx`
 | **동작** | 클릭 시 `FeedbackModal` 렌더링 |
 
 ### 채팅 토글 버튼
