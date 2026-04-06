@@ -14,10 +14,11 @@ import { FiretruckOverlay } from './FiretruckOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
 import { Header } from '../../../components/Header';
 import { LocationPermissionModal } from './LocationPermissionModal';
-import { FeedbackButton } from '../../feedback/components/FeedbackButton';
+import { DisclaimerModal, isDismissedToday } from '../../../components/DisclaimerModal';
 import 'leaflet/dist/leaflet.css';
 
 const KOREA_CENTER: [number, number] = [36.5, 127.5];
+const SEOUL_CENTER: [number, number] = [37.5665, 126.978];
 const KOREA_BOUNDS: [[number, number], [number, number]] = [
   [33.0, 124.5],
   [39.0, 132.0],
@@ -58,6 +59,8 @@ function LocateButton({ lat, lng }: { lat: number; lng: number }) {
 
 export function MapPage() {
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
+  const [locationDismissed, setLocationDismissed] = useState(false);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
   const gridId = lat && lng ? getGridId(lat, lng) : null;
 
   useFireSocket();
@@ -100,6 +103,7 @@ export function MapPage() {
             <LocateButton lat={lat} lng={lng} />
           </>
         )}
+        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} />}
       </MapContainer>
 
       <Header />
@@ -125,18 +129,12 @@ export function MapPage() {
         </div>
       )}
 
-      {!loading && error && (
+      {!loading && error && !locationDismissed && (
         <LocationPermissionModal
           permissionDenied={permissionDenied}
           onRetry={retry}
+          onDismiss={() => setLocationDismissed(true)}
         />
-      )}
-
-      {/* 의견 보내기 버튼 */}
-      {!chatOpen && (
-        <div className='absolute bottom-[244px] right-4 z-[1000]'>
-          <FeedbackButton />
-        </div>
       )}
 
       {/* 채팅 토글 버튼 */}
@@ -166,7 +164,12 @@ export function MapPage() {
         gridId={gridId}
         onFire={handleFire}
         disabled={!lat || !lng}
+        noLocation={locationDismissed && !lat}
       />
+
+      {!disclaimerAccepted && (
+        <DisclaimerModal onAccept={() => setDisclaimerAccepted(true)} />
+      )}
     </div>
   );
 }
