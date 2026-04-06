@@ -269,7 +269,7 @@ export function FireCanvas() {
     canvas.style.top = '0'
     canvas.style.left = '0'
     canvas.style.pointerEvents = 'none'
-    canvas.style.zIndex = '450'
+    canvas.style.zIndex = '1500'
     container.appendChild(canvas)
     canvasRef.current = canvas
 
@@ -394,18 +394,14 @@ export function FireCanvas() {
           flames.pop()
         }
 
-        // 격자 클리핑 (위로는 확장 — 불꽃+연기가 격자 위로 타오름)
-        const clipHeight = Math.max(cfg.maxHeight, cfg.smokeMaxHeight)
+        // 클리핑 없이 자연스러운 페이드로 경계 처리
         ctx.save()
-        ctx.beginPath()
-        ctx.rect(left - w * 0.3, top - h * clipHeight, w * 1.6, h * (1 + clipHeight))
-        ctx.clip()
 
         ctx.globalCompositeOperation = 'lighter'
 
-        // ── 바닥 코어 글로우 ──
+        // ── 바닥 코어 글로우 ── (중심을 격자 바닥보다 살짝 위로)
         const coreX = cx
-        const coreY = top + h  // 격자 바닥
+        const coreY = top + h * 0.85
         const coreR = w * cfg.glowRadius
 
         const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, coreR)
@@ -453,7 +449,10 @@ export function FireCanvas() {
 
           // 높이에 따른 색상
           const [cr, cg, cb, ca] = getFlameColor(cfg, heightRatio)
-          const alpha = ca * lifeRatio * sizeDecay
+          // 격자 경계 근처에서 자연스럽게 페이드아웃
+          const edgeFadeTop = Math.min(1, (cfg.maxHeight - f.ry) / (cfg.maxHeight * 0.3))
+          const edgeFadeBottom = Math.min(1, (f.ry + 0.15) / 0.15)
+          const alpha = ca * lifeRatio * sizeDecay * edgeFadeTop * edgeFadeBottom
 
           if (alpha < 0.01) continue
 
