@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 import { DisclaimerModal } from '../../../components/DisclaimerModal'
 import { FeedbackButton } from '../../feedback/components/FeedbackButton'
