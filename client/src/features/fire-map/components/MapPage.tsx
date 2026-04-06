@@ -87,14 +87,15 @@ export function MapPage() {
     }
   }, [lat, lng, gridId, throwMatch, fire]);
 
-  // 랜덤 화재 지역 구경하기
+  // 랜덤 화재 지역 구경하기 (내 위치 제외)
   const handleVisit = useCallback(() => {
     if (fires.size === 0 || !mapRef.current) return;
-    const keys = Array.from(fires.keys());
+    const keys = Array.from(fires.keys()).filter((k) => k !== gridId);
+    if (keys.length === 0) return;
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
     const [centerLat, centerLng] = getGridCenter(randomKey);
     mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
-  }, [fires]);
+  }, [fires, gridId]);
 
   return (
     <div className='relative h-svh w-full'>

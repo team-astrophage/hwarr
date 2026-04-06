@@ -37,6 +37,7 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
   const messagesRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
+  const DEFAULT_HEIGHT = 55
   const MIN_HEIGHT = 30
   const MAX_HEIGHT = 85
 
@@ -131,7 +132,7 @@ export function ChatPanel({ visible, onClose }: ChatPanelProps) {
             </span>
           </div>
           <button
-            onClick={() => { setPanelHeight(MIN_HEIGHT); onClose() }}
+            onClick={() => { setPanelHeight(DEFAULT_HEIGHT); onClose() }}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-bg-elevated)] transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round">
