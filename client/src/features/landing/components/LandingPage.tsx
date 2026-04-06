@@ -27,9 +27,11 @@ export function LandingPage() {
             className="mt-7 mb-1 max-w-[28ch] text-[0.9375rem] text-[var(--color-text-secondary)] leading-[1.65]"
             style={{ textWrap: 'pretty' }}
           >
-            이 자리의 좌표가 출발점이에요.
+            스트레스, 여기서 마음껏 불태우세요.
             <br />
-            지도 위에 익명으로 불을 올리고, 전국과 같은 맵을 실시간으로 함께 봅니다.
+            내 위치에 불을 지르고,
+            <br />
+            전국에서 불타는 곳을 구경하세요.
           </p>
         </section>
 
@@ -46,21 +48,21 @@ export function LandingPage() {
               tone="accent"
             />
             <StatCard
-              label="실시간 불타는 건수"
+              label="실시간 방화 시도"
               value={stats?.totalFires}
-              unit="건"
+              unit="회"
               tone="warning"
             />
             <StatCard
-              label="오늘 방화 건수"
+              label="오늘의 방화 시도"
               value={stats?.dailyFires}
-              unit="건"
+              unit="회"
               tone="negative"
             />
             <StatCard
-              label="누적 총 방화 건수"
+              label="누적 방화 시도"
               value={stats?.cumulativeFires}
-              unit="건"
+              unit="회"
               tone="base"
             />
           </div>
@@ -80,12 +82,6 @@ export function LandingPage() {
           >
             실시간 지도에서 불 지르기
           </Link>
-          <p
-            className="mt-2 text-center text-[0.6875rem] text-[var(--color-text-secondary)]"
-            style={{ textWrap: 'pretty' }}
-          >
-            완전 익명 · 로그인 불필요
-          </p>
           <div className="mt-1 flex justify-center">
             <FeedbackButton>
               {(open) => (

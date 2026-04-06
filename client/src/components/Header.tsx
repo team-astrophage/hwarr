@@ -34,7 +34,7 @@ export function Header() {
     <header
       className={`
         flex items-center justify-between px-5 h-14
-        ${isMap ? 'absolute top-0 left-0 right-0 z-[1000]' : 'bg-[var(--color-bg-base)]'}
+        ${isMap ? 'absolute top-0 left-0 right-0 z-[1000]' : 'bg-[var(--color-bg-base)] border-b border-[var(--color-border)]'}
       `}
     >
       <Link to="/" className="min-w-0 shrink-0">
