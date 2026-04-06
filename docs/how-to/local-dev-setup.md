@@ -2,9 +2,102 @@
 
 화르르(hwarr) 프로젝트를 로컬에서 실행하기 위한 단계별 가이드입니다.
 
+로컬 개발 환경을 구성하는 방법은 두 가지입니다:
+
+- **[Docker Compose](#docker-compose로-실행-추천)** — 명령어 하나로 전체 환경 구성. 별도 설치 불필요.
+- **[직접 설치](#직접-설치)** — Node.js, Python, Redis를 직접 설치하여 실행.
+
 ---
 
-## 1. 필요 도구
+## Docker Compose로 실행 (추천)
+
+### 사전 준비
+
+[Docker Desktop](https://www.docker.com/products/docker-desktop/)을 설치한다. Docker Compose는 Docker Desktop에 포함되어 있다.
+
+```bash
+docker --version          # Docker 확인
+docker compose version    # Compose 확인
+```
+
+### 1단계: 전체 서비스 실행
+
+프로젝트 루트에서 아래 명령을 실행한다.
+
+```bash
+docker compose up --build
+```
+
+최초 실행 시 이미지 빌드에 약 30초가 소요된다. 이후에는 캐시를 사용하므로 빠르게 시작된다.
+
+실행 완료 시 3개 컨테이너가 올라간다:
+
+| 컨테이너 | 포트 | 역할 |
+|----------|------|------|
+| `hwarr-redis-1` | `6379` | Redis 데이터 저장소 |
+| `hwarr-backend-1` | `8000` | FastAPI 서버 |
+| `hwarr-frontend-1` | `5173` | Vite 개발 서버 |
+
+브라우저에서 `http://localhost:5173`으로 접속한다.
+
+### 2단계: 백그라운드 실행
+
+터미널을 점유하고 싶지 않다면 `-d` 플래그를 사용한다.
+
+```bash
+docker compose up -d
+```
+
+로그를 확인하고 싶을 때:
+
+```bash
+docker compose logs -f           # 전체 로그
+docker compose logs -f backend   # 백엔드만
+```
+
+### 3단계: 종료
+
+```bash
+docker compose down
+```
+
+Redis 데이터는 `hwarr_redis-data` 볼륨에 보존된다. 데이터까지 완전히 삭제하려면:
+
+```bash
+docker compose down -v
+```
+
+### Docker 개발 환경 특징
+
+- **핫 리로드**: 소스 코드가 볼륨 마운트되어 있어 파일 수정 시 서버/클라이언트가 자동 재시작된다.
+- **환경변수 자동 설정**: `VITE_API_URL`, `REDIS_URL` 등이 `docker-compose.yml`에 미리 설정되어 있다. `.env.local` 파일을 만들 필요 없다.
+- **GeoJSON 자동 다운로드**: 백엔드 컨테이너 시작 시 행정동 GeoJSON 파일이 없으면 자동으로 다운로드한다.
+- **Redis 헬스체크**: Redis가 준비된 후에 백엔드가 시작되도록 `depends_on` + `healthcheck`가 설정되어 있다.
+
+### 자주 쓰는 Docker 명령어
+
+```bash
+# 이미지 재빌드 (의존성 변경 시)
+docker compose up --build
+
+# 특정 서비스만 재시작
+docker compose restart backend
+
+# 컨테이너 안에서 명령 실행
+docker compose exec backend bash
+docker compose exec redis redis-cli
+
+# 실행 상태 확인
+docker compose ps
+```
+
+---
+
+## 직접 설치
+
+Docker를 사용하지 않고 각 도구를 직접 설치하여 실행하는 방법이다.
+
+### 1. 필요 도구
 
 | 도구 | 최소 버전 | 설치 (macOS) |
 |------|----------|-------------|
