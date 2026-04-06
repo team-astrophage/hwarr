@@ -191,7 +191,7 @@ function spawnSmoke(cfg: StageCfg): Smoke {
 }
 
 // ── 줌 임계값 ──
-const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환 (최대줌 18에서 4단계 축소)
+const GLOW_DOT_ZOOM = 12   // 이 줌 미만이면 글로우 도트로 전환
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
@@ -269,7 +269,7 @@ export function FireCanvas() {
     canvas.style.top = '0'
     canvas.style.left = '0'
     canvas.style.pointerEvents = 'none'
-    canvas.style.zIndex = '1500'
+    canvas.style.zIndex = '1050'
     container.appendChild(canvas)
     canvasRef.current = canvas
 
@@ -324,10 +324,14 @@ export function FireCanvas() {
         const tl = map.latLngToContainerPoint(L.latLng(gLat + LAT_UNIT, gLng))
         const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
 
-        const left = Math.min(tl.x, br.x)
-        const top = Math.min(tl.y, br.y)
-        const w = Math.abs(br.x - tl.x)
-        const h = Math.abs(br.y - tl.y)
+        // 줌 축소 시 불꽃이 너무 작아지지 않도록 최소 크기 보정
+        const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.7)
+        const rawW = Math.abs(br.x - tl.x)
+        const rawH = Math.abs(br.y - tl.y)
+        const w = rawW * zoomScale
+        const h = rawH * zoomScale
+        const left = Math.min(tl.x, br.x) - (w - rawW) / 2
+        const top = Math.min(tl.y, br.y) - (h - rawH) / 2
 
         const cx = left + w / 2
         const cy = top + h / 2
