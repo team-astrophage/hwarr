@@ -1,10 +1,11 @@
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet';
-import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import L from 'leaflet';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { useFireSocket } from '../hooks/useFireSocket';
 import { useFire } from '../hooks/useFire';
-import { getGridId } from '../utils/grid';
+import { getGridId, getGridCenter } from '../utils/grid';
+import { useFireStore } from '../stores/fireStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
 import { MapControls } from './MapControls';
@@ -14,13 +15,14 @@ import { FiretruckOverlay } from './FiretruckOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
 import { Header } from '../../../components/Header';
 import { LocationPermissionModal } from './LocationPermissionModal';
-import { FeedbackButton } from '../../feedback/components/FeedbackButton';
+import { DisclaimerModal, isDismissedToday } from '../../../components/DisclaimerModal';
 import 'leaflet/dist/leaflet.css';
 
 const KOREA_CENTER: [number, number] = [36.5, 127.5];
+const SEOUL_CENTER: [number, number] = [37.5665, 126.978];
 const KOREA_BOUNDS: [[number, number], [number, number]] = [
-  [33.0, 124.5],
-  [39.0, 132.0],
+  [32.0, 124.0],
+  [39.5, 132.5],
 ];
 
 function FlyToUser({ lat, lng }: { lat: number; lng: number }) {
@@ -56,8 +58,18 @@ function LocateButton({ lat, lng }: { lat: number; lng: number }) {
   return <MapControls onLocate={handleLocate} />;
 }
 
+function MapRef({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  mapRef.current = map;
+  return null;
+}
+
 export function MapPage() {
+  const mapRef = useRef<L.Map | null>(null);
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
+  const [locationDismissed, setLocationDismissed] = useState(false);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
+  const fires = useFireStore((s) => s.fires);
   const gridId = lat && lng ? getGridId(lat, lng) : null;
 
   useFireSocket();
@@ -75,6 +87,15 @@ export function MapPage() {
     }
   }, [lat, lng, gridId, throwMatch, fire]);
 
+  // 랜덤 화재 지역 구경하기
+  const handleVisit = useCallback(() => {
+    if (fires.size === 0 || !mapRef.current) return;
+    const keys = Array.from(fires.keys());
+    const randomKey = keys[Math.floor(Math.random() * keys.length)];
+    const [centerLat, centerLng] = getGridCenter(randomKey);
+    mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
+  }, [fires]);
+
   return (
     <div className='relative h-svh w-full'>
       <MapContainer
@@ -87,6 +108,7 @@ export function MapPage() {
         minZoom={7}
         maxZoom={18}
       >
+        <MapRef mapRef={mapRef} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -100,6 +122,7 @@ export function MapPage() {
             <LocateButton lat={lat} lng={lng} />
           </>
         )}
+        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} />}
       </MapContainer>
 
       <Header />
@@ -125,18 +148,12 @@ export function MapPage() {
         </div>
       )}
 
-      {!loading && error && (
+      {!loading && error && !locationDismissed && (
         <LocationPermissionModal
           permissionDenied={permissionDenied}
           onRetry={retry}
+          onDismiss={() => setLocationDismissed(true)}
         />
-      )}
-
-      {/* 의견 보내기 버튼 */}
-      {!chatOpen && (
-        <div className='absolute bottom-[244px] right-4 z-[1000]'>
-          <FeedbackButton />
-        </div>
       )}
 
       {/* 채팅 토글 버튼 */}
@@ -165,8 +182,14 @@ export function MapPage() {
       <BottomPanel
         gridId={gridId}
         onFire={handleFire}
+        onVisit={handleVisit}
         disabled={!lat || !lng}
+        noLocation={locationDismissed && !lat}
       />
+
+      {!disclaimerAccepted && (
+        <DisclaimerModal onAccept={() => setDisclaimerAccepted(true)} />
+      )}
     </div>
   );
 }

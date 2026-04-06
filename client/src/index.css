@@ -60,6 +60,33 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-size: 16px;
   line-height: 1.4;
+  overflow-x: hidden;
+  /* 앱 전역 텍스트 선택 비활성화 */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Dark scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-elevated) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border);
 }
 
 /* Mobile-first container */
@@ -68,7 +95,6 @@ body {
   margin: 0 auto;
   min-height: 100svh;
   position: relative;
-  overflow-x: hidden;
 }
 
 /* 내 위치 마커 펄스 애니메이션 */

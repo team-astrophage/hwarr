@@ -1,5 +1,7 @@
-import { Link } from '@tanstack/react-router'
+import { useState, useCallback } from 'react'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
+import { DisclaimerModal } from '../../../components/DisclaimerModal'
 import { FeedbackButton } from '../../feedback/components/FeedbackButton'
 import { useStats } from '../api/useStats'
 import { RankingFeed } from './RankingFeed'
@@ -7,6 +9,8 @@ import { StatCard } from './StatCard'
 
 export function LandingPage() {
   const { data: stats } = useStats()
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
+  const navigate = useNavigate()
 
   return (
     <div className="relative flex min-h-svh flex-col bg-[var(--color-bg-base)]">
@@ -27,9 +31,11 @@ export function LandingPage() {
             className="mt-7 mb-1 max-w-[28ch] text-[0.9375rem] text-[var(--color-text-secondary)] leading-[1.65]"
             style={{ textWrap: 'pretty' }}
           >
-            이 자리의 좌표가 출발점이에요.
+            스트레스, 여기서 마음껏 불태우세요.
             <br />
-            지도 위에 익명으로 불을 올리고, 전국과 같은 맵을 실시간으로 함께 봅니다.
+            내 위치에 불을 지르고,
+            <br />
+            전국에서 불타는 곳을 구경하세요.
           </p>
         </section>
 
@@ -46,21 +52,21 @@ export function LandingPage() {
               tone="accent"
             />
             <StatCard
-              label="실시간 불타는 건수"
+              label="실시간 방화 시도"
               value={stats?.totalFires}
-              unit="건"
+              unit="회"
               tone="warning"
             />
             <StatCard
-              label="오늘 방화 건수"
+              label="오늘의 방화 시도"
               value={stats?.dailyFires}
-              unit="건"
+              unit="회"
               tone="negative"
             />
             <StatCard
-              label="누적 총 방화 건수"
+              label="누적 방화 시도"
               value={stats?.cumulativeFires}
-              unit="건"
+              unit="회"
               tone="base"
             />
           </div>
@@ -74,18 +80,12 @@ export function LandingPage() {
         <div
           className="pointer-events-auto border-t border-[color-mix(in_srgb,var(--color-border)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-bg-base)_92%,transparent)] px-5 pt-3 shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--color-bg-base)_88%,transparent)] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
         >
-          <Link
-            to="/map"
+          <button
+            onClick={() => setShowDisclaimer(true)}
             className="flex h-14 w-full items-center justify-center rounded-[14px] bg-[var(--color-accent)] text-[0.9375rem] font-extrabold tracking-[1px] text-[#000000] shadow-[var(--shadow-medium)] transition-[transform] duration-150 active:scale-[0.96]"
           >
             실시간 지도에서 불 지르기
-          </Link>
-          <p
-            className="mt-2 text-center text-[0.6875rem] text-[var(--color-text-secondary)]"
-            style={{ textWrap: 'pretty' }}
-          >
-            완전 익명 · 로그인 불필요
-          </p>
+          </button>
           <div className="mt-1 flex justify-center">
             <FeedbackButton>
               {(open) => (
@@ -100,6 +100,14 @@ export function LandingPage() {
           </div>
         </div>
       </footer>
+      {showDisclaimer && (
+        <DisclaimerModal
+          onAccept={() => {
+            setShowDisclaimer(false)
+            navigate({ to: '/map' })
+          }}
+        />
+      )}
     </div>
   )
 }

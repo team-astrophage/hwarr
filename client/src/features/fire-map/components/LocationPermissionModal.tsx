@@ -1,11 +1,13 @@
 interface LocationPermissionModalProps {
   permissionDenied: boolean
   onRetry: () => void
+  onDismiss?: () => void
 }
 
 export function LocationPermissionModal({
   permissionDenied,
   onRetry,
+  onDismiss,
 }: LocationPermissionModalProps) {
   const handleClick = () => {
     if (permissionDenied) {
@@ -21,7 +23,7 @@ export function LocationPermissionModal({
     : '위치 권한이 필요해요'
   const description = permissionDenied
     ? '브라우저 주소창 왼쪽 자물쇠 아이콘 → 사이트 설정 → 위치 허용으로 변경 후 새로고침 해주세요'
-    : '근처에서 불을 지르려면 위치 공유가 필요합니다'
+    : '내 GPS 위치에 불을 질러 스트레스를 푸세요.\n위치 공유를 허용해주세요.'
   const cta = permissionDenied ? '새로고침' : '위치 권한 허용'
 
   return (
@@ -33,7 +35,7 @@ export function LocationPermissionModal({
         <h2 className='text-[1.0625rem] font-bold text-[var(--color-text-primary)] mb-2'>
           {title}
         </h2>
-        <p className='text-[0.8125rem] text-[var(--color-text-secondary)] leading-relaxed mb-5'>
+        <p className='text-[0.8125rem] text-[var(--color-text-secondary)] leading-relaxed mb-5 whitespace-pre-line'>
           {description}
         </p>
         <button
@@ -42,6 +44,14 @@ export function LocationPermissionModal({
         >
           {cta}
         </button>
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className='mt-2 w-full py-2.5 text-[0.8125rem] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-base)]'
+          >
+            위치 없이 구경하기
+          </button>
+        )}
       </div>
     </div>
   )

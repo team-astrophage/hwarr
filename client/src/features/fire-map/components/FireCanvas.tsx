@@ -191,7 +191,7 @@ function spawnSmoke(cfg: StageCfg): Smoke {
 }
 
 // ── 줌 임계값 ──
-const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환 (최대줌 18에서 4단계 축소)
+const GLOW_DOT_ZOOM = 12   // 이 줌 미만이면 글로우 도트로 전환
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
@@ -269,7 +269,7 @@ export function FireCanvas() {
     canvas.style.top = '0'
     canvas.style.left = '0'
     canvas.style.pointerEvents = 'none'
-    canvas.style.zIndex = '450'
+    canvas.style.zIndex = '1050'
     container.appendChild(canvas)
     canvasRef.current = canvas
 
@@ -324,10 +324,14 @@ export function FireCanvas() {
         const tl = map.latLngToContainerPoint(L.latLng(gLat + LAT_UNIT, gLng))
         const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
 
-        const left = Math.min(tl.x, br.x)
-        const top = Math.min(tl.y, br.y)
-        const w = Math.abs(br.x - tl.x)
-        const h = Math.abs(br.y - tl.y)
+        // 줌 축소 시 불꽃이 너무 작아지지 않도록 최소 크기 보정
+        const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.7)
+        const rawW = Math.abs(br.x - tl.x)
+        const rawH = Math.abs(br.y - tl.y)
+        const w = rawW * zoomScale
+        const h = rawH * zoomScale
+        const left = Math.min(tl.x, br.x) - (w - rawW) / 2
+        const top = Math.min(tl.y, br.y) - (h - rawH) / 2
 
         const cx = left + w / 2
         const cy = top + h / 2
@@ -394,18 +398,14 @@ export function FireCanvas() {
           flames.pop()
         }
 
-        // 격자 클리핑 (위로는 확장 — 불꽃+연기가 격자 위로 타오름)
-        const clipHeight = Math.max(cfg.maxHeight, cfg.smokeMaxHeight)
+        // 클리핑 없이 자연스러운 페이드로 경계 처리
         ctx.save()
-        ctx.beginPath()
-        ctx.rect(left - w * 0.3, top - h * clipHeight, w * 1.6, h * (1 + clipHeight))
-        ctx.clip()
 
         ctx.globalCompositeOperation = 'lighter'
 
-        // ── 바닥 코어 글로우 ──
+        // ── 바닥 코어 글로우 ── (중심을 격자 바닥보다 살짝 위로)
         const coreX = cx
-        const coreY = top + h  // 격자 바닥
+        const coreY = top + h * 0.85
         const coreR = w * cfg.glowRadius
 
         const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, coreR)
@@ -453,7 +453,10 @@ export function FireCanvas() {
 
           // 높이에 따른 색상
           const [cr, cg, cb, ca] = getFlameColor(cfg, heightRatio)
-          const alpha = ca * lifeRatio * sizeDecay
+          // 격자 경계 근처에서 자연스럽게 페이드아웃
+          const edgeFadeTop = Math.min(1, (cfg.maxHeight - f.ry) / (cfg.maxHeight * 0.3))
+          const edgeFadeBottom = Math.min(1, (f.ry + 0.15) / 0.15)
+          const alpha = ca * lifeRatio * sizeDecay * edgeFadeTop * edgeFadeBottom
 
           if (alpha < 0.01) continue
 

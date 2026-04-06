@@ -11,9 +11,9 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 | 0 | 없음 | none | 0 | 0 | - | 0 |
 | 1 | 불씨 | ember | 1 | 1 -- 9 | - | 0 |
 | 2 | 모닥불 | campfire | 10 | 10 -- 39 | - | 0 |
-| 3 | 화재 | fire | 40 | 40 -- 119 | - | 0 |
-| 4 | 대화재 | big fire | 120 | 120 -- 279 | O | 2 |
-| 5 | 전소 | total burn | 280 | 280+ | O | 3 |
+| 3 | 불기둥 | fire | 40 | 40 -- 119 | - | 0 |
+| 4 | 불바다 | big fire | 120 | 120 -- 279 | O | 2 |
+| 5 | 불지옥 (MAX) | total burn | 280 | 280+ | O | 3 |
 
 > 소스: `server/models/fire.py` -- `STAGE_CONFIGS` dict
 
@@ -61,16 +61,16 @@ def get_stage(active_count: int) -> FireStage:
 
 ### 스폰 조건
 
-- **단계 4 (대화재, 120+) 이상**에서만 스폰됩니다.
-- `triggers_firefighter` 필드가 `True`인 단계: 4(대화재), 5(전소)
+- **단계 4 (불바다, 120+) 이상**에서만 스폰됩니다.
+- `triggers_firefighter` 필드가 `True`인 단계: 4(불바다), 5(불지옥)
 
 ### `remove_per_sweep` 값
 
 | 단계 | `remove_per_sweep` | 비고 |
 |:---:|:---:|---|
 | 0 -- 3 | 0 | 소방관 스폰 없음 |
-| 4 (대화재) | 2 | 정보 표시용 (실제 suppression 없음) |
-| 5 (전소) | 3 | 정보 표시용 (실제 suppression 없음) |
+| 4 (불바다) | 2 | 정보 표시용 (실제 suppression 없음) |
+| 5 (불지옥) | 3 | 정보 표시용 (실제 suppression 없음) |
 
 ### NPC 생성 흐름
 

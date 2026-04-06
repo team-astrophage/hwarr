@@ -3,6 +3,8 @@
  *
  * Nominatim (OpenStreetMap) 무료 API 사용.
  * 좌표가 변경될 때 한 번만 호출, 결과 캐싱.
+ *
+ * 표시 범위: 시 > 구 > 도로명 + 번호까지만 (건물명·호수 제외)
  */
 
 import { useState, useEffect } from 'react'
@@ -10,7 +12,7 @@ import { useState, useEffect } from 'react'
 interface AddressParts {
   city: string    // 시 (서울특별시)
   district: string // 구 (광진구)
-  road: string     // 로 (구의강변로)
+  road: string     // 로 + 번호 (모래내로 1길 4)
 }
 
 interface ReverseGeocodeState {
@@ -44,7 +46,7 @@ export function useReverseGeocode(lat: number | null, lng: number | null): Rever
       .then((data) => {
         const addr = data.address
         const city = addr?.city || addr?.town || addr?.county || ''
-        const district = addr?.borough || addr?.suburb || addr?.quarter || ''
+        const district = addr?.borough || addr?.city_district || addr?.suburb || addr?.quarter || ''
         const road = [addr?.road, addr?.house_number].filter(Boolean).join(' ') || ''
         const allParts = [city, district, road].filter(Boolean)
 
