@@ -59,7 +59,7 @@ const queryClient = new QueryClient()
 | 조건 | 적용 클래스 | 효과 |
 |------|-----------|------|
 | `pathname === '/map'` | `absolute top-0 left-0 right-0 z-[1000]` | 지도 위에 떠 있는 오버레이 헤더. 배경 투명. |
-| 그 외 페이지 | `bg-[var(--color-bg-base)]` (`#121212`) | 불투명 어두운 배경 |
+| 그 외 페이지 | `bg-[var(--color-bg-base)]` (`#121212`) | 불투명 어두운 배경, 하단 border 없음 |
 
 맵 페이지에서는 `position: absolute`로 지도 콘텐츠 위에 겹쳐지며, `z-index: 1000`으로 Leaflet 지도 타일 위에 표시된다. 배경색이 지정되지 않으므로 지도가 헤더 뒤로 비쳐 보인다.
 
@@ -92,15 +92,25 @@ const queryClient = new QueryClient()
 
 `ConnectionStatus` 타입의 5가지 상태에 대해 각각 `label`, `colorVar`, `pulse` 값이 매핑된다:
 
-| 상태 | label | CSS 변수 (`colorVar`) | 실제 색상값 | pulse 애니메이션 |
-|------|-------|-----------------------|------------|-----------------|
-| `connected` | `Live` | `--color-accent` | `#1ed760` (녹색) | 활성 |
-| `connecting` | `Reconnecting` | `--color-warning` | `#ffa42b` (주황) | 활성 |
-| `reconnecting` | `Reconnecting` | `--color-warning` | `#ffa42b` (주황) | 활성 |
-| `offline` | `Offline` | `--color-negative` | `#f3727f` (붉은 분홍) | 비활성 |
-| `idle` (기본값) | `Idle` | `--color-text-secondary` | `#b3b3b3` (회색) | 비활성 |
+| 상태 | label (맵) | label (기타) | CSS 변수 (`colorVar`) | 실제 색상값 | pulse 애니메이션 |
+|------|------------|-------------|----------------------|------------|-----------------|
+| `connected` | `실시간 접속자` | `Live` | `--color-accent` | `#1ed760` (녹색) | 활성 |
+| `connecting` | `재연결 중` | `Reconnecting` | `--color-warning` | `#ffa42b` (주황) | 활성 |
+| `reconnecting` | `재연결 중` | `Reconnecting` | `--color-warning` | `#ffa42b` (주황) | 활성 |
+| `offline` | `오프라인` | `Offline` | `--color-negative` | `#f3727f` (붉은 분홍) | 비활성 |
+| `idle` (기본값) | `대기` | `Idle` | `--color-text-secondary` | `#b3b3b3` (회색) | 비활성 |
 
-설계 의도: `connecting`과 `reconnecting`은 동일한 표시(`Reconnecting`, 주황 pulse)로 통합했다. 사용자에게 "연결 시도 중"이라는 하나의 의미만 전달하면 충분하기 때문이다. `offline`과 `idle`은 pulse를 끄는데, 이는 "죽은 점"으로 인지시켜 현재 통신이 없음을 명확히 한다.
+`toIndicator(status, isMap)` 함수가 `isMap` 인자에 따라 한국어(맵)/영어(기타) label을 반환한다.
+
+설계 의도: `connecting`과 `reconnecting`은 동일한 표시로 통합했다. 사용자에게 "연결 시도 중"이라는 하나의 의미만 전달하면 충분하기 때문이다. `offline`과 `idle`은 pulse를 끄는데, 이는 "죽은 점"으로 인지시켜 현재 통신이 없음을 명확히 한다.
+
+#### 2.3.1a 온라인 접속자 수 (맵 페이지 전용)
+
+맵 페이지(`isMap`)에서 `onlineUsers > 0`일 때, label 옆에 구분선(`w-px h-2.5 bg-[var(--color-border)]`)과 접속자 수를 추가 표시한다.
+
+- **숫자 폰트**: `text-[0.6875rem] font-bold text-[var(--color-text-base)]`, `fontVariantNumeric: 'tabular-nums'`
+- **데이터 소스**: `useFireStore((s) => s.onlineUsers)`
+- 랜딩 페이지 등 맵이 아닌 페이지에서는 접속자 수를 표시하지 않는다.
 
 #### 2.3.2 표시기 컨테이너 스타일
 
@@ -168,7 +178,7 @@ animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 #### 2.3.4 Label 텍스트 스타일
 
 ```
-text-[0.6875rem] font-bold uppercase leading-none tracking-wide
+text-[0.6875rem] font-bold leading-none tracking-wide
 text-[var(--color-text-secondary)]
 ```
 
@@ -176,7 +186,6 @@ text-[var(--color-text-secondary)]
 |------|-----|------|
 | 폰트 크기 | `0.6875rem` = `11px` | |
 | 폰트 굵기 | `font-bold` = `700` | |
-| 대소문자 | `uppercase` | `Live` → `LIVE`, `Offline` → `OFFLINE` |
 | line-height | `leading-none` = `1` | |
 | letter-spacing | `tracking-wide` = `0.025em` | |
 | 색상 | `var(--color-text-secondary)` = `#b3b3b3` | 상태와 무관하게 고정 |
@@ -277,6 +286,8 @@ body {
 | `line-height` | `1.4` |
 | `-webkit-font-smoothing` | `antialiased` |
 | `-moz-osx-font-smoothing` | `grayscale` |
+| `user-select` | `none` |
+| `-webkit-user-select` | `none` |
 
 ### 3.9 반응형 및 컨테이너 설정
 
