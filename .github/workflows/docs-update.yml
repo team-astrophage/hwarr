@@ -1,57 +1,56 @@
 name: Docs Auto-Update
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize]
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - ".github/workflows/docs-update.yml"
 
 concurrency:
-  group: docs-update-${{ github.ref }}
+  group: docs-update-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   update-docs:
     name: Update Documentation
     runs-on: ubuntu-latest
     if: >-
-      !contains(github.event.head_commit.message, '[skip-docs]') &&
-      !contains(github.event.head_commit.message, 'docs: auto-update')
+      !contains(github.event.pull_request.title, '[skip-docs]')
 
     steps:
-      - name: Checkout code
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
 
-      - name: Check if only docs changed
-        id: check-docs
+      - name: Get changed files
+        id: changed
         run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # If every changed file is under docs/, skip
-          NON_DOCS=$(echo "$CHANGED_FILES" | grep -v '^docs/' || true)
-          if [ -z "$NON_DOCS" ]; then
-            echo "only_docs=true" >> $GITHUB_OUTPUT
-          else
-            echo "only_docs=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run Claude Code
-        if: steps.check-docs.outputs.only_docs == 'false'
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          model: claude-sonnet-4-20250514
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            다음 파일들이 최근 커밋에서 변경되었습니다:
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
 
-            ${{ steps.check-docs.outputs.changed_files }}
+            이 PR에서 변경된 파일들:
+
+            ${{ steps.changed.outputs.files }}
 
             1. 변경된 파일들을 읽고 어떤 내용이 바뀌었는지 파악하세요.
             2. `docs/` 디렉토리에 관련 문서가 있는지 확인하세요.
@@ -60,52 +59,25 @@ jobs:
             5. 단순 리팩토링이나 스타일 변경만 있는 경우, 문서 업데이트가 불필요하면 아무 변경도 하지 마세요.
 
             문서 작성 시 기존 docs/ 디렉토리의 문서 스타일과 구조를 따라주세요.
-          allowed_tools: "Read,Write,Edit,Glob,Grep,Bash(git diff*),Bash(git log*)"
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: Create Pull Request
-        if: steps.check-docs.outputs.only_docs == 'false'
-        id: create-pr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "docs: auto-update documentation"
-          branch: docs/auto-update-${{ github.sha }}
-          delete-branch: true
-          title: "docs: auto-update for ${{ github.sha }}"
-          body: |
-            ## Summary
-            - 커밋 `${{ github.sha }}` 변경사항에 맞춰 문서를 자동 업데이트합니다.
-            - Claude Code에 의해 자동 생성된 PR입니다.
-
-            **Trigger commit:** ${{ github.event.head_commit.message }}
-          labels: documentation,automated
+            문서를 업데이트했다면 이 PR 브랜치에 커밋하세요.
+          claude_args: |
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*)"
 
       - name: Notify Discord
         if: always()
         run: |
-          SKIPPED="${{ steps.check-docs.outputs.only_docs }}"
-
-          if [ "$SKIPPED" = "true" ]; then
-            COLOR=8421504
-            STATUS="SKIPPED"
-            EMOJI="⏭️"
-            DESCRIPTION="**Commit:** \`${GITHUB_SHA::7}\`\n**Branch:** \`${GITHUB_REF_NAME}\`\n**By:** ${GITHUB_ACTOR}\n**Reason:** Only docs/ files changed"
-          elif [ "${{ job.status }}" = "success" ]; then
+          if [ "${{ job.status }}" = "success" ]; then
             COLOR=3066993
             STATUS="SUCCESS"
             EMOJI="✅"
-            PR_URL="${{ steps.create-pr.outputs.pull-request-url }}"
-            DESCRIPTION="**Commit:** \`${GITHUB_SHA::7}\`\n**Branch:** \`${GITHUB_REF_NAME}\`\n**By:** ${GITHUB_ACTOR}"
-            if [ -n "$PR_URL" ]; then
-              DESCRIPTION="${DESCRIPTION}\n**PR:** ${PR_URL}"
-            fi
           else
             COLOR=15158332
             STATUS="FAILED"
             EMOJI="❌"
-            DESCRIPTION="**Commit:** \`${GITHUB_SHA::7}\`\n**Branch:** \`${GITHUB_REF_NAME}\`\n**By:** ${GITHUB_ACTOR}"
           fi
+
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          DESCRIPTION="**PR:** [#${{ github.event.pull_request.number }}](${PR_URL})\n**Branch:** \`${{ github.event.pull_request.head.ref }}\`\n**By:** ${{ github.actor }}"
 
           curl -H "Content-Type: application/json" \
             -d "{
