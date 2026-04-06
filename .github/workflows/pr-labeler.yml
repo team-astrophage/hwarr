@@ -15,3 +15,13 @@ jobs:
       - uses: actions/labeler@v6
         with:
           sync-labels: false
+
+  assign:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    steps:
+      - run: gh pr edit "$PR_URL" --add-assignee "$PR_AUTHOR"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
