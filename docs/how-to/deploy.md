@@ -4,9 +4,11 @@
 
 ---
 
-## 1. CI/CD 파이프라인 개요
+## 1. GitHub Actions 워크플로우 전체 개요
 
-GitHub Actions 워크플로우 3개가 배포를 담당한다.
+GitHub Actions 워크플로우 5개가 CI/CD 및 자동화를 담당한다.
+
+### 배포 워크플로우
 
 | 워크플로우 | 파일 | 트리거 | 역할 |
 |---|---|---|---|
@@ -14,8 +16,15 @@ GitHub Actions 워크플로우 3개가 배포를 담당한다.
 | **Backend CI/CD** | `.github/workflows/backend-deploy.yml` | `main` branch push (`server/**` 변경 시) / 수동 | Docker build → ECR push → ECS deploy |
 | **Frontend CI/CD** | `.github/workflows/frontend-deploy.yml` | `main` branch push (`client/**` 변경 시) / 수동 | Vite build → S3 sync → CloudFront invalidation |
 
-세 워크플로우 모두 `workflow_dispatch`를 지원하므로 GitHub Actions UI에서 수동 실행이 가능하다.
+Backend/Frontend 워크플로우는 `workflow_dispatch`를 지원하므로 GitHub Actions UI에서 수동 실행이 가능하다.
 Backend 워크플로우에는 `concurrency` 설정이 적용되어 동일 branch에 대한 중복 배포를 자동 취소한다.
+
+### 자동화 워크플로우
+
+| 워크플로우 | 파일 | 트리거 | 역할 |
+|---|---|---|---|
+| **Docs Auto-Update** | `.github/workflows/docs-update.yml` | `main` 대상 PR 생성/업데이트 시 (`docs/**` 제외) | Claude Code로 문서 자동 업데이트 |
+| **PR Labeler** | `.github/workflows/pr-labeler.yml` | PR 생성/업데이트 시 | 변경 파일 경로 기반 자동 라벨링 |
 
 ---
 
@@ -67,7 +76,7 @@ ECS service의 `task_definition`은 Terraform에서 `ignore_changes`로 설정�
 ```
 git push (client/** 변경)
   → GitHub Actions 트리거
-    → Node.js 20 설정
+    → Node.js 설정
     → npm ci (의존성 설치)
     → tsc -b && vite build (TypeScript 컴파일 + Vite 번들링)
     → OIDC로 AWS 인증
@@ -312,3 +321,81 @@ Discord 서버에서 webhook URL을 생성하고 GitHub Secrets의 `DISCORD_WEBH
 ```
 Discord 서버 설정 > Integrations > Webhooks > New Webhook > Copy URL
 ```
+
+---
+
+## 9. Docs Auto-Update 워크플로우
+
+PR이 `main` 브랜치를 대상으로 생성되거나 업데이트되면, Claude Code가 변경된 코드를 분석하여 관련 문서를 자동으로 업데이트한다.
+
+### 동작 흐름
+
+```
+PR 생성/업데이트 (main 대상, docs/** 외 파일 변경)
+  → PR 브랜치 checkout
+  → 변경된 파일 목록 추출 (git diff)
+  → Claude Code 실행
+    → 변경 사항 분석
+    → docs/ 관련 문서 업데이트
+    → README.md 동기화 확인
+    → PR 브랜치에 커밋 추가
+  → Discord 알림 전송
+```
+
+### 트리거 조건
+
+- `main` 대상 PR의 `opened`, `synchronize` 이벤트
+- `docs/**`와 `.github/workflows/docs-update.yml` 변경만 있는 PR은 **제외** (`paths-ignore`)
+- PR 제목에 `[skip-docs]`를 포함하면 **스킵**
+
+### 동시성 제어
+
+동일 PR에 대해 `concurrency` 그룹이 설정되어 있어, PR에 새 커밋이 추가되면 진행 중이던 이전 실행을 자동 취소한다.
+
+### Claude Code가 수행하는 작업
+
+1. 변경된 파일을 읽고 내용 파악
+2. `docs/` 디렉토리에서 관련 문서 탐색
+3. 관련 문서가 있으면 변경사항 반영하여 업데이트
+4. 새 기능 추가 시 적절한 문서 신규 작성
+5. 단순 리팩토링/스타일 변경이면 아무 변경 없이 종료
+6. docs/ 업데이트 시 README.md의 기술 스택, 프로젝트 구조 등도 함께 동기화
+
+### 필요한 Secret
+
+| Secret 이름 | 설명 |
+|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API 키 (Claude Code 실행용) |
+| `DISCORD_WEBHOOK_URL` | 결과 알림용 Discord webhook URL |
+
+### 권한
+
+`GITHUB_TOKEN`을 명시적으로 전달하며, 별도 GitHub App 설치 없이 동작한다.
+
+```yaml
+permissions:
+  contents: write       # PR 브랜치에 커밋 푸시
+  pull-requests: write  # PR 코멘트
+```
+
+---
+
+## 10. PR Labeler 워크플로우
+
+PR이 생성되거나 업데이트되면 변경된 파일 경로를 기반으로 자동으로 라벨을 부여한다.
+
+### 라벨 규칙
+
+`.github/labeler.yml`에 정의된 규칙:
+
+| 라벨 | 트리거 경로 |
+|---|---|
+| `scope/client` | `client/**` |
+| `scope/server` | `server/**` |
+| `scope/infra` | `infra/**`, `.github/workflows/**`, `Dockerfile`, `docker-compose*.yml` |
+| `scope/docs` | `docs/**` |
+
+### 설정
+
+- `sync-labels: false` — 이미 부여된 라벨은 제거하지 않고, 새로 매칭되는 라벨만 추가한다.
+- `pull_request_target` 이벤트를 사용하여 fork에서 온 PR에도 라벨링이 동작한다.
