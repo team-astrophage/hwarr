@@ -15,7 +15,6 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   update-docs:
@@ -26,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -44,6 +43,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -57,11 +57,11 @@ jobs:
             3. 관련 문서가 있다면 변경사항을 반영하여 한국어로 업데이트하세요.
             4. 관련 문서가 없지만 새로운 기능이 추가된 경우, 적절한 문서를 한국어로 새로 작성하세요.
             5. 단순 리팩토링이나 스타일 변경만 있는 경우, 문서 업데이트가 불필요하면 아무 변경도 하지 마세요.
+            6. docs/ 문서를 업데이트한 경우, README.md의 내용(기술 스택, 프로젝트 구조 등)이 docs/와 일치하는지 확인하고 필요하면 함께 수정하세요.
 
             문서 작성 시 기존 docs/ 디렉토리의 문서 스타일과 구조를 따라주세요.
             문서를 업데이트했다면 이 PR 브랜치에 커밋하세요.
-          claude_args: |
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*)"
+          allowed_tools: "Read,Write,Edit,Glob,Grep,Bash(git:*)"
 
       - name: Notify Discord
         if: always()
