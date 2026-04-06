@@ -1,3 +1,4 @@
+# CI/CD 검증용 임시 주석
 """전국불판 — FastAPI + Socket.IO application entry point.
 
 Creates the FastAPI app and mounts the Socket.IO ASGI app.
