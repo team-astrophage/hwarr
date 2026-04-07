@@ -10,15 +10,22 @@
  *   - 현재 UX 상 "지른 순간"이 의미가 있으므로 뒤늦은 재시도보다 드롭이 낫다.
  */
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { socket } from '../../../lib/socket'
 
+const FIRE_THROTTLE_MS = 300
+
 export function useFire() {
+  const lastFireRef = useRef(0)
+
   const fire = useCallback((lat: number, lng: number) => {
     if (!socket.connected) {
       console.warn('[Socket] fire dropped (disconnected)', { lat, lng })
       return
     }
+    const now = Date.now()
+    if (now - lastFireRef.current < FIRE_THROTTLE_MS) return
+    lastFireRef.current = now
     socket.emit('fire', { lat, lng })
   }, [])
 
