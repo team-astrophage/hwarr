@@ -22,10 +22,10 @@ graph LR
         CF_WS["/socket.io/* → ALB"]
     end
 
-    subgraph Server["ECS Fargate (Python 3.12)"]
-        ASGI["socketio.ASGIApp (combined_app)"]
-        FASTAPI[FastAPI — REST Routes]
-        SIO_S["python-socketio — 이벤트 핸들러"]
+    subgraph Server["ECS Fargate (Go)"]
+        GIN["Gin HTTP Router"]
+        HANDLER[REST Handlers]
+        SIO_S["Socket.IO — 이벤트 핸들러"]
         ENGINE["FireProgressionEngine"]
         ENGINE_SCAN["2s 주기 scan loop"]
         ENGINE_CLEAN["60s 주기 cleanup loop"]
@@ -35,12 +35,12 @@ graph LR
 
     UI --> SIO_C
     UI --> REST_C
-    SIO_C -- "WebSocket / polling" --> CF_WS --> ASGI
-    REST_C -- "HTTP" --> CF_API --> ASGI
-    ASGI --> FASTAPI
-    ASGI --> SIO_S
-    FASTAPI -- "engine.register_fire()" --> ENGINE
-    SIO_S -- "engine.register_fire()" --> ENGINE
+    SIO_C -- "WebSocket / polling" --> CF_WS --> GIN
+    REST_C -- "HTTP" --> CF_API --> GIN
+    GIN --> HANDLER
+    GIN --> SIO_S
+    HANDLER -- "engine.RegisterFire()" --> ENGINE
+    SIO_S -- "engine.RegisterFire()" --> ENGINE
     ENGINE --> REDIS
     ENGINE_SCAN -- "ZCOUNT, broadcast" --> REDIS
     ENGINE_CLEAN -- "ZREMRANGEBYSCORE" --> REDIS
@@ -52,57 +52,52 @@ graph LR
 
 | 결정 | 이유 |
 |------|------|
-| **단일 ASGI 프로세스에 REST + WebSocket 통합** | 해커톤 규모에서 마이크로서비스 분리는 오버 엔지니어링이다. `socketio.ASGIApp(sio, other_asgi_app=app)` 한 줄로 두 프로토콜을 하나의 Uvicorn 프로세스가 처리한다. |
+| **단일 프로세스에 REST + WebSocket 통합** | 해커톤 규모에서 마이크로서비스 분리는 오버 엔지니어링이다. Gin 라우터가 REST 요청을 처리하고, Engine.IO/Socket.IO 서버가 WebSocket을 처리한다. 하나의 Go 바이너리로 두 프로토콜을 서빙한다. |
 | **Redis를 유일한 상태 저장소로 사용** | Sorted Set의 score에 만료 시각을 넣으면 TTL 기반 자동 소멸이 `ZCOUNT`/`ZREMRANGEBYSCORE`만으로 구현된다. 별도 DB 없이 불 이벤트의 생성-조회-소멸 전체 수명 주기를 다룰 수 있다. |
-| **FireProgressionEngine을 in-process background task로 실행** | Celery나 외부 스케줄러 대신 `asyncio.create_task`로 2초 간격 스캔 루프를 돌린다. 같은 프로세스이므로 Redis 커넥션과 Socket.IO broadcaster를 직접 참조해 지연 없이 broadcast할 수 있다. |
+| **FireProgressionEngine을 in-process goroutine으로 실행** | 외부 스케줄러 대신 goroutine으로 2초 간격 스캔 루프를 돌린다. 같은 프로세스이므로 Redis 커넥션과 Socket.IO broadcaster를 직접 참조해 지연 없이 broadcast할 수 있다. |
 
 ---
 
 ## 2. 서버 아키텍처
 
-### ASGI Mount 구조
+### Gin 라우터 구조
 
 ```
-combined_app (socketio.ASGIApp)
-├── /socket.io/*  → python-socketio AsyncServer
-└── 그 외 모든 경로 → FastAPI (other_asgi_app)
-    ├── /api/fire, /api/grid/*        (fire_router)
-    ├── /api/news, /api/qr, ...       (기타 routers)
-    └── /health                       (ALB health check)
+Gin Router (http.Server)
+├── /socket.io/*  → Engine.IO Server → Socket.IO Server
+├── /api/grid/:grid_id, /api/grid/viewport  (handler.GridHandler)
+├── /api/ranking/today                       (handler.RankingHandler)
+├── /api/news, /api/qr, ...                 (기타 handlers)
+├── /api/feedback, /api/demo/*               (handler.FeedbackHandler 등)
+└── /health                                  (ALB health check)
 ```
 
-`socketio.ASGIApp`가 최상위 ASGI 앱이 되어 `/socket.io/*` 경로를 먼저 가로채고, 나머지를 FastAPI로 위임한다. 이 구조 덕분에 Uvicorn 하나로 HTTP와 WebSocket을 동시에 서빙한다.
+Gin 라우터가 모든 HTTP 요청을 받고, `/socket.io/*` 경로는 Engine.IO 서버로 위임하여 WebSocket 연결을 처리한다. 하나의 Go 바이너리로 HTTP와 WebSocket을 동시에 서빙한다.
 
 ### Startup / Shutdown 순서
 
-**Startup** (`main.py → startup_event`):
+**Startup** (`server.Run()`):
 
-1. Redis 연결 (`redis.asyncio.from_url`) 및 `ping()` 확인
-2. `FireProgressionEngine` 생성 — Redis client와 `ConnectionManager`(broadcaster) 주입
-3. `register_fire_events(sio, manager, engine)` — Socket.IO 이벤트 핸들러 등록
-4. `register_chat_events(sio, manager, redis_client)` — 채팅 이벤트 핸들러 등록
-5. `AdminRegionResolver` 로드 (일별 행정동 랭킹용 GeoJSON, optional)
-6. `engine.start()` — progression loop(2s)와 cleanup loop(60s) background task 시작
-7. `manager.start_reaper()` — stale connection 감지 task 시작
+1. Redis 연결 (`go-redis` client) 및 `Ping()` 확인
+2. Socket.IO + Engine.IO 서버 생성
+3. `sio.NewHandler()` — ConnectionManager 초기화 및 Socket.IO 이벤트 핸들러 등록
+4. `geodata.LoadOrNil()` — 행정동 GeoJSON 로드 (일별 랭킹용, optional)
+5. Background goroutine 시작: FireProgressionEngine(2s), CleanupEngine(60s)
+6. `sio.NewReaper()` — stale connection 감지 goroutine 시작
+7. Gin HTTP 서버 시작
 
-Redis 연결 실패 시 engine 없이 기동한다 (`engine = None`). 이 경우 REST fire API는 503을 반환하고, Socket.IO fire 이벤트 핸들러는 등록되지 않는다. health check 엔드포인트는 항상 응답하므로 ALB가 컨테이너 상태를 판단할 수 있다.
+Redis 연결 실패 시 engine 없이 기동한다. health check 엔드포인트는 항상 응답하므로 ALB가 컨테이너 상태를 판단할 수 있다.
 
-**Shutdown** (`main.py → shutdown_event`):
+**Shutdown** (OS signal 수신 시):
 
-1. `manager.stop_reaper()` — stale connection reaper 중지
-2. `engine.stop()` — background task cancel 및 `asyncio.gather` 대기
+1. `http.Server.Shutdown()` — graceful HTTP 서버 종료 (10s timeout)
+2. Background goroutine 정리 (context cancellation)
 
 ### Socket.IO 설정
 
-```python
-sio = socketio.AsyncServer(
-    async_mode="asgi",
-    ping_interval=10,   # 10초마다 ping
-    ping_timeout=5,     # 5초 내 pong 미수신 시 disconnect
-)
-```
+Engine.IO 서버에서 ping interval 10초, ping timeout 5초로 설정한다.
 
-빠른 disconnect 감지를 위해 기본값(25s/20s)보다 공격적인 값을 사용한다. 실시간 불 지도에서 "유령 연결"이 남으면 `users:count`가 부정확해지기 때문이다. 클라이언트 측 heartbeat(10s)와 서버 reaper(30s timeout)가 이중 안전망 역할을 한다.
+빠른 disconnect 감지를 위해 기본값보다 공격적인 값을 사용한다. 실시간 불 지도에서 "유령 연결"이 남으면 `users:count`가 부정확해지기 때문이다. 클라이언트 측 heartbeat(10s)와 서버 reaper(30s timeout)가 이중 안전망 역할을 한다.
 
 ---
 
@@ -127,7 +122,7 @@ sio = socketio.AsyncServer(
 | **TanStack Router** | 클라이언트 라우팅 | 파일 기반 route 생성(`routeTree.gen.ts`), type-safe params |
 | **TanStack Query** | REST API 캐시 | viewport 조회 등 HTTP 요청의 캐시/재검증 자동화 |
 | **Zustand** | 전역 상태 관리 | Socket 연결 상태(`useSocketStore`)를 React 외부에서도 읽고 쓸 수 있다. Redux 대비 보일러플레이트가 거의 없다. |
-| **Socket.IO Client** | 실시간 통신 | 자동 재접속, polling→WebSocket 업그레이드, 서버 `python-socketio`와 프로토콜 일치 |
+| **Socket.IO Client** | 실시간 통신 | 자동 재접속, polling→WebSocket 업그레이드, 서버 Socket.IO와 프로토콜 일치 |
 | **Leaflet + react-leaflet** | 지도 렌더링 | 오픈소스, 가벼움, 타일 기반 grid 시스템과 자연스럽게 호환 |
 
 ### Socket 수명 주기 (`socketManager.ts`)
@@ -152,7 +147,7 @@ sio = socketio.AsyncServer(
 ### 경로 A: REST API (`POST /api/fire`)
 
 ```
-Client ──HTTP POST──→ CloudFront /api/* ──→ ALB ──→ FastAPI route
+Client ──HTTP POST──→ CloudFront /api/* ──→ ALB ──→ Gin handler
                                                       │
                                             engine.register_fire()
                                                       │
@@ -165,8 +160,8 @@ Client ──HTTP POST──→ CloudFront /api/* ──→ ALB ──→ FastAP
                                               Socket.IO → all clients
 ```
 
-- `routes/fire.py`의 `ignite_fire()` 핸들러가 GPS 좌표를 grid ID로 변환
-- `engine.register_fire(grid_id, event_id, expire_at)` 호출 — Redis Sorted Set에 불 이벤트 추가
+- `handler/grid.go`의 핸들러가 GPS 좌표를 grid ID로 변환
+- `engine.RegisterFire(grid_id, event_id, expire_at)` 호출 — Redis Sorted Set에 불 이벤트 추가
 - engine이 stage 변화를 감지하면 즉시 broadcast (scan loop를 기다리지 않음)
 - HTTP response로 호출자에게 grid 상태 반환
 
@@ -180,7 +175,7 @@ Client ──Socket.IO emit──→ CloudFront /socket.io/* ──→ ALB ─�
                                                             (동일한 흐름)
 ```
 
-- `sio/events.py`의 `handle_fire_ignite()` 핸들러가 동일한 GPS → grid → `register_fire()` 흐름 수행
+- `sio/fire_ignite.go`의 핸들러가 동일한 GPS → grid → `RegisterFire()` 흐름 수행
 - Socket.IO ack로 호출자에게 결과 반환 (HTTP response 대신)
 - demo 모드 지원: `{ "demo": true }` 전송 시 서버가 미리 정의된 랜드마크 좌표를 임의 선택
 
@@ -213,7 +208,7 @@ graph TB
                 ALB[Application Load Balancer]
             end
             subgraph Private Subnet
-                ECS[ECS Fargate<br/>Python 3.12 Container]
+                ECS[ECS Fargate<br/>Go Container]
                 REDIS[ElastiCache Serverless<br/>Redis 7]
             end
         end
@@ -266,14 +261,12 @@ Socket.IO는 연결 초기에 HTTP long-polling으로 시작한 뒤 WebSocket으
 
 | 구성 요소 | 기술 | 버전 |
 |-----------|------|------|
-| Runtime | Python | 3.12 |
-| Web Framework | FastAPI | >= 0.115 |
-| WebSocket | python-socketio | >= 5.12 |
-| ASGI Server | Uvicorn | >= 0.34 |
-| Data Validation | Pydantic | >= 2.0 |
-| State Store | Redis (async) | >= 5.2 (client) / Redis 7 (server) |
-| Spatial Analysis | Shapely | >= 2.0 |
-| Container | Docker | Python 3.12-slim base |
+| Runtime | Go | 1.25 |
+| Web Framework | Gin | 1.12 |
+| WebSocket | gorilla/websocket + custom Socket.IO | - |
+| State Store | go-redis | v9 |
+| Spatial Analysis | paulmach/orb | 0.13 |
+| Container | Docker | Alpine 3.20 base |
 
 ### Frontend
 

@@ -5,7 +5,7 @@
 로컬 개발 환경을 구성하는 방법은 두 가지입니다:
 
 - **[Docker Compose](#docker-compose로-실행-추천)** — 명령어 하나로 전체 환경 구성. 별도 설치 불필요.
-- **[직접 설치](#직접-설치)** — Node.js, Python, Redis를 직접 설치하여 실행.
+- **[직접 설치](#직접-설치)** — Node.js, Go, Redis를 직접 설치하여 실행.
 
 ---
 
@@ -35,7 +35,7 @@ docker compose up --build
 | 컨테이너 | 포트 | 역할 |
 |----------|------|------|
 | `hwarr-redis-1` | `6379` | Redis 데이터 저장소 |
-| `hwarr-backend-1` | `8000` | FastAPI 서버 |
+| `hwarr-backend-1` | `8000` | Go Gin 서버 |
 | `hwarr-frontend-1` | `5173` | Vite 개발 서버 |
 
 브라우저에서 `http://localhost:5173`으로 접속한다.
@@ -102,7 +102,7 @@ Docker를 사용하지 않고 각 도구를 직접 설치하여 실행하는 방
 | 도구 | 최소 버전 | 설치 (macOS) |
 |------|----------|-------------|
 | Node.js | 18+ | `brew install node` |
-| Python | 3.12+ | `brew install python` |
+| Go | 1.25+ | `brew install go` |
 | Redis | 7+ | `brew install redis` |
 
 Windows 사용자는 [Redis for Windows](https://github.com/microsoftarchive/redis/releases) 또는 WSL2 환경을 권장합니다.
@@ -111,7 +111,7 @@ Windows 사용자는 [Redis for Windows](https://github.com/microsoftarchive/red
 
 ```bash
 node -v        # v18 이상
-python3 -V     # 3.12 이상
+go version     # 1.25 이상
 redis-server -v # 7 이상
 ```
 
@@ -131,16 +131,14 @@ redis-server
 redis-server --daemonize yes
 ```
 
-### 2-2. Python 가상환경 및 의존성 설치
+### 2-2. 서버 실행
 
 ```bash
 cd server
-python3 -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+go run .
 ```
 
-주요 패키지: `fastapi`, `uvicorn[standard]`, `python-socketio`, `redis`, `shapely`, `httpx`
+서버가 `http://localhost:8000`에서 실행됩니다.
 
 ### 2-3. 행정동 GeoJSON 다운로드 (일일 랭킹용, 선택)
 
@@ -151,14 +149,6 @@ mkdir -p data
 curl -fsSL -o data/admin_dong.geojson \
   "https://raw.githubusercontent.com/vuski/admdongkor/master/ver20230701/HangJeongDong_ver20230701.geojson"
 ```
-
-### 2-4. 서버 실행
-
-```bash
-python main.py
-```
-
-서버가 `http://localhost:8000`에서 실행됩니다. `--reload` 옵션이 기본 활성화되어 코드 변경 시 자동 재시작됩니다.
 
 동작 확인:
 
@@ -331,23 +321,9 @@ VITE_SOCKET_URL=http://localhost:8000
 
 ---
 
-### `ModuleNotFoundError` (Python)
-
-**원인**: 가상환경이 활성화되지 않았거나, `pip install`을 실행하지 않았습니다.
-
-**해결**:
-
-```bash
-cd server
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
----
-
 ### Socket.IO 연결이 끊겼다가 다시 붙을 때
 
-**정상 동작입니다.** 서버는 `ping_interval=10`, `ping_timeout=5`로 설정되어 있어, 15초 이상 응답이 없으면 연결을 끊습니다. 클라이언트는 자동으로 재연결을 시도합니다.
+**정상 동작입니다.** 서버는 ping interval 10초, ping timeout 5초로 설정되어 있어, 15초 이상 응답이 없으면 연결을 끊습니다. 클라이언트는 자동으로 재연결을 시도합니다.
 
 ---
 
@@ -376,5 +352,5 @@ kill -9 <PID>
 또는 `PORT` 환경변수로 다른 포트를 지정합니다.
 
 ```bash
-PORT=8001 python main.py
+PORT=8001 go run .
 ```

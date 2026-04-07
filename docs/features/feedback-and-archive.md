@@ -16,8 +16,8 @@
 | FeedbackModal | `client/src/features/feedback/components/FeedbackModal.tsx` |
 | useFeedbackSubmit | `client/src/features/feedback/api/useFeedbackSubmit.ts` |
 | types | `client/src/features/feedback/types.ts` |
-| 서버 라우트 | `server/routes/feedback.py` |
-| 서버 설정 | `server/config.py` |
+| 서버 핸들러 | `server/internal/handler/feedback.go` |
+| 서버 설정 | `server/internal/config/config.go` |
 
 ---
 
@@ -418,7 +418,7 @@ interface FeedbackRequest {
 | HTTP 상태 코드 | 클라이언트 에러 메시지 | 서버 detail |
 |---|---|---|
 | `429` | `"잠시 후 다시 시도해주세요"` | `"rate_limited"` |
-| `422` | `"입력값을 확인해주세요"` | (Pydantic validation error) |
+| `422` | `"입력값을 확인해주세요"` | (validation error) |
 | 기타 (`!res.ok`) | `"전송에 실패했어요"` | 다양함 |
 | `502` | `"전송에 실패했어요"` | `"webhook_failed"` |
 | `503` | `"전송에 실패했어요"` | `"feedback_disabled"` |
@@ -430,41 +430,22 @@ interface FeedbackRequest {
 
 ---
 
-## 11. 서버 처리 (feedback.py)
+## 11. 서버 처리 (feedback.go)
 
 ### 11.1 라우터 설정
 
-```python
-router = APIRouter(prefix="/api", tags=["feedback"])
-```
-
 - 엔드포인트: `POST /api/feedback`
-- response_model: `FeedbackResponse`
-- status_code: `201`
+- 성공 응답: `201 Created`
 
-### 11.2 요청 검증 (Pydantic)
+### 11.2 요청 검증
 
-```python
-class FeedbackRequest(BaseModel):
-    category: Literal["bug", "idea", "etc"]
-    message: str = Field(min_length=1, max_length=500)
-    email: Optional[str] = Field(default=None, max_length=200)
-    page: Optional[str] = Field(default=None, max_length=200)
-```
-
-- `category`가 `Literal`에 없거나, `message`가 빈 문자열이거나 500자를 초과하면 Pydantic이 자동으로 `422 Unprocessable Entity` 반환
+요청 body의 `category`는 `"bug"`, `"idea"`, `"etc"` 중 하나여야 하며, `message`는 1~500자 범위, `email`과 `page`는 선택적(최대 200자)이다. 검증 실패 시 `400 Bad Request`를 반환한다.
 
 ### 11.3 CloudFront IP 추출
 
 실 서비스 환경에서는 CloudFront/ALB를 거치기 때문에 `request.client.host`가 프록시 IP가 된다. 실제 클라이언트 IP를 다음 로직으로 추출한다:
 
-```python
-xff = request.headers.get("x-forwarded-for", "")
-if xff:
-    ip = xff.split(",")[0].strip()  # 첫 번째 항목 = 원본 클라이언트 IP
-else:
-    ip = request.client.host if request.client else "unknown"
-```
+`X-Forwarded-For` 헤더에서 **첫 번째**(leftmost) 항목을 추출한다.
 
 - `X-Forwarded-For` 헤더에서 **첫 번째**(leftmost) 항목을 추출 -- CloudFront가 viewer IP를 맨 앞에 추가하고, ALB가 자신의 hop을 뒤에 추가하는 구조
 
@@ -472,21 +453,13 @@ else:
 
 CloudFront는 기본적으로 `User-Agent`를 `"Amazon CloudFront"`로 덮어쓴다. 실제 클라이언트 UA를 얻기 위해:
 
-```python
-ua = (
-    request.headers.get("cloudfront-viewer-user-agent")  # 우선
-    or request.headers.get("user-agent")                  # fallback
-    or "-"
-)
-```
+`cloudfront-viewer-user-agent` 헤더를 우선 사용하고, 없으면 `user-agent` 헤더로 fallback한다.
 
 - `cloudfront-viewer-user-agent` 헤더는 CloudFront managed origin request policy에서 전달됨
 
 ### 11.5 UA 축약 함수
 
-```python
-_UA_MAX_LEN = 80
-```
+UA 최대 길이: 80자
 
 - UA가 비어있거나 `"-"`이면 `"unknown client"` 반환
 - 80자 이하면 그대로 사용
@@ -498,28 +471,26 @@ _UA_MAX_LEN = 80
 |---|---|---|
 | 윈도우 | `600초` (10분) | `_RL_WINDOW_SEC = 600` |
 | 최대 횟수 | `3회` (기본값) | `FEEDBACK_RATE_LIMIT_PER_10MIN`, 환경변수로 변경 가능 |
-| 저장소 | Redis | `FireProgressionEngine`의 Redis 클라이언트 재사용 |
+| 저장소 | Redis | 공유 Redis 클라이언트 사용 |
 | 키 형식 | `feedback:rl:{ip}` | IP 기반 |
 
 **동작 흐름:**
 
 1. `redis.incr(key)` -- 카운터 증가 (키가 없으면 1로 생성)
 2. `count == 1`이면 `redis.expire(key, 600)` -- TTL 설정 (최초 요청 시에만)
-3. `count > FEEDBACK_RATE_LIMIT_PER_10MIN`이면 `HTTPException(429, "rate_limited")` 발생
+3. `count > FEEDBACK_RATE_LIMIT_PER_10MIN`이면 `429 Too Many Requests` 반환
 
-**Soft fail:** Redis가 사용 불가능하면 (`_get_redis()` 반환값이 `None`이거나 Redis 명령 실행 중 예외 발생 시) rate limit을 건너뛰고 요청을 허용한다 (로그만 남김).
+**Soft fail:** Redis가 사용 불가능하면 rate limit을 건너뛰고 요청을 허용한다 (로그만 남김).
 
 ### 11.7 Discord Webhook 전달
 
 #### embed 구성
 
-```python
-_CATEGORY_LABELS = {
-    "bug":  "🐛 버그 제보",
-    "idea": "💡 기능 제안",
-    "etc":  "💬 기타 의견",
-}
-```
+| 카테고리 | 라벨 |
+|---|---|
+| `bug` | 🐛 버그 제보 |
+| `idea` | 💡 기능 제안 |
+| `etc` | 💬 기타 의견 |
 
 #### embed 색상 (카테고리별)
 
@@ -532,14 +503,14 @@ _CATEGORY_LABELS = {
 
 #### embed 필드 구조
 
-```python
-embed = {
-    "author": {"name": label},              # 카테고리 라벨 (예: "🐛 버그 제보")
-    "description": _quote_lines(message),    # 메시지 본문 (blockquote 형식)
-    "color": color,                          # 카테고리별 색상
-    "fields": fields,                        # 조건부 필드 (아래 참조)
-    "footer": {"text": f"{ip} · {short_ua}"}, # 클라이언트 IP와 축약 UA
-    "timestamp": datetime.now(UTC).isoformat(), # UTC ISO 타임스탬프
+```json
+{
+  "author": {"name": "카테고리 라벨"},
+  "description": "메시지 본문 (blockquote 형식)",
+  "color": "카테고리별 색상",
+  "fields": ["조건부 필드"],
+  "footer": {"text": "IP · UA"},
+  "timestamp": "UTC ISO 타임스탬프"
 }
 ```
 
@@ -553,39 +524,27 @@ embed = {
 
 `_quote_lines()` 함수가 메시지의 각 줄 앞에 `> `를 추가하여 Discord blockquote 형식으로 변환:
 
-```python
-def _quote_lines(text: str) -> str:
-    return "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
-```
+각 줄 앞에 `> `를 추가하여 Discord blockquote 형식으로 변환한다.
 
 #### payload 래핑
 
-```python
-payload = {
-    "embeds": [embed],
-    "allowed_mentions": {"parse": []},  # @everyone 등 mention 차단
-}
-```
+payload에 `allowed_mentions.parse`를 빈 배열로 설정하여 mention 차단한다.
 
 - `allowed_mentions.parse`를 빈 배열로 설정하여 사용자 입력에 포함된 `@everyone`, `@here`, `<@userid>` 등의 mention이 실제로 작동하지 않도록 차단
 
 #### 전송
 
-- `send_discord_webhook(FEEDBACK_DISCORD_WEBHOOK_URL, payload)` 비동기 호출
-- 실패 시 `HTTPException(502, "webhook_failed")` 발생
+- Discord webhook으로 비동기 전송
+- 실패 시 `502 Bad Gateway` 반환
 
 ### 11.8 Webhook URL 미설정 시
 
-- `FEEDBACK_DISCORD_WEBHOOK_URL`이 빈 문자열(falsy)이면 `HTTPException(503, "feedback_disabled")` 반환
+- `FEEDBACK_DISCORD_WEBHOOK_URL`이 빈 문자열이면 `503 Service Unavailable` 반환
 - 환경변수: `FEEDBACK_DISCORD_WEBHOOK_URL` (기본값: `""`)
 
 ### 11.9 로깅
 
-성공 시 다음 정보를 `logger.info`로 기록:
-
-```
-feedback received category={category} ip={ip} len={message_len} has_email={bool}
-```
+성공 시 category, IP, message 길이, email 유무를 로그에 기록한다.
 
 ---
 ---

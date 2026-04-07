@@ -1,7 +1,7 @@
 # 설정 레퍼런스
 
 화르르(hwarr) 프로젝트의 모든 설정값을 한곳에 정리한 문서이다.
-서버(`server/config.py`, `server/main.py`)와 클라이언트(`client/src/lib/config.ts`)에 흩어진 설정을 통합하여 기술한다.
+서버(`server/internal/config/config.go`)와 클라이언트(`client/src/lib/config.ts`)에 흩어진 설정을 통합하여 기술한다.
 
 ---
 
@@ -11,7 +11,7 @@
 
 | 변수명 | 타입 | 기본값 | 설명 |
 |--------|------|--------|------|
-| `REDIS_URL` | `str` | `redis://localhost:6379/0` | Redis 연결 URL. `main.py`에서 사용 |
+| `REDIS_URL` | `string` | `redis://localhost:6379/0` | Redis 연결 URL |
 | `HOST` | `str` | `0.0.0.0` | 서버 바인드 주소 |
 | `PORT` | `int` | `8000` | 서버 리스닝 포트 |
 | `FIRE_TTL_SEC` | `int` | `43200` (12시간) | 불(fire) 데이터의 Redis TTL (초) |
@@ -21,11 +21,11 @@
 | `FEEDBACK_RATE_LIMIT_PER_10MIN` | `int` | `3` | 10분당 피드백 제출 횟수 제한 |
 | `FRONTEND_URL` | `str` | `https://bulpan.example.com` | QR 코드 생성 시 사용하는 프론트엔드 URL |
 
-### 상수 (config.py)
+### 상수 (config.go / constants.go)
 
 | 상수명 | 타입 | 값 | 설명 |
 |--------|------|-----|------|
-| `KST` | `ZoneInfo` | `Asia/Seoul` | 한국 표준시 timezone 객체 |
+| `KST` | `*time.Location` | `Asia/Seoul` | 한국 표준시 timezone |
 | `STATS_TOTAL_FIRES_KEY` | `str` | `stats:total_fires` | 누적 불 횟수를 저장하는 Redis key |
 | `STATS_DAILY_FIRES_PREFIX` | `str` | `stats:daily_fires:` | 일별 불 횟수 Redis key prefix |
 | `STATS_DAILY_FIRES_TTL_SEC` | `int` | `172800` (48시간) | 일별 불 횟수 key의 TTL. KST 자정 경계 여유분 포함 |
@@ -36,9 +36,9 @@
 
 | 항목 | 값 | 설명 |
 |------|-----|------|
-| Base image | `python:3.12-slim` | Python 3.12 slim 이미지 |
+| Base image | `golang:1.25-alpine` (build) / `alpine:3.20` (runtime) | Multi-stage build |
 | `EXPOSE` | `8000` | 컨테이너 노출 포트 |
-| `CMD` | `uvicorn main:combined_app --host 0.0.0.0 --port 8000` | 서버 실행 커맨드 |
+| `CMD` | `./hwarr-server` | Go 바이너리 실행 |
 | Build arg `GEOJSON_URL` | GitHub raw URL (ver20230701) | 행정동 GeoJSON 다운로드 URL. 빌드 시 override 가능 |
 
 ---
