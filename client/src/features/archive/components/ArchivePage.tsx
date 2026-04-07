@@ -52,6 +52,8 @@ export function ArchivePage() {
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--color-bg-base)]">
+      <title>아카이브 — 화르르</title>
+      <meta name="description" content="화르르 역대 화재 기록과 지역별 통계를 확인하세요." />
       <Header />
 
       {/* 탭 */}
