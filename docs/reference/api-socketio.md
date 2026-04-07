@@ -40,7 +40,7 @@ Client                          Server
   │                               │  room 정리, users:count 재broadcast
 ```
 
-**설정값** (서버 `connection_manager.py`):
+**설정값** (서버 `connection_manager.go`):
 
 | 상수 | 값 | 설명 |
 |---|---|---|

@@ -15,7 +15,7 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 | 4 | 대화재 | big fire | 120 | 120 -- 279 | O | 2 |
 | 5 | 전소 (MAX) | total burn | 280 | 280+ | O | 3 |
 
-> 소스: `server/models/fire.py` -- `STAGE_CONFIGS` dict
+> 소스: `server/internal/model/fire.go` -- `StageConfigs`
 >
 > **참고:** 클라이언트 UI(`BottomPanel.tsx`의 `STAGE_LABELS`)에서는 3단계를 "불기둥", 4단계를 "불바다", 5단계를 "불지옥"으로 별도 표시합니다. 위 표는 서버 `label_ko` 기준입니다.
 
@@ -27,20 +27,17 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 
 `get_stage(active_count)` 함수는 내림차순 정렬된 threshold 목록을 순회하며, `active_count >= threshold`를 만족하는 **첫 번째(가장 높은)** 단계를 반환합니다.
 
-```python
-# server/models/fire.py
-
-_STAGE_THRESHOLDS: list[tuple[int, FireStage]] = sorted(
-    [(cfg.threshold, cfg.stage) for cfg in STAGE_CONFIGS.values()],
-    key=lambda x: x[0],
-    reverse=True,  # 내림차순: 280, 120, 40, 10, 1, 0
-)
-
-def get_stage(active_count: int) -> FireStage:
-    for threshold, stage in _STAGE_THRESHOLDS:
-        if active_count >= threshold:
-            return stage
-    return FireStage.NONE
+```go
+// server/internal/model/fire.go
+// stageThresholds는 내림차순 정렬: 280, 120, 40, 10, 1, 0
+func GetStage(activeCount int) FireStage {
+    for _, entry := range stageThresholds {
+        if activeCount >= entry.Threshold {
+            return entry.Stage
+        }
+    }
+    return StageNone
+}
 ```
 
 ### 전환 감지 및 broadcast
@@ -76,18 +73,18 @@ def get_stage(active_count: int) -> FireStage:
 
 ### NPC 생성 흐름
 
-```python
-# server/models/firefighter.py
+소방관 NPC는 `firefighter:spawn` event의 payload로 아래 구조가 broadcast됩니다:
 
-npc = FirefighterNPC(
-    npc_id="ff-{uuid8}",       # 예: "ff-a1b2c3d4"
-    grid_id=grid_id,
-    status="dispatched",
-    dispatched_at=time.time(),
-    fires_removed=0,            # 항상 0 (suppression 없음)
-    remove_per_sweep=max(remove_count, 1),
-    target_stage=stage.value,
-)
+```json
+{
+  "npc_id": "ff-a1b2c3d4",
+  "grid_id": "41740:115434",
+  "status": "dispatched",
+  "dispatched_at": 1700000000.0,
+  "fires_removed": 0,
+  "remove_per_sweep": 2,
+  "target_stage": 4
+}
 ```
 
 `firefighter:spawn` event가 grid room과 global 양쪽에 broadcast됩니다.
@@ -160,14 +157,14 @@ Member: unique event ID
 >
 > | 위치 | 상수명 | 값 |
 > |---|---|---|
-> | Server (`config.py`) | `FIRE_TTL_SEC` | **43200초 (12시간)** |
+> | Server (`config.go`) | `FIRE_TTL_SEC` | **43200초 (12시간)** |
 > | Client | `TTL_SECONDS` | **1800초 (30분)** |
 >
 > 서버는 12시간 동안 fire를 활성 상태로 유지하지만, 클라이언트는 30분을 기준으로 불의 잔여 수명을 계산합니다. 클라이언트는 주기적으로 서버와 동기화(`fires:sync`, `subscribe:viewport`)하므로 실질적인 유령 fire 문제는 제한적이나, 클라이언트 자체 TTL 만료 후 서버에는 여전히 활성 fire가 남아있을 수 있습니다.
 
 ## 관련 설정값 (config.py)
 
-`server/config.py`에 정의된 fire 시스템 관련 설정값 전체 목록입니다:
+`server/internal/config/config.go` 및 `server/internal/engine/constants.go`에 정의된 fire 시스템 관련 설정값 전체 목록입니다:
 
 | 상수 | 기본값 | 환경변수 override | 설명 |
 |---|---|---|---|
@@ -179,7 +176,7 @@ Member: unique event ID
 | `STATS_DAILY_RANKING_PREFIX` | `"stats:daily_ranking:"` | - | 일별 지역 순위 key prefix |
 | `STATS_DAILY_RANKING_TTL_SEC` | `172800` (48시간) | - | 일별 지역 순위 key TTL |
 
-`fire_progression.py`에 정의된 추가 상수:
+`engine/constants.go`에 정의된 추가 상수:
 
 | 상수 | 값 | 설명 |
 |---|---|---|
