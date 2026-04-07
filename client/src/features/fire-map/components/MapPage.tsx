@@ -137,17 +137,24 @@ export function MapPage() {
   }, [lat, lng, gridId, throwMatch, fire]);
 
   // 랜덤 화재 지역 구경하기 (내 위치 제외)
+  const visitListenerRef = useRef<(() => void) | null>(null);
   const handleVisit = useCallback(() => {
     if (fires.size === 0 || !mapRef.current) return;
     const keys = Array.from(fires.keys()).filter((k) => k !== gridId);
     if (keys.length === 0) return;
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
     const [centerLat, centerLng] = getGridCenter(randomKey);
-    mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
-    // flyTo 완료 후 즉시 주소 갱신
-    mapRef.current.once('moveend', () => {
+    // 이전 리스너 제거 (연타 시 누적 방지)
+    if (visitListenerRef.current) {
+      mapRef.current.off('moveend', visitListenerRef.current);
+    }
+    const onArrival = () => {
+      visitListenerRef.current = null;
       immediateRef.current?.();
-    });
+    };
+    visitListenerRef.current = onArrival;
+    mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
+    mapRef.current.once('moveend', onArrival);
   }, [fires, gridId]);
 
   return (
