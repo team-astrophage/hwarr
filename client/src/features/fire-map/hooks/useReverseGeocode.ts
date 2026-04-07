@@ -53,7 +53,7 @@ export function useReverseGeocode(lat: number | null, lng: number | null): Rever
     parts: null,
     loading: false,
   })
-  const delayTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const delayTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     if (!lat || !lng) return

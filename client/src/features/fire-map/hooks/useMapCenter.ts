@@ -23,7 +23,7 @@ export function useMapCenter(debounceMs = 800): UseMapCenterReturn {
     const c = map.getCenter()
     return { lat: c.lat, lng: c.lng }
   })
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const immediate = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
