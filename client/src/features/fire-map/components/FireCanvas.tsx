@@ -388,7 +388,6 @@ export function FireCanvas() {
 
       // ── Precompute grid render data for 2-pass rendering ──
       const grids: GridRenderData[] = []
-      let maxNeighborCount = 0
 
       for (const [gridId, cell] of currentFires) {
         const cfg = STAGES[cell.stage] ?? STAGES[1]
@@ -417,7 +416,6 @@ export function FireCanvas() {
         if (cx + margin < 0 || cx - margin > sw || cy + margin < 0 || cy - margin > sh) continue
 
         const neighborCount = densityCache.get(gridId) ?? 0
-        if (neighborCount > maxNeighborCount) maxNeighborCount = neighborCount
         const densityMul = getDensityMultiplier(neighborCount) * fpsMultiplier
 
         grids.push({
@@ -890,25 +888,6 @@ export function FireCanvas() {
         }
       }
 
-      // ════════════════════════════════════════════
-      // PASS 3: source-over (vignette + heat shimmer)
-      // ════════════════════════════════════════════
-      if (maxNeighborCount >= 4 && zoom >= GLOW_DOT_ZOOM) {
-        ctx.globalCompositeOperation = 'source-over'
-
-        // Vignette intensity scales with density: 4→subtle, 8→strong
-        const vignetteAlpha = Math.min((maxNeighborCount - 3) / 5, 1) * 0.55
-        ctx.globalAlpha = vignetteAlpha
-        ctx.drawImage(sprites.fireVignette, 0, 0, sw, sh)
-
-        // Heat shimmer at extreme density
-        if (maxNeighborCount >= 7) {
-          const shimmerX = Math.sin(frameCount * 0.05) * 1.5
-          const shimmerY = Math.cos(frameCount * 0.07) * 0.8
-          ctx.globalAlpha = 0.12
-          ctx.drawImage(sprites.fireVignette, shimmerX, shimmerY, sw, sh)
-        }
-      }
 
       ctx.restore()
     }
