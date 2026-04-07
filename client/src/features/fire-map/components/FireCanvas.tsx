@@ -191,7 +191,7 @@ function spawnSmoke(cfg: StageCfg): Smoke {
 }
 
 // ── 줌 임계값 ──
-const GLOW_DOT_ZOOM = 12   // 이 줌 미만이면 글로우 도트로 전환
+const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환
 
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
@@ -325,7 +325,7 @@ export function FireCanvas() {
         const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
 
         // 줌 축소 시 불꽃이 너무 작아지지 않도록 최소 크기 보정
-        const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.7)
+        const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.5)
         const rawW = Math.abs(br.x - tl.x)
         const rawH = Math.abs(br.y - tl.y)
         const w = rawW * zoomScale
