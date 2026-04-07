@@ -165,8 +165,8 @@ export function MapPage() {
 
   return (
     <div className='relative h-svh w-full'>
-      <title>실시간 불 지도 — 화르르</title>
-      <meta name="description" content="내 위치에 불을 지르고 전국의 실시간 화재 현황을 확인하세요." />
+      <title>실시간 가상 불 지도 — 화르르</title>
+      <meta name="description" content="지도 위 내 위치에 가상의 불을 피우고 전국의 실시간 현황을 확인하세요." />
       <MapContainer
         center={KOREA_CENTER}
         zoom={7}
