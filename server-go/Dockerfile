@@ -22,7 +22,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /hwarr-server .
-COPY --from=builder /app/data/ ./data/ 2>/dev/null || true
+COPY --from=builder /app/ ./
 
 ENV HOST=0.0.0.0
 ENV PORT=8000
