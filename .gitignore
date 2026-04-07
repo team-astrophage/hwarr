@@ -9,3 +9,4 @@ node_modules/
 .venv/
 server-go/server-go
 *.tar.gz
+CLAUDE.bak.md
