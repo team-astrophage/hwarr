@@ -2,6 +2,7 @@ package engineio
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -14,7 +15,9 @@ import (
 func dialWS(t *testing.T, server *httptest.Server, path string) *websocket.Conn {
 	t.Helper()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + path
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	header := http.Header{}
+	header.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -233,7 +236,9 @@ func TestWSUpgradeFromPolling(t *testing.T) {
 
 	// Step 2: Open WebSocket connection for upgrade
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/engine.io/?transport=websocket&EIO=4&sid=" + sid
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, wsHeader)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -280,10 +285,11 @@ func TestWSUpgradeFromPolling(t *testing.T) {
 func TestWSServerPing(t *testing.T) {
 	// Use a short ping interval to test server-initiated pings
 	config := ServerConfig{
-		PingInterval: 200 * time.Millisecond,
-		PingTimeout:  100 * time.Millisecond,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   200 * time.Millisecond,
+		PingTimeout:    100 * time.Millisecond,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost"},
 	}
 	srv := NewServer(config)
 	server := httptest.NewServer(srv)
@@ -356,7 +362,9 @@ func TestWSInvalidSID(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/engine.io/?transport=websocket&EIO=4&sid=nonexistent"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, wsHeader)
 	if err != nil {
 		// Connection may be refused; that's acceptable
 		return
@@ -419,7 +427,9 @@ func TestWSUpgradeReleasesPollingWithNoop(t *testing.T) {
 
 	// Step 3: Open WebSocket and perform probe
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/engine.io/?transport=websocket&EIO=4&sid=" + sid
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, wsHeader)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -464,10 +474,11 @@ func TestWSUpgradeReleasesPollingWithNoop(t *testing.T) {
 
 func TestWSUpgradeProbeTimeout(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 10 * time.Second,
-		PingTimeout:  500 * time.Millisecond, // short timeout for test
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   10 * time.Second,
+		PingTimeout:    500 * time.Millisecond, // short timeout for test
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost"},
 	}
 	srv := NewServer(config)
 	server := httptest.NewServer(srv)
@@ -488,7 +499,9 @@ func TestWSUpgradeProbeTimeout(t *testing.T) {
 
 	// Open WebSocket but don't send probe — should timeout
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/engine.io/?transport=websocket&EIO=4&sid=" + sid
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, wsHeader)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -531,7 +544,9 @@ func TestWSUpgradeInvalidProbe(t *testing.T) {
 
 	// Open WebSocket and send an invalid probe (wrong data)
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/engine.io/?transport=websocket&EIO=4&sid=" + sid
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "http://localhost")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, wsHeader)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}

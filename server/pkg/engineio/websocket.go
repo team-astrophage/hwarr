@@ -10,13 +10,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// wsUpgrader is the default WebSocket upgrader for Engine.IO connections.
-var wsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Engine.IO handles CORS at application level
-	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+// newWSUpgrader creates a WebSocket upgrader that validates origins against the allowlist.
+func newWSUpgrader(allowedOrigins []string) websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return false
+			}
+			for _, a := range allowedOrigins {
+				if a == origin {
+					return true
+				}
+			}
+			return false
+		},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 }
 
 // wsConn wraps a gorilla/websocket.Conn with a write mutex for thread safety.
@@ -50,7 +61,8 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	sid := query.Get("sid")
 
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	upgrader := newWSUpgrader(srv.config.AllowedOrigins)
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		// Upgrade failed — response already written by upgrader
 		return

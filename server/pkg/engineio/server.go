@@ -16,16 +16,18 @@ type ServerConfig struct {
 	MaxPayload   int64         // max payload size in bytes (default: 1MB)
 	// Upgrades lists available transport upgrades.
 	// For polling sessions, this typically includes "websocket".
-	Upgrades []string
+	Upgrades       []string
+	AllowedOrigins []string // allowed CORS origins
 }
 
 // DefaultConfig returns a default Engine.IO server configuration.
 func DefaultConfig() ServerConfig {
 	return ServerConfig{
-		PingInterval: 25 * time.Second,
-		PingTimeout:  20 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   25 * time.Second,
+		PingTimeout:    20 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173", "http://localhost:3000"},
 	}
 }
 
@@ -77,17 +79,29 @@ func (srv *Server) RemoveSession(sid string) {
 	srv.sessions.Delete(sid)
 }
 
+// isOriginAllowed checks whether the given origin is in the server's allowed list.
+func (srv *Server) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	for _, a := range srv.config.AllowedOrigins {
+		if a == origin {
+			return true
+		}
+	}
+	return false
+}
+
 // ServeHTTP handles Engine.IO HTTP requests (both GET and POST for polling).
 func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers
+	// Set CORS headers only for allowed origins
 	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = "*"
+	if srv.isOriginAllowed(origin) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	}
-	w.Header().Set("Access-Control-Allow-Origin", origin)
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
