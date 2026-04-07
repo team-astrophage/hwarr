@@ -349,6 +349,35 @@ html, body, #root {
 
 - 빨간색(`#ff0000`)에서 파란색(`#0066ff`)으로 교대 점멸.
 
+#### `stage-shake` (화재 단계 변경 흔들림)
+
+```css
+@keyframes stage-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-3px); }
+  30% { transform: translateX(3px); }
+  45% { transform: translateX(-2px); }
+  60% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+  90% { transform: translateX(1px); }
+}
+```
+
+- 좌우 교대 흔들림, 진폭 3px → 1px으로 감쇠.
+- 500ms, `ease-out`.
+
+#### `stage-glow` (화재 단계 변경 글로우)
+
+```css
+@keyframes stage-glow {
+  0%   { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+```
+
+- 아이콘 외곽의 `box-shadow` 글로우가 fade-out.
+- 700ms, `ease-out`, `forwards`.
+
 ---
 
 ## 4. 라우팅

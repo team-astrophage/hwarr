@@ -806,7 +806,29 @@ Icon 크기: `32x32`, anchor: `[16, 28]` (하단 중앙)
 
 두 통계를 가로로 배치 (`flex items-center gap-4 mb-4`), 중간에 구분선 (`w-px h-8 bg-[var(--color-border)]`).
 
-#### 실시간 화재 지역 수 (좌측)
+#### 현재 위치 화재 단계 (좌측)
+
+| 요소 | 상세 |
+|------|------|
+| **데이터 소스** | `currentCell?.stage ?? 0` (현재 위치 grid의 화재 단계) |
+| **단계 표시** | `STAGE_LABELS` 매핑: 0=안전, 1=1단계·불씨, 2=2단계·모닥불, 3=3단계·불기둥, 4=4단계·불바다, 5=MAX·불지옥 |
+| **아이콘** | SVG 불꽃, `fill={stageInfo.color}`, `14x14` |
+| **아이콘 배경** | `color-mix(in srgb, {stageInfo.color} 15%, transparent)` |
+| **단계명 폰트** | `text-[0.8125rem] font-bold`, 색상은 단계별 동적 |
+| **라벨** | `현재 위치 화재 단계`, `text-[0.6875rem] text-[var(--color-text-secondary)]` |
+
+##### 단계 변경 이펙트 (Shake + Glow)
+
+`useRef`로 이전 단계를 추적하고, 단계가 변경되면 (`stage > 0`일 때만) 두 가지 애니메이션을 동시 트리거한다:
+
+| 애니메이션 | 대상 | 상세 |
+|-----------|------|------|
+| **stage-shake** | 화재 단계 섹션 전체 (`flex-1` 컨테이너) | 좌우 미세 흔들림 500ms, 진폭 3px → 1px 감쇠 |
+| **stage-glow** | 아이콘 외곽 오버레이 (`absolute inset-[-4px]`) | `box-shadow: 0 0 14px 4px {stageInfo.color}`, opacity 0.9 → 0 fade-out 700ms |
+
+`onAnimationEnd`로 `flashing` 상태를 리셋하여 오버레이를 제거한다. 안전(0단계)으로 변경될 때는 이펙트를 트리거하지 않는다.
+
+#### 실시간 화재 지역 수 (우측)
 
 | 요소 | 상세 |
 |------|------|
@@ -817,17 +839,6 @@ Icon 크기: `32x32`, anchor: `[16, 28]` (하단 중앙)
 | **숫자 폰트** | `text-[1rem] font-bold text-[var(--color-text-base)] leading-none`, `fontVariantNumeric: 'tabular-nums'` |
 | **라벨** | `실시간 화재 지역 →`, `text-[0.6875rem] text-[var(--color-accent)] mt-0.5` |
 | **비활성 조건** | `activeGrids === 0` |
-
-#### 현재 위치 화재 단계 (우측)
-
-| 요소 | 상세 |
-|------|------|
-| **데이터 소스** | `currentCell?.stage ?? 0` (현재 위치 grid의 화재 단계) |
-| **단계 표시** | `STAGE_LABELS` 매핑: 0=안전, 1=1단계·불씨, 2=2단계·모닥불, 3=3단계·불기둥, 4=4단계·불바다, 5=MAX·불지옥 |
-| **아이콘** | SVG 불꽃, `fill={stageInfo.color}`, `14x14` |
-| **아이콘 배경** | `color-mix(in srgb, {stageInfo.color} 15%, transparent)` |
-| **단계명 폰트** | `text-[0.8125rem] font-bold`, 색상은 단계별 동적 |
-| **라벨** | `현재 위치 화재 단계`, `text-[0.6875rem] text-[var(--color-text-secondary)]` |
 
 ### 이벤트 버블링 방지
 
