@@ -12,10 +12,11 @@ import (
 
 func newTestServer() *Server {
 	config := ServerConfig{
-		PingInterval: 10 * time.Second,
-		PingTimeout:  5 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   10 * time.Second,
+		PingTimeout:    5 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost", "http://localhost:3000"},
 	}
 	return NewServer(config)
 }

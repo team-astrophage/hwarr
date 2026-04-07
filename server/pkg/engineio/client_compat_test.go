@@ -13,6 +13,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// testOriginHeader returns an HTTP header with the test origin for WebSocket dials.
+func testOriginHeader() http.Header {
+	h := http.Header{}
+	h.Set("Origin", "http://localhost:5173")
+	return h
+}
+
 // =============================================================================
 // socket.io-client v4.8.3 compatibility tests
 //
@@ -35,10 +42,11 @@ import (
 //   - upgrades includes "websocket"
 func TestClientCompat_PollingHandshake_SIDAndTimings(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 25 * time.Second,
-		PingTimeout:  20 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   25 * time.Second,
+		PingTimeout:    20 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173"},
 	}
 	srv := NewServer(config)
 
@@ -187,10 +195,11 @@ func TestClientCompat_PollingHandshake_CustomPingValues(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			config := ServerConfig{
-				PingInterval: tc.pingInterval,
-				PingTimeout:  tc.pingTimeout,
-				MaxPayload:   1_000_000,
-				Upgrades:     []string{"websocket"},
+				PingInterval:   tc.pingInterval,
+				PingTimeout:    tc.pingTimeout,
+				MaxPayload:     1_000_000,
+				Upgrades:       []string{"websocket"},
+				AllowedOrigins: []string{"http://localhost:5173"},
 			}
 			srv := NewServer(config)
 
@@ -294,7 +303,7 @@ func TestClientCompat_PollingToWebSocketUpgrade(t *testing.T) {
 	// --- Step 3: Open WebSocket for upgrade ---
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket&sid=" + sid
-	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -398,7 +407,7 @@ func TestClientCompat_PollingUpgrade_ReleasesBlockedPoll(t *testing.T) {
 	// Start WebSocket upgrade
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket&sid=" + sid
-	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -431,10 +440,11 @@ func TestClientCompat_PollingUpgrade_ReleasesBlockedPoll(t *testing.T) {
 // In this mode, there's no polling phase — the client opens a WebSocket directly.
 func TestClientCompat_DirectWebSocketHandshake(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 25 * time.Second,
-		PingTimeout:  20 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   25 * time.Second,
+		PingTimeout:    20 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173"},
 	}
 	srv := NewServer(config)
 	server := httptest.NewServer(srv)
@@ -443,7 +453,7 @@ func TestClientCompat_DirectWebSocketHandshake(t *testing.T) {
 	// socket.io-client with transports: ['websocket'] connects directly
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -504,10 +514,11 @@ func TestClientCompat_DirectWebSocketHandshake(t *testing.T) {
 // polling continues to work. socket.io-client v4.8.3 handles this gracefully.
 func TestClientCompat_UpgradeProbeTimeout(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 10 * time.Second,
-		PingTimeout:  500 * time.Millisecond, // short for test
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   10 * time.Second,
+		PingTimeout:    500 * time.Millisecond, // short for test
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173"},
 	}
 	srv := NewServer(config)
 
@@ -535,7 +546,7 @@ func TestClientCompat_UpgradeProbeTimeout(t *testing.T) {
 	// Open WebSocket but don't send probe — let it timeout
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket&sid=" + sid
-	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -596,7 +607,7 @@ func TestClientCompat_UpgradeInvalidProbe(t *testing.T) {
 	// Open WebSocket and send invalid probe
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket&sid=" + sid
-	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -627,10 +638,11 @@ func TestClientCompat_UpgradeInvalidProbe(t *testing.T) {
 // responds with PONG. socket.io-client v4.8.3 expects this pattern.
 func TestClientCompat_ServerPingFromClient(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 200 * time.Millisecond, // fast for testing
-		PingTimeout:  100 * time.Millisecond,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   200 * time.Millisecond, // fast for testing
+		PingTimeout:    100 * time.Millisecond,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173"},
 	}
 	srv := NewServer(config)
 	server := httptest.NewServer(srv)
@@ -639,7 +651,7 @@ func TestClientCompat_ServerPingFromClient(t *testing.T) {
 	// Connect directly via WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
@@ -729,10 +741,11 @@ func TestClientCompat_MultiPayload_RecordSeparator(t *testing.T) {
 // to messaging, matching the exact order of HTTP/WS requests.
 func TestClientCompat_FullProtocolSequence_PollingToWS(t *testing.T) {
 	config := ServerConfig{
-		PingInterval: 25 * time.Second,
-		PingTimeout:  20 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   25 * time.Second,
+		PingTimeout:    20 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost:5173"},
 	}
 	srv := NewServer(config)
 
@@ -803,7 +816,7 @@ func TestClientCompat_FullProtocolSequence_PollingToWS(t *testing.T) {
 	// ===== Phase 4: WebSocket upgrade =====
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") +
 		"/socket.io/?EIO=4&transport=websocket&sid=" + sid
-	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, testOriginHeader())
 	if err != nil {
 		t.Fatalf("Phase 4 WS dial failed: %v", err)
 	}

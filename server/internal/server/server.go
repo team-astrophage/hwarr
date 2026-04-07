@@ -37,7 +37,7 @@ func Run(cfg *config.Config) error {
 	}
 
 	// Socket.IO + Engine.IO
-	sioServer, eioServer := setupSocketServers(logger)
+	sioServer, eioServer := setupSocketServers(cfg, logger)
 
 	// Connection manager + SIO event handlers
 	sioHandler := sio.NewHandler(sioServer, logger)
@@ -64,7 +64,7 @@ func Run(cfg *config.Config) error {
 	logger.Println("Background engines started")
 
 	// HTTP server
-	r := setupRouter(manager, progressionEngine, redisClient, resolver, sioServer, eioServer)
+	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, sioServer, eioServer)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	srv := &http.Server{
@@ -99,15 +99,16 @@ func Run(cfg *config.Config) error {
 }
 
 // setupSocketServers creates and bridges the Engine.IO and Socket.IO servers.
-func setupSocketServers(logger *log.Logger) (*socketio.Server, *engineio.Server) {
+func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Server, *engineio.Server) {
 	sioServer := socketio.NewServer()
 	sioServer.Logger = logger
 
 	eioConfig := engineio.ServerConfig{
-		PingInterval: 10 * time.Second,
-		PingTimeout:  5 * time.Second,
-		MaxPayload:   1_000_000,
-		Upgrades:     []string{"websocket"},
+		PingInterval:   10 * time.Second,
+		PingTimeout:    5 * time.Second,
+		MaxPayload:     1_000_000,
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: cfg.AllowedOrigins,
 	}
 	eioServer := engineio.NewServer(eioConfig)
 
@@ -197,6 +198,7 @@ func startBackgroundEngines(redisClient *hredis.Client, sioServer *socketio.Serv
 
 // setupRouter creates the Gin router with all HTTP routes.
 func setupRouter(
+	cfg *config.Config,
 	manager *sio.ConnectionManager,
 	progressionEngine *engine.FireProgressionEngine,
 	redisClient *hredis.Client,
@@ -207,7 +209,7 @@ func setupRouter(
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(corsMiddleware())
+	r.Use(corsMiddleware(cfg.AllowedOrigins))
 
 	// Health
 	handler.NewHealthHandler(manager, progressionEngine).Register(r)
