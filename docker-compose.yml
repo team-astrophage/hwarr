@@ -13,15 +13,12 @@ services:
 
   backend:
     build:
-      context: ./server
-      dockerfile: Dockerfile.dev
+      context: ./server-go
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - ./server:/app
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - FEEDBACK_DISCORD_WEBHOOK_URL=${FEEDBACK_DISCORD_WEBHOOK_URL:-}
     depends_on:
       redis:
         condition: service_healthy
