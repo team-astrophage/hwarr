@@ -166,22 +166,28 @@ func (h *DemoFireHandler) Handle(c *gin.Context) {
 
 	if h.broadcaster != nil {
 		_ = h.broadcaster.BroadcastToRoom("fire:ignite", ignitePayload, gridID)
-		_ = h.broadcaster.Broadcast("fire:global_update", globalPayload)
+		_ = h.broadcaster.BroadcastToRoom("fire:update", globalPayload, gridID)
 
-		// Broadcast fire:spread animation event if the fire moved to a neighbor
+		// Broadcast fire:spread animation to affected grid rooms only
 		if len(reg.SpreadPath) > 0 {
 			spreadPathMaps := make([]map[string]string, len(reg.SpreadPath))
+			affectedGrids := make(map[string]struct{})
 			for i, sp := range reg.SpreadPath {
 				spreadPathMaps[i] = map[string]string{
 					"from": sp[0],
 					"to":   sp[1],
 				}
+				affectedGrids[sp[0]] = struct{}{}
+				affectedGrids[sp[1]] = struct{}{}
 			}
-			_ = h.broadcaster.Broadcast("fire:spread", map[string]interface{}{
+			spreadPayload := map[string]interface{}{
 				"path":      spreadPathMaps,
 				"event_id":  eventID,
 				"timestamp": now,
-			})
+			}
+			for room := range affectedGrids {
+				_ = h.broadcaster.BroadcastToRoom("fire:spread", spreadPayload, room)
+			}
 		}
 	}
 
