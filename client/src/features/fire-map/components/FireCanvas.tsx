@@ -269,7 +269,7 @@ export function FireCanvas() {
     canvas.style.top = '0'
     canvas.style.left = '0'
     canvas.style.pointerEvents = 'none'
-    canvas.style.zIndex = '1050'
+    canvas.style.zIndex = '450'
     container.appendChild(canvas)
     canvasRef.current = canvas
 

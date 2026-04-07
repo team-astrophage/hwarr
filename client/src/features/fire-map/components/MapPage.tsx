@@ -8,6 +8,7 @@ import { getGridId, getGridCenter } from '../utils/grid';
 import { useFireStore } from '../stores/fireStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { useMapCenter } from '../hooks/useMapCenter';
 import { MapControls } from './MapControls';
 import { BottomPanel } from './BottomPanel';
 import { FireOverlay } from './FireOverlay';
@@ -24,6 +25,20 @@ const KOREA_BOUNDS: [[number, number], [number, number]] = [
   [32.0, 124.0],
   [39.5, 132.5],
 ];
+
+/** 소수점 3자리 반올림 (~100m) 기준으로 두 좌표가 같은 위치인지 판단 */
+function isSameLocation(
+  aLat: number | null,
+  aLng: number | null,
+  bLat: number,
+  bLng: number,
+): boolean {
+  if (aLat == null || aLng == null) return false;
+  return (
+    Math.round(aLat * 1000) === Math.round(bLat * 1000) &&
+    Math.round(aLng * 1000) === Math.round(bLng * 1000)
+  );
+}
 
 function FlyToUser({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
@@ -64,8 +79,27 @@ function MapRef({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
   return null;
 }
 
+/** 맵 중심점을 부모로 전달하는 브릿지 컴포넌트 */
+function MapCenterTracker({
+  onCenterChange,
+  immediateRef,
+}: {
+  onCenterChange: (lat: number, lng: number) => void;
+  immediateRef: React.MutableRefObject<(() => void) | null>;
+}) {
+  const { lat, lng, immediate } = useMapCenter(800);
+  immediateRef.current = immediate;
+
+  useEffect(() => {
+    onCenterChange(lat, lng);
+  }, [lat, lng, onCenterChange]);
+
+  return null;
+}
+
 export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
+  const immediateRef = useRef<(() => void) | null>(null);
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
   const [locationDismissed, setLocationDismissed] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
@@ -77,7 +111,22 @@ export function MapPage() {
 
   const throwMatch = useAnimationStore((s) => s.throwMatch);
   const [chatOpen, setChatOpen] = useState(false);
-  const { parts } = useReverseGeocode(lat, lng);
+
+  // 맵 중심점 상태
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const handleCenterChange = useCallback((cLat: number, cLng: number) => {
+    setMapCenter({ lat: cLat, lng: cLng });
+  }, []);
+
+  // 내 GPS 위치를 보고 있는지 판단
+  const isAtMyLocation = mapCenter
+    ? isSameLocation(lat, lng, mapCenter.lat, mapCenter.lng)
+    : true; // 초기 상태에서는 내 위치로 간주
+
+  // 주소: 맵 중심 기반 (초기엔 GPS fallback)
+  const geocodeLat = mapCenter?.lat ?? lat;
+  const geocodeLng = mapCenter?.lng ?? lng;
+  const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
 
   // tap → 성냥 던지기 + 불 이벤트
   const handleFire = useCallback(() => {
@@ -95,6 +144,10 @@ export function MapPage() {
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
     const [centerLat, centerLng] = getGridCenter(randomKey);
     mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
+    // flyTo 완료 후 즉시 주소 갱신
+    mapRef.current.once('moveend', () => {
+      immediateRef.current?.();
+    });
   }, [fires, gridId]);
 
   return (
@@ -112,6 +165,7 @@ export function MapPage() {
         maxZoom={18}
       >
         <MapRef mapRef={mapRef} />
+        <MapCenterTracker onCenterChange={handleCenterChange} immediateRef={immediateRef} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -129,6 +183,21 @@ export function MapPage() {
       </MapContainer>
 
       <Header />
+
+      {/* 십자선 — 내 GPS 위치가 아닐 때만 표시 */}
+      {!isAtMyLocation && (
+        <div
+          className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1000] pointer-events-none'
+          aria-hidden='true'
+        >
+          <svg width='24' height='24' viewBox='0 0 24 24' fill='none'>
+            <line x1='12' y1='4' x2='12' y2='10' stroke='rgba(255,255,255,0.5)' strokeWidth='1.5' strokeLinecap='round' />
+            <line x1='12' y1='14' x2='12' y2='20' stroke='rgba(255,255,255,0.5)' strokeWidth='1.5' strokeLinecap='round' />
+            <line x1='4' y1='12' x2='10' y2='12' stroke='rgba(255,255,255,0.5)' strokeWidth='1.5' strokeLinecap='round' />
+            <line x1='14' y1='12' x2='20' y2='12' stroke='rgba(255,255,255,0.5)' strokeWidth='1.5' strokeLinecap='round' />
+          </svg>
+        </div>
+      )}
 
       {/* 현재 위치 도로명 주소 */}
       {parts && (

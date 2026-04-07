@@ -131,7 +131,7 @@ export function BottomPanel({
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0 opacity-95">
             <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />
           </svg>
-          {noLocation ? '위치를 찾을 수 없어요' : gridId ? '현재 위치에 불 지르기' : '위치 감지 중...'}
+          {noLocation ? '위치를 찾을 수 없어요' : gridId ? '실시간 내 위치에 불지르기' : '위치 감지 중...'}
         </button>
       </div>
     </div>
