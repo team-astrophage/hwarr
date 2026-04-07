@@ -73,6 +73,27 @@ export function BottomPanel({
       <div className="bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-heavy)] p-5">
         {/* Stats row */}
         <div className="flex items-center gap-4 mb-4">
+          <div className="flex-1 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `color-mix(in srgb, ${stageInfo.color} 15%, transparent)` }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill={stageInfo.color}>
+                <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />
+              </svg>
+            </div>
+            <div>
+              <p
+                className="text-[0.8125rem] font-bold leading-none"
+                style={{ color: stageInfo.color }}
+              >
+                {stageInfo.label}
+              </p>
+              <p className="text-[0.6875rem] text-[var(--color-text-secondary)] mt-0.5">
+                현재 위치 화재 단계
+              </p>
+            </div>
+          </div>
+
+          <div className="w-px h-8 bg-[var(--color-border)]" />
+
           <button
             className="flex-1 flex items-center gap-3 transition-opacity active:opacity-70"
             onClick={onVisit}
@@ -96,27 +117,6 @@ export function BottomPanel({
               </p>
             </div>
           </button>
-
-          <div className="w-px h-8 bg-[var(--color-border)]" />
-
-          <div className="flex-1 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `color-mix(in srgb, ${stageInfo.color} 15%, transparent)` }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill={stageInfo.color}>
-                <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />
-              </svg>
-            </div>
-            <div>
-              <p
-                className="text-[0.8125rem] font-bold leading-none"
-                style={{ color: stageInfo.color }}
-              >
-                {stageInfo.label}
-              </p>
-              <p className="text-[0.6875rem] text-[var(--color-text-secondary)] mt-0.5">
-                현재 위치 화재 단계
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* Fire button — tap으로 성냥 던지기 */}
