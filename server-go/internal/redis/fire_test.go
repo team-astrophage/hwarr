@@ -360,7 +360,7 @@ func TestNewClient(t *testing.T) {
 	rdb := skipIfNoRedis(t)
 	defer rdb.Close()
 
-	client := NewClient(testRedisAddr(), "", 0)
+	client := NewClient(testRedisAddr(), "", 0, false)
 	defer client.Close()
 
 	ctx := context.Background()

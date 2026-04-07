@@ -22,7 +22,7 @@ RUN mkdir -p data && curl -fsSL -o data/admin_dong.geojson "$GEOJSON_URL"
 # --- Runtime stage ---
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata curl
 
 WORKDIR /app
 

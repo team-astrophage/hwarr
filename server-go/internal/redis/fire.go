@@ -12,6 +12,7 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -28,8 +29,9 @@ type Client struct {
 
 // NewClient creates a new Redis client connected to the given address.
 // addr is in "host:port" format (e.g., "localhost:6379").
-func NewClient(addr, password string, db int) *Client {
-	rdb := goredis.NewClient(&goredis.Options{
+// When useTLS is true, the connection is established over TLS (required for ElastiCache Serverless).
+func NewClient(addr, password string, db int, useTLS bool) *Client {
+	opts := &goredis.Options{
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
@@ -38,8 +40,11 @@ func NewClient(addr, password string, db int) *Client {
 		WriteTimeout: 3 * time.Second,
 		PoolSize:     20,
 		MinIdleConns: 5,
-	})
-	return &Client{rdb: rdb}
+	}
+	if useTLS {
+		opts.TLSConfig = &tls.Config{}
+	}
+	return &Client{rdb: goredis.NewClient(opts)}
 }
 
 // NewClientFromRedis creates a Client from an existing go-redis client.

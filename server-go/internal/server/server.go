@@ -28,7 +28,7 @@ func Run(cfg *config.Config) error {
 	logger := log.New(os.Stdout, "[hwarr] ", log.LstdFlags|log.Lmsgprefix)
 
 	// Redis
-	redisClient := hredis.NewClient(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	redisClient := hredis.NewClient(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, cfg.RedisTLS)
 	ctx := context.Background()
 	if err := redisClient.Ping(ctx); err != nil {
 		logger.Printf("WARNING: Failed to connect to Redis at %s: %v — running without fire engine", cfg.RedisAddr, err)
