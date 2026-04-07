@@ -150,8 +150,8 @@ func gridStateToMap(state model.GridState) map[string]interface{} {
 		"stage":        state.Stage,
 		"stage_info": map[string]interface{}{
 			"stage":                state.StageInfo.Stage,
-			"label_ko":            state.StageInfo.LabelKo,
-			"label_en":            state.StageInfo.LabelEn,
+			"label_ko":             state.StageInfo.LabelKo,
+			"label_en":             state.StageInfo.LabelEn,
 			"triggers_firefighter": state.StageInfo.TriggersFirefighter,
 		},
 	}

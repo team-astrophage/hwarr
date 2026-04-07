@@ -11,23 +11,23 @@ type ZMember struct {
 type FireStage int
 
 const (
-	StageNone     FireStage = 0 // no active fires
-	StageBulsssi  FireStage = 1 // ember/spark (1-9 clicks)
-	StageModakbul FireStage = 2 // campfire (10-39 clicks)
-	StageHwajae   FireStage = 3 // fire (40-119 clicks)
+	StageNone      FireStage = 0 // no active fires
+	StageBulsssi   FireStage = 1 // ember/spark (1-9 clicks)
+	StageModakbul  FireStage = 2 // campfire (10-39 clicks)
+	StageHwajae    FireStage = 3 // fire (40-119 clicks)
 	StageDaehwajae FireStage = 4 // big fire (120-279 clicks)
-	StageJeonso   FireStage = 5 // total burn (280+ clicks)
+	StageJeonso    FireStage = 5 // total burn (280+ clicks)
 )
 
 // StageConfig holds configuration for a single fire stage.
 type StageConfig struct {
-	Stage                 FireStage `json:"stage"`
-	LabelKo              string    `json:"label_ko"`
-	LabelEn              string    `json:"label_en"`
-	Threshold             int       `json:"threshold"`
-	DurationSec           int       `json:"duration_sec"`
-	TriggersFirefighter   bool      `json:"triggers_firefighter"`
-	FirefighterRemoveCount int      `json:"firefighter_remove_count"`
+	Stage                  FireStage `json:"stage"`
+	LabelKo                string    `json:"label_ko"`
+	LabelEn                string    `json:"label_en"`
+	Threshold              int       `json:"threshold"`
+	DurationSec            int       `json:"duration_sec"`
+	TriggersFirefighter    bool      `json:"triggers_firefighter"`
+	FirefighterRemoveCount int       `json:"firefighter_remove_count"`
 }
 
 // StageConfigs maps each fire stage to its configuration.

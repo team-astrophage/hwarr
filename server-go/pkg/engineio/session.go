@@ -14,23 +14,23 @@ type Session struct {
 	PingInterval time.Duration
 	PingTimeout  time.Duration
 
-	mu          sync.Mutex
-	sendBuffer  []*Packet // packets waiting to be sent via polling GET
-	recvChan    chan struct{} // signals when new packets are available (polling)
-	pollReady   chan []*Packet // delivers packets to the waiting poll request
-	closed      bool
-	closedChan  chan struct{}
-	lastActive  time.Time
-	onMessage   func(data []byte) // callback for incoming messages
-	onClose     func(sid string, reason string) // callback on session close
+	mu         sync.Mutex
+	sendBuffer []*Packet      // packets waiting to be sent via polling GET
+	recvChan   chan struct{}  // signals when new packets are available (polling)
+	pollReady  chan []*Packet // delivers packets to the waiting poll request
+	closed     bool
+	closedChan chan struct{}
+	lastActive time.Time
+	onMessage  func(data []byte)               // callback for incoming messages
+	onClose    func(sid string, reason string) // callback on session close
 
 	// WebSocket transport fields
-	wsConn     *wsConn          // active WebSocket connection (nil for polling)
-	wsSendChan chan struct{}     // signals when packets are available for WS write loop
+	wsConn     *wsConn       // active WebSocket connection (nil for polling)
+	wsSendChan chan struct{} // signals when packets are available for WS write loop
 
 	// Upgrade state fields
-	upgrading    bool           // true during polling→websocket probe phase
-	upgradeChan  chan struct{}   // closed when upgrade completes, to release pending polls
+	upgrading   bool          // true during polling→websocket probe phase
+	upgradeChan chan struct{} // closed when upgrade completes, to release pending polls
 }
 
 // generateSID creates a URL-safe random session ID (20 bytes base64-encoded).

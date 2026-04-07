@@ -123,7 +123,6 @@ func (e *FireProgressionEngine) GetGridStage(gridID string) model.FireStage {
 	return e.gridStages[gridID]
 }
 
-
 // Start begins the progression scan loop. It is non-blocking and launches
 // a goroutine that runs until Stop() is called.
 func (e *FireProgressionEngine) Start() {
@@ -269,9 +268,9 @@ func (e *FireProgressionEngine) broadcastStageChange(
 		"active_count": state.ActiveCount,
 		"stage":        state.Stage,
 		"stage_info": map[string]interface{}{
-			"stage":               state.StageInfo.Stage,
-			"label_ko":            state.StageInfo.LabelKo,
-			"label_en":            state.StageInfo.LabelEn,
+			"stage":                state.StageInfo.Stage,
+			"label_ko":             state.StageInfo.LabelKo,
+			"label_en":             state.StageInfo.LabelEn,
 			"triggers_firefighter": state.StageInfo.TriggersFirefighter,
 		},
 		"timestamp": ts,

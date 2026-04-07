@@ -34,10 +34,10 @@ func NewGridHandler(redis RedisGridReader) *GridHandler {
 
 // gridStateResponse matches the Python GridStateResponse model.
 type gridStateResponse struct {
-	GridID      string                `json:"grid_id"`
-	ActiveCount int                   `json:"active_count"`
-	Stage       int                   `json:"stage"`
-	StageInfo   model.FireStageInfo   `json:"stage_info"`
+	GridID      string              `json:"grid_id"`
+	ActiveCount int                 `json:"active_count"`
+	Stage       int                 `json:"stage"`
+	StageInfo   model.FireStageInfo `json:"stage_info"`
 }
 
 // Handle returns the current fire state for a specific grid cell.
