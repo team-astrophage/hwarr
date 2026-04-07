@@ -1,0 +1,125 @@
+package model
+
+// ZMember represents a sorted set member with its score.
+// Shared across handler and redis packages to avoid adapter boilerplate.
+type ZMember struct {
+	Member string
+	Score  float64
+}
+
+// FireStage represents fire intensity stages.
+type FireStage int
+
+const (
+	StageNone      FireStage = 0 // no active fires
+	StageBulsssi   FireStage = 1 // ember/spark (1-9 clicks)
+	StageModakbul  FireStage = 2 // campfire (10-39 clicks)
+	StageHwajae    FireStage = 3 // fire (40-119 clicks)
+	StageDaehwajae FireStage = 4 // big fire (120-279 clicks)
+	StageJeonso    FireStage = 5 // total burn (280+ clicks)
+)
+
+// StageConfig holds configuration for a single fire stage.
+type StageConfig struct {
+	Stage                  FireStage `json:"stage"`
+	LabelKo                string    `json:"label_ko"`
+	LabelEn                string    `json:"label_en"`
+	Threshold              int       `json:"threshold"`
+	DurationSec            int       `json:"duration_sec"`
+	TriggersFirefighter    bool      `json:"triggers_firefighter"`
+	FirefighterRemoveCount int       `json:"firefighter_remove_count"`
+}
+
+// StageConfigs maps each fire stage to its configuration.
+var StageConfigs = map[FireStage]StageConfig{
+	StageNone: {
+		Stage: StageNone, LabelKo: "없음", LabelEn: "none",
+		Threshold: 0, DurationSec: 0,
+		TriggersFirefighter: false, FirefighterRemoveCount: 0,
+	},
+	StageBulsssi: {
+		Stage: StageBulsssi, LabelKo: "불씨", LabelEn: "ember",
+		Threshold: 1, DurationSec: 86400,
+		TriggersFirefighter: false, FirefighterRemoveCount: 0,
+	},
+	StageModakbul: {
+		Stage: StageModakbul, LabelKo: "모닥불", LabelEn: "campfire",
+		Threshold: 10, DurationSec: 86400,
+		TriggersFirefighter: false, FirefighterRemoveCount: 0,
+	},
+	StageHwajae: {
+		Stage: StageHwajae, LabelKo: "화재", LabelEn: "fire",
+		Threshold: 40, DurationSec: 86400,
+		TriggersFirefighter: false, FirefighterRemoveCount: 0,
+	},
+	StageDaehwajae: {
+		Stage: StageDaehwajae, LabelKo: "대화재", LabelEn: "big fire",
+		Threshold: 120, DurationSec: 86400,
+		TriggersFirefighter: true, FirefighterRemoveCount: 2,
+	},
+	StageJeonso: {
+		Stage: StageJeonso, LabelKo: "전소", LabelEn: "total burn",
+		Threshold: 280, DurationSec: 86400,
+		TriggersFirefighter: true, FirefighterRemoveCount: 3,
+	},
+}
+
+// stageThresholds is pre-sorted descending for efficient lookup.
+var stageThresholds = []struct {
+	Threshold int
+	Stage     FireStage
+}{
+	{280, StageJeonso},
+	{120, StageDaehwajae},
+	{40, StageHwajae},
+	{10, StageModakbul},
+	{1, StageBulsssi},
+	{0, StageNone},
+}
+
+// GetStage determines the fire stage from active fire count.
+func GetStage(activeCount int) FireStage {
+	for _, t := range stageThresholds {
+		if activeCount >= t.Threshold {
+			return t.Stage
+		}
+	}
+	return StageNone
+}
+
+// FireStageInfo is the stage info returned in API responses.
+type FireStageInfo struct {
+	Stage               int    `json:"stage"`
+	LabelKo             string `json:"label_ko"`
+	LabelEn             string `json:"label_en"`
+	TriggersFirefighter bool   `json:"triggers_firefighter"`
+}
+
+// GridState represents the state of a single grid cell.
+type GridState struct {
+	GridID      string        `json:"grid_id"`
+	Lat         *float64      `json:"lat,omitempty"`
+	Lng         *float64      `json:"lng,omitempty"`
+	ActiveCount int           `json:"active_count"`
+	Stage       int           `json:"stage"`
+	StageInfo   FireStageInfo `json:"stage_info"`
+}
+
+// BuildGridState creates a GridState from grid ID and active count.
+func BuildGridState(gridID string, activeCount int, lat, lng *float64) GridState {
+	stage := GetStage(activeCount)
+	cfg := StageConfigs[stage]
+	return GridState{
+		GridID:      gridID,
+		Lat:         lat,
+		Lng:         lng,
+		ActiveCount: activeCount,
+		Stage:       int(stage),
+		StageInfo: FireStageInfo{
+			Stage:               int(stage),
+			LabelKo:             cfg.LabelKo,
+			LabelEn:             cfg.LabelEn,
+			TriggersFirefighter: cfg.TriggersFirefighter,
+		},
+	}
+}
