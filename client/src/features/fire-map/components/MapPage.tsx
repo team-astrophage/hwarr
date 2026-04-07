@@ -40,11 +40,14 @@ function isSameLocation(
   );
 }
 
-function FlyToUser({ lat, lng }: { lat: number; lng: number }) {
+function FlyToUser({ lat, lng, onArrived }: { lat: number; lng: number; onArrived?: () => void }) {
   const map = useMap();
   useEffect(() => {
     map.flyTo([lat, lng], 16, { duration: 2 });
-  }, [map, lat, lng]);
+    if (onArrived) {
+      map.once('moveend', onArrived);
+    }
+  }, [map, lat, lng, onArrived]);
   return null;
 }
 
@@ -101,6 +104,8 @@ export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const immediateRef = useRef<(() => void) | null>(null);
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
+  const [arrived, setArrived] = useState(false);
+  const handleArrived = useCallback(() => setArrived(true), []);
   const [locationDismissed, setLocationDismissed] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
   const fires = useFireStore((s) => s.fires);
@@ -163,7 +168,7 @@ export function MapPage() {
       <meta name="description" content="내 위치에 불을 지르고 전국의 실시간 화재 현황을 확인하세요." />
       <MapContainer
         center={KOREA_CENTER}
-        zoom={13}
+        zoom={7}
         className='h-full w-full'
         zoomControl={false}
         maxBounds={KOREA_BOUNDS}
@@ -181,12 +186,12 @@ export function MapPage() {
         <FiretruckOverlay />
         {lat && lng && (
           <>
-            <FlyToUser lat={lat} lng={lng} />
+            <FlyToUser lat={lat} lng={lng} onArrived={handleArrived} />
             <UserLocationMarker lat={lat} lng={lng} />
             <LocateButton lat={lat} lng={lng} />
           </>
         )}
-        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} />}
+        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} onArrived={handleArrived} />}
       </MapContainer>
 
       <Header />
@@ -206,8 +211,8 @@ export function MapPage() {
         </div>
       )}
 
-      {/* 현재 위치 도로명 주소 */}
-      {parts && (
+      {/* 현재 위치 도로명 주소 — 초기 fly 도착 후 표시 */}
+      {arrived && parts && (
         <div className='absolute top-14 left-4 z-[1000]'>
           {parts.city && (
             <p className='text-4xl font-extrabold text-white leading-tight'>
