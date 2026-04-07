@@ -58,7 +58,7 @@
 | 영역 | 기술 |
 |------|------|
 | 프론트엔드 | React 19, Vite, TanStack Router/Query, Zustand, Tailwind CSS, Leaflet |
-| 백엔드 | FastAPI, Python-SocketIO, Redis, Shapely |
+| 백엔드 | Go (Gin), Socket.IO, Redis |
 | 인프라 | Terraform, Docker |
 | 실시간 통신 | Socket.IO |
 

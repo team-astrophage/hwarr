@@ -21,7 +21,7 @@
 
 ```
 client/          # React 19 + Vite + TanStack Router/Query + Zustand + Tailwind
-server/          # FastAPI + Python-SocketIO + Redis
+server/          # Go (Gin) + Socket.IO + Redis
 infra/           # Terraform (AWS ECS, S3, CloudFront)
 docs/            # Diátaxis 기반 문서
 ```
@@ -34,9 +34,9 @@ cd client && npm install && npm run dev
 cd client && npx tsc --noEmit          # 타입 체크
 
 # 백엔드
-cd server && pip install -r requirements.txt && uvicorn main:app --reload
-cd server && ruff check .              # 린트
-cd server && pytest tests/ -v          # 테스트
+cd server && go run .                  # 서버 실행
+cd server && go vet ./...              # 린트
+cd server && go test ./... -v          # 테스트
 ```
 
 ## 언어

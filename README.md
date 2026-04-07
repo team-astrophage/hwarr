@@ -7,7 +7,7 @@ GPS 기반 전국 실시간 스트레스 해소 웹 서비스. 내 위치에서 
 | 영역 | 기술 |
 |------|------|
 | 프론트엔드 | React 19, Vite, TanStack Router/Query, Zustand, Tailwind CSS, Leaflet |
-| 백엔드 | FastAPI, Python-SocketIO, Redis, Shapely |
+| 백엔드 | Go (Gin), Socket.IO, Redis |
 | 인프라 | Terraform, Docker |
 | 실시간 통신 | Socket.IO |
 
@@ -16,17 +16,14 @@ GPS 기반 전국 실시간 스트레스 해소 웹 서비스. 내 위치에서 
 ### 사전 준비
 
 - **Node.js** 18+
-- **Python** 3.12+
+- **Go** 1.25+
 - **Redis** 7+
 
 ### 1. 서버 실행
 
 ```bash
 cd server
-python -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
+go run .
 ```
 
 서버가 `http://localhost:8000`에서 실행된다.
@@ -58,7 +55,7 @@ npm run dev
 
 ```
 ├── client/     # React 19 + Vite 프론트엔드
-├── server/     # FastAPI 백엔드
+├── server/     # Go Gin 백엔드
 ├── infra/      # Terraform (AWS)
 ├── docs/       # 프로젝트 문서
 └── scripts/    # 유틸리티 스크립트

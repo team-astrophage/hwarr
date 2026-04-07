@@ -51,7 +51,7 @@
 
 | 파일 | 언어 |
 |---|---|
-| `server/grid.py` | Python |
+| `server/internal/grid/grid.go` | Go |
 | `client/src/lib/config.ts` | TypeScript |
 
 ---
@@ -82,14 +82,15 @@ Grid ID는 문자열이며, 포맷은 다음과 같다:
 
 GPS 좌표를 grid ID 문자열로 변환한다.
 
-**서버 (Python)**
+**서버 (Go)**
 
-```python
-# server/grid.py
-def to_grid_id(lat: float, lng: float) -> str:
-    grid_lat = math.floor(lat / LAT_UNIT)
-    grid_lng = math.floor(lng / LNG_UNIT)
-    return f"{grid_lat}:{grid_lng}"
+```go
+// server/internal/grid/grid.go
+func ToGridID(lat, lng float64) string {
+    gridLat := int(math.Floor(lat / LatUnit))
+    gridLng := int(math.Floor(lng / LngUnit))
+    return fmt.Sprintf("%d:%d", gridLat, gridLng)
+}
 ```
 
 **클라이언트 (TypeScript)**
@@ -109,16 +110,18 @@ export function getGridId(lat: number, lng: number): string {
 
 Grid ID를 해당 셀의 **중심 좌표**로 역변환한다. 지도에 셀을 표시할 때 사용한다.
 
-**서버 (Python)**
+**서버 (Go)**
 
-```python
-def grid_id_to_center(grid_id: str) -> tuple[float, float]:
-    parts = grid_id.split(":")
-    grid_lat = int(parts[0])
-    grid_lng = int(parts[1])
-    center_lat = (grid_lat + 0.5) * LAT_UNIT
-    center_lng = (grid_lng + 0.5) * LNG_UNIT
-    return (center_lat, center_lng)
+```go
+// server/internal/grid/grid.go
+func GridIDToCenter(gridID string) (float64, float64) {
+    parts := strings.SplitN(gridID, ":", 2)
+    gridLat, _ := strconv.Atoi(parts[0])
+    gridLng, _ := strconv.Atoi(parts[1])
+    centerLat := (float64(gridLat) + 0.5) * LatUnit
+    centerLng := (float64(gridLng) + 0.5) * LngUnit
+    return centerLat, centerLng
+}
 ```
 
 **클라이언트 (TypeScript)**
@@ -151,17 +154,23 @@ center_lng = (115434 + 0.5) * 0.0011 = 126.97795
 
 주어진 grid cell의 8방향(상하좌우 + 대각선) 이웃 셀 ID를 반환한다. 불 번짐(fire spread) 로직에서 사용한다.
 
-```python
-def get_neighbors_8(grid_id: str) -> list[str]:
-    parts = grid_id.split(":")
-    grid_lat = int(parts[0])
-    grid_lng = int(parts[1])
-    return [
-        f"{grid_lat + dlat}:{grid_lng + dlng}"
-        for dlat in (-1, 0, 1)
-        for dlng in (-1, 0, 1)
-        if not (dlat == 0 and dlng == 0)
-    ]
+```go
+// server/internal/grid/grid.go
+func GetNeighbors8(gridID string) []string {
+    parts := strings.SplitN(gridID, ":", 2)
+    gridLat, _ := strconv.Atoi(parts[0])
+    gridLng, _ := strconv.Atoi(parts[1])
+    neighbors := make([]string, 0, 8)
+    for dlat := -1; dlat <= 1; dlat++ {
+        for dlng := -1; dlng <= 1; dlng++ {
+            if dlat == 0 && dlng == 0 {
+                continue
+            }
+            neighbors = append(neighbors, fmt.Sprintf("%d:%d", gridLat+dlat, gridLng+dlng))
+        }
+    }
+    return neighbors
+}
 ```
 
 **예시:**
@@ -183,23 +192,22 @@ def get_neighbors_8(grid_id: str) -> list[str]:
 
 지도 viewport(bounding box)에 포함되는 모든 grid ID를 반환한다. 클라이언트가 현재 보고 있는 영역의 불 데이터를 요청할 때 사용한다.
 
-```python
-def get_grids_in_viewport(
-    ne_lat: float, ne_lng: float, sw_lat: float, sw_lng: float
-) -> list[str]:
-    grids = []
-    lat = math.floor(sw_lat / LAT_UNIT)
-    lat_max = math.floor(ne_lat / LAT_UNIT)
-    lng_min = math.floor(sw_lng / LNG_UNIT)
-    lng_max = math.floor(ne_lng / LNG_UNIT)
+```go
+// server/internal/grid/grid.go
+func GetGridsInViewport(neLat, neLng, swLat, swLng float64) []string {
+    latMin := int(math.Floor(swLat / LatUnit))
+    latMax := int(math.Floor(neLat / LatUnit))
+    lngMin := int(math.Floor(swLng / LngUnit))
+    lngMax := int(math.Floor(neLng / LngUnit))
 
-    while lat <= lat_max:
-        lng = lng_min
-        while lng <= lng_max:
-            grids.append(f"{lat}:{lng}")
-            lng += 1
-        lat += 1
+    var grids []string
+    for lat := latMin; lat <= latMax; lat++ {
+        for lng := lngMin; lng <= lngMax; lng++ {
+            grids = append(grids, fmt.Sprintf("%d:%d", lat, lng))
+        }
+    }
     return grids
+}
 ```
 
 **예시:**
@@ -232,10 +240,10 @@ lng 범위: floor(126.976/0.0011)=115432 ~ floor(126.980/0.0011)=115436 → 5열
 
 | 항목 | 설명 |
 |---|---|
-| **상수 동기화** | `LAT_UNIT`, `LNG_UNIT` 값을 변경할 때 반드시 `server/grid.py`와 `client/src/lib/config.ts` **양쪽 모두** 수정해야 한다. |
-| **floor 연산** | Python의 `math.floor`와 JavaScript의 `Math.floor`는 음수에서도 동일하게 동작한다 (둘 다 음의 무한대 방향으로 내림). 예: `floor(-0.5)` = `-1`. |
+| **상수 동기화** | `LAT_UNIT`, `LNG_UNIT` 값을 변경할 때 반드시 `server/internal/grid/grid.go`와 `client/src/lib/config.ts` **양쪽 모두** 수정해야 한다. |
+| **floor 연산** | Go의 `math.Floor`와 JavaScript의 `Math.floor`는 음수에서도 동일하게 동작한다 (둘 다 음의 무한대 방향으로 내림). 예: `floor(-0.5)` = `-1`. |
 | **부동소수점** | IEEE 754 double 기준으로 두 언어 모두 동일한 결과를 낸다. 다만, 극단적인 경계값에서 미세한 차이가 발생할 수 있으므로 테스트 시 주의한다. |
-| **함수 이름 차이** | 서버(`to_grid_id`, `grid_id_to_center`)와 클라이언트(`getGridId`, `getGridCenter`)는 네이밍 컨벤션만 다르고 로직은 동일하다. |
+| **함수 이름 차이** | 서버(`ToGridID`, `GridIDToCenter`)와 클라이언트(`getGridId`, `getGridCenter`)는 네이밍 컨벤션만 다르고 로직은 동일하다. |
 
 ---
 
@@ -243,8 +251,8 @@ lng 범위: floor(126.976/0.0011)=115432 ~ floor(126.980/0.0011)=115436 → 5열
 
 | 파일 | 역할 |
 |---|---|
-| `server/grid.py` | 서버 grid 변환, 이웃 셀 계산, viewport 쿼리 |
-| `server/config.py` | 서버 설정 (`FIRE_TTL_SEC` 등) |
+| `server/internal/grid/grid.go` | 서버 grid 변환, 이웃 셀 계산, viewport 쿼리 |
+| `server/internal/config/config.go` | 서버 설정 |
 | `client/src/lib/config.ts` | 클라이언트 grid 상수 (`LAT_UNIT`, `LNG_UNIT`, `TTL_SECONDS`) |
 | `client/src/features/fire-map/utils/grid.ts` | 클라이언트 grid 변환 함수 |
-| `server/models/fire.py` | 불 단계(FireStage) 정의 및 grid state 빌드 로직 |
+| `server/internal/model/fire.go` | 불 단계(FireStage) 정의 및 grid state 빌드 로직 |

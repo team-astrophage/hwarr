@@ -37,11 +37,11 @@ GPS 좌표를 grid 시스템으로 변환한 셀 단위로 불 이벤트를 관�
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `ZADD key {event_id: expire_at}` | 새 불 이벤트 등록 | `server/jobs/fire_progression.py` `register_fire()` |
-| `ZCOUNT key now +inf` | 현재 활성(미만료) 불 개수 조회 | `server/jobs/fire_progression.py` `_get_active_count()` |
-| `ZREMRANGEBYSCORE key -inf now` | 만료된 이벤트 일괄 제거 | `server/jobs/fire_progression.py` `_run_cleanup()` |
-| `ZCARD key` | 전체 member 수 (cleanup 후 빈 키 확인) | `server/jobs/fire_progression.py` `_run_cleanup()` |
-| `DELETE key` | 빈 Sorted Set 삭제 | `server/jobs/fire_progression.py` `_run_cleanup()` |
+| `ZADD key {event_id: expire_at}` | 새 불 이벤트 등록 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `ZCOUNT key now +inf` | 현재 활성(미만료) 불 개수 조회 | `server/internal/engine/fire_progression.go` `getActiveCount()` |
+| `ZREMRANGEBYSCORE key -inf now` | 만료된 이벤트 일괄 제거 | `server/internal/engine/cleanup.go` |
+| `ZCARD key` | 전체 member 수 (cleanup 후 빈 키 확인) | `server/internal/engine/cleanup.go` |
+| `DELETE key` | 빈 Sorted Set 삭제 | `server/internal/engine/cleanup.go` |
 
 ---
 
@@ -59,9 +59,9 @@ GPS 좌표를 grid 시스템으로 변환한 셀 단위로 불 이벤트를 관�
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `SADD active_grids {gridId}` | 불 등록 시 grid를 활성 목록에 추가 | `server/jobs/fire_progression.py` `register_fire()` |
-| `SMEMBERS active_grids` | 모든 활성 grid 조회 (progression scan) | `server/jobs/fire_progression.py` `_get_active_grid_ids()` |
-| `SREM active_grids {gridId}` | 불이 모두 소멸된 grid 제거 | `server/jobs/fire_progression.py` `_remove_active_grid()` |
+| `SADD active_grids {gridId}` | 불 등록 시 grid를 활성 목록에 추가 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `SMEMBERS active_grids` | 모든 활성 grid 조회 (progression scan) | `server/internal/engine/fire_progression.go` |
+| `SREM active_grids {gridId}` | 불이 모두 소멸된 grid 제거 | `server/internal/engine/fire_progression.go` |
 
 ---
 
@@ -78,8 +78,8 @@ GPS 좌표를 grid 시스템으로 변환한 셀 단위로 불 이벤트를 관�
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `INCR stats:total_fires` | 불 등록마다 1 증가 | `server/jobs/fire_progression.py` `register_fire()` |
-| `GET stats:total_fires` | 누적 횟수 조회 | `server/routes/stats.py` `get_stats()` |
+| `INCR stats:total_fires` | 불 등록마다 1 증가 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `GET stats:total_fires` | 누적 횟수 조회 | `server/internal/handler/stats.go` |
 
 ---
 
@@ -99,9 +99,9 @@ KST(Asia/Seoul) 기준 일별 불 횟수 카운터.
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `INCR stats:daily_fires:{date}` | 불 등록마다 1 증가 | `server/jobs/fire_progression.py` `register_fire()` |
-| `EXPIRE stats:daily_fires:{date} 172800` | TTL 갱신 | `server/jobs/fire_progression.py` `register_fire()` |
-| `GET stats:daily_fires:{date}` | 오늘의 불 횟수 조회 | `server/routes/stats.py` `get_stats()` |
+| `INCR stats:daily_fires:{date}` | 불 등록마다 1 증가 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `EXPIRE stats:daily_fires:{date} 172800` | TTL 갱신 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `GET stats:daily_fires:{date}` | 오늘의 불 횟수 조회 | `server/internal/handler/stats.go` |
 
 ---
 
@@ -121,9 +121,9 @@ KST 기준 일별 행정동(admin region)별 불 횟수 랭킹.
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `ZINCRBY stats:daily_ranking:{date} 1 {region}` | 해당 행정동 불 횟수 1 증가 | `server/jobs/fire_progression.py` `register_fire()` |
-| `EXPIRE stats:daily_ranking:{date} 172800` | TTL 갱신 | `server/jobs/fire_progression.py` `register_fire()` |
-| `ZREVRANGE stats:daily_ranking:{date} 0 {limit-1} WITHSCORES` | 상위 N개 행정동 조회 | `server/routes/ranking.py` `get_today_ranking()` |
+| `ZINCRBY stats:daily_ranking:{date} 1 {region}` | 해당 행정동 불 횟수 1 증가 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `EXPIRE stats:daily_ranking:{date} 172800` | TTL 갱신 | `server/internal/engine/fire_progression.go` `RegisterFire()` |
+| `ZREVRANGE stats:daily_ranking:{date} 0 {limit-1} WITHSCORES` | 상위 N개 행정동 조회 | `server/internal/handler/ranking.go` |
 
 ---
 
@@ -142,10 +142,10 @@ KST 기준 일별 행정동(admin region)별 불 횟수 랭킹.
 
 | 명령어 | 용도 | 코드 위치 |
 |---|---|---|
-| `LPUSH chat:global:messages {json}` | 새 메시지를 리스트 앞에 추가 | `server/sio/chat_events.py` `handle_chat_send()` |
-| `LTRIM chat:global:messages 0 99` | 최대 100개로 리스트 길이 제한 | `server/sio/chat_events.py` `handle_chat_send()` |
-| `EXPIRE chat:global:messages 3600` | TTL 갱신 (메시지 전송마다) | `server/sio/chat_events.py` `handle_chat_send()` |
-| `LRANGE chat:global:messages 0 49` | 최근 50개 히스토리 조회 | `server/sio/chat_events.py` `handle_chat_join()` |
+| `LPUSH chat:global:messages {json}` | 새 메시지를 리스트 앞에 추가 | `server/internal/sio/chat_send.go` |
+| `LTRIM chat:global:messages 0 99` | 최대 100개로 리스트 길이 제한 | `server/internal/sio/chat_send.go` |
+| `EXPIRE chat:global:messages 3600` | TTL 갱신 (메시지 전송마다) | `server/internal/sio/chat_send.go` |
+| `LRANGE chat:global:messages 0 49` | 최근 50개 히스토리 조회 | `server/internal/sio/chat_join.go` |
 
 LPUSH + LTRIM + EXPIRE는 pipeline으로 묶어 atomic하게 실행된다.
 

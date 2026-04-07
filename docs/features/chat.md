@@ -455,13 +455,13 @@ interface ChatSendAck {
 | HTML `maxLength` | - | 300 | 브라우저 네이티브 제한 |
 | `onChange` slice | - | 300 | `e.target.value.slice(0, 300)` |
 | `useSendChatMessage` | 1 (trim 후) | 300 (trim 후) | 빈 문자열/초과 시 즉시 반환 |
-| 서버 (`chat_events.py`) | 1 (`CHAT_TEXT_MIN`) | 300 (`CHAT_TEXT_MAX`) | 최종 서버 측 검증 |
+| 서버 (`chat_send.go`) | 1 (`CHAT_TEXT_MIN`) | 300 (`CHAT_TEXT_MAX`) | 최종 서버 측 검증 |
 
 ---
 
 ## 7. 서버 채팅 로직
 
-> 소스: `server/sio/chat_events.py`
+> 소스: `server/internal/sio/chat_join.go`, `server/internal/sio/chat_send.go`, `server/internal/sio/chat_leave.go`
 
 ### 7.1 상수
 
@@ -495,28 +495,23 @@ interface ChatSendAck {
    - `text` strip 후 길이 검증: `< CHAT_TEXT_MIN` -> `{"error": "text_too_short"}`, `> CHAT_TEXT_MAX` -> `{"error": "text_too_long"}`
    - `user_id` 존재 및 문자열 여부 -> 실패 시 `{"error": "user_id_required"}`
 2. **메시지 객체 생성**:
-   ```python
-   msg = {
-       "id": f"msg-{uuid.uuid4().hex[:12]}",    # 예: "msg-a1b2c3d4e5f6"
-       "user_id": user_id,
-       "nickname": str(data.get("nickname") or "익명"),      # fallback: "익명"
-       "avatar": str(data.get("avatar") or "👤"),            # fallback: "👤"
-       "avatar_bg": str(data.get("avatar_bg") or "#333"),    # fallback: "#333"
-       "name_color": str(data.get("name_color") or "#fff"),  # fallback: "#fff"
-       "text": text,
-       "timestamp": time.time(),   # Unix timestamp (초 단위, float)
+   ```json
+   {
+     "id": "msg-a1b2c3d4e5f6",
+     "user_id": "user-uuid",
+     "nickname": "익명",
+     "avatar": "👤",
+     "avatar_bg": "#333",
+     "name_color": "#fff",
+     "text": "메시지 내용",
+     "timestamp": 1700000000.0
    }
    ```
-3. **Redis 저장** (pipeline):
-   ```python
-   pipe.lpush(CHAT_REDIS_KEY, serialized)              # 최신 메시지를 list 앞에 추가
-   pipe.ltrim(CHAT_REDIS_KEY, 0, CHAT_MAX_MESSAGES - 1)  # 최대 100개 유지 (인덱스 0~99)
-   pipe.expire(CHAT_REDIS_KEY, CHAT_TTL_SEC)            # TTL 1시간으로 갱신
-   ```
-   - `json.dumps(msg, ensure_ascii=False)`: 한글 등 유니코드를 escape하지 않고 직접 저장
-   - Redis 저장 실패 시 `logger.exception`으로 로깅하되, 메시지 broadcast는 계속 진행
-4. **broadcast**: `sio.emit("chat:message", msg, room=CHAT_ROOM)` -- 방 전체에 메시지 전파 (발신자 포함)
-5. **ACK 반환**: `{"status": "ok", "id": msg["id"]}`
+3. **Redis 저장** (pipeline): `LPUSH` + `LTRIM`(최대 100개) + `EXPIRE`(1시간)
+   - JSON으로 직렬화하여 저장
+   - Redis 저장 실패 시 로깅하되, 메시지 broadcast는 계속 진행
+4. **broadcast**: `chat:message` 이벤트로 방 전체에 메시지 전파 (발신자 포함)
+5. **ACK 반환**: `{"status": "ok", "id": msg.id}`
 
 ### 7.4 `chat:leave` 이벤트
 
