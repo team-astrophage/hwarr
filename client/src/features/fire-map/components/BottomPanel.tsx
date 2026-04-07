@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { useFireStore } from '../stores/fireStore'
 
 const STAGE_LABELS: Record<number, { label: string; color: string }> = {
@@ -31,6 +31,17 @@ export function BottomPanel({
   const currentCell = gridId ? fires.get(gridId) : undefined
   const stage = currentCell?.stage ?? 0
   const stageInfo = STAGE_LABELS[stage] ?? STAGE_LABELS[0]
+
+  // 단계 변경 감지 → Shake + Glow 이펙트
+  const prevStageRef = useRef(stage)
+  const [flashing, setFlashing] = useState(false)
+
+  useEffect(() => {
+    if (prevStageRef.current !== stage && stage > 0) {
+      setFlashing(true)
+    }
+    prevStageRef.current = stage
+  }, [stage])
 
   // 멀티터치 방지: 첫 번째 primary pointerId만 추적
   const activePointerIdRef = useRef<number | null>(null)
@@ -73,8 +84,21 @@ export function BottomPanel({
       <div className="bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-heavy)] p-5">
         {/* Stats row */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `color-mix(in srgb, ${stageInfo.color} 15%, transparent)` }}>
+          <div
+            className="flex-1 flex items-center gap-3"
+            style={flashing ? { animation: 'stage-shake 500ms ease-out' } : undefined}
+            onAnimationEnd={() => setFlashing(false)}
+          >
+            <div className="relative w-8 h-8 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `color-mix(in srgb, ${stageInfo.color} 15%, transparent)` }}>
+              {flashing && (
+                <div
+                  className="absolute inset-[-4px] rounded-[12px] pointer-events-none"
+                  style={{
+                    boxShadow: `0 0 14px 4px ${stageInfo.color}`,
+                    animation: 'stage-glow 700ms ease-out forwards',
+                  }}
+                />
+              )}
               <svg width="14" height="14" viewBox="0 0 24 24" fill={stageInfo.color}>
                 <path d="M12 23c-3.866 0-7-3.134-7-7 0-3.866 4-9 7-12 3 3 7 8.134 7 12 0 3.866-3.134 7-7 7z" />
               </svg>
