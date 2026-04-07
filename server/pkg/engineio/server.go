@@ -155,6 +155,7 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handleHandshake processes a new connection request.
 func (srv *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	session := NewSession(srv.config.PingInterval, srv.config.PingTimeout)
+	session.RemoteAddr = r.RemoteAddr
 
 	// Store the session
 	srv.sessions.Store(session.ID, session)

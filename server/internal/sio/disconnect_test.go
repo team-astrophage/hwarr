@@ -44,7 +44,7 @@ func setupTestServer(t *testing.T) (*socketio.Server, *ConnectionManager, *[]sen
 // simulateConnect adds a socket to the connection manager and namespace.
 func simulateConnect(t *testing.T, server *socketio.Server, manager *ConnectionManager, sid string) {
 	t.Helper()
-	manager.Add(sid, "")
+	manager.Add(sid, "", "")
 	ns := server.Of("/")
 	_ = ns.HandleConnect(sid, nil)
 }
