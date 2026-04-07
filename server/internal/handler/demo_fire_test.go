@@ -191,15 +191,15 @@ func TestDemoFire_BroadcastEvents(t *testing.T) {
 		t.Fatalf("expected 201, got %d", w.Code)
 	}
 
-	// Should broadcast fire:ignite and fire:global_update
+	// Should broadcast fire:ignite and fire:update (room-scoped)
 	if len(bc.events) != 2 {
 		t.Fatalf("expected 2 broadcast events, got %d", len(bc.events))
 	}
 	if bc.events[0] != "fire:ignite" {
 		t.Errorf("expected first broadcast=fire:ignite, got %s", bc.events[0])
 	}
-	if bc.events[1] != "fire:global_update" {
-		t.Errorf("expected second broadcast=fire:global_update, got %s", bc.events[1])
+	if bc.events[1] != "fire:update" {
+		t.Errorf("expected second broadcast=fire:update, got %s", bc.events[1])
 	}
 }
 
