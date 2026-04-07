@@ -175,6 +175,16 @@ func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Serve
 
 // registerSocketEvents wires all Socket.IO event handlers.
 func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher) {
+	// Rate limiting middleware — must be registered before event handlers.
+	rl := sio.NewRateLimiter(func(sid string) {
+		sioServer.DisconnectAll(sid, "rate limit exceeded")
+	})
+	sioServer.Use(sio.NewRateLimitMiddleware(rl, logger))
+
+	// Cleanup rate limiter state on disconnect.
+	sioServer.OnDisconnect(func(sid string, reason string) {
+		rl.Remove(sid)
+	})
 	// Fire events
 	sio.RegisterFireIgniteHandler(sioServer, manager, redisClient, resolver, logger, batcher)
 	sio.RegisterFireStateHandler(sioServer, redisClient, logger)
