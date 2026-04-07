@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/homepy/hwarr/server/internal/auth"
 	"github.com/homepy/hwarr/server/internal/config"
 	"github.com/homepy/hwarr/server/internal/engine"
 	"github.com/homepy/hwarr/server/internal/geodata"
@@ -36,11 +37,23 @@ func Run(cfg *config.Config) error {
 		logger.Printf("Connected to Redis: %s", cfg.RedisAddr)
 	}
 
+	// Token service
+	tokenService := auth.NewTokenService(cfg.TokenSecret, cfg.TokenTTLMin)
+
 	// Socket.IO + Engine.IO
 	sioServer, eioServer := setupSocketServers(cfg, logger)
 
+	// Provide a function to look up remote address from Engine.IO session
+	getRemoteAddr := func(sid string) string {
+		s := eioServer.GetSession(sid)
+		if s == nil {
+			return ""
+		}
+		return s.RemoteAddr
+	}
+
 	// Connection manager + SIO event handlers
-	sioHandler := sio.NewHandler(sioServer, logger)
+	sioHandler := sio.NewHandler(sioServer, logger, tokenService, cfg.MaxConnectionsPerIP, getRemoteAddr)
 	manager := sioHandler.Manager()
 
 	// Admin region resolver (optional — for daily ranking)
@@ -67,7 +80,7 @@ func Run(cfg *config.Config) error {
 	logger.Println("Background engines started")
 
 	// HTTP server
-	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, sioServer, eioServer)
+	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, sioServer, eioServer, tokenService)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	srv := &http.Server{
@@ -209,6 +222,7 @@ func setupRouter(
 	resolver *geodata.AdminRegionResolver,
 	sioServer *socketio.Server,
 	eioServer *engineio.Server,
+	tokenService *auth.TokenService,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -228,6 +242,9 @@ func setupRouter(
 	handler.NewStatsHandler(redisClient, manager).Register(r)
 	handler.NewRankingHandler(redisClient.AsRankingReader()).Register(r)
 	handler.NewFeedbackHandler(redisClient.AsFeedbackRateLimiter(), handler.NewHTTPDiscordSender()).Register(r)
+
+	// Token endpoint for Socket.IO authentication
+	r.GET("/api/token", handler.TokenHandler(tokenService))
 
 	// Engine.IO / Socket.IO transport
 	r.Any("/socket.io/*any", gin.WrapH(eioServer))

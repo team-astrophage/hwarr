@@ -15,7 +15,7 @@
 
 import { io, type Socket } from 'socket.io-client'
 import { create } from 'zustand'
-import { SOCKET_URL } from './config'
+import { API_URL, SOCKET_URL } from './config'
 
 export type ConnectionStatus =
   | 'idle'
@@ -44,24 +44,13 @@ const MAX_RECONNECT_ATTEMPTS = 8
 const USER_ID_STORAGE_KEY = 'hwarr:anonUserId'
 
 /**
- * 재접속 시 세션 복원에 쓰이는 익명 user_id.
- * 서버 main.py connect 핸들러가 auth.user_id 로 이전 room 구독을 복원한다.
+ * Fetch an HMAC-signed auth token and server-assigned user_id from the API.
+ * The token is short-lived and validated by the server on Socket.IO connect.
  */
-function getOrCreateAnonUserId(): string {
-  if (typeof window === 'undefined') return 'anon'
-  try {
-    const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY)
-    if (existing) return existing
-    const fresh =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    window.localStorage.setItem(USER_ID_STORAGE_KEY, fresh)
-    return fresh
-  } catch {
-    // localStorage 접근 실패 (프라이빗 모드 등) 시 세션 한정 ID
-    return `anon-${Date.now()}`
-  }
+async function fetchToken(): Promise<{ token: string; user_id: string }> {
+  const res = await fetch(`${API_URL}/api/token`)
+  if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`)
+  return res.json()
 }
 
 export const socket: Socket = io(SOCKET_URL, {
@@ -71,7 +60,15 @@ export const socket: Socket = io(SOCKET_URL, {
   reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
   reconnectionDelay: 500,
   reconnectionDelayMax: 5_000,
-  auth: (cb) => cb({ user_id: getOrCreateAnonUserId() }),
+  auth: async (cb) => {
+    try {
+      const { token, user_id } = await fetchToken()
+      localStorage.setItem(USER_ID_STORAGE_KEY, user_id)
+      cb({ user_id, token })
+    } catch (err) {
+      console.error('[Socket] Failed to fetch auth token', err)
+    }
+  },
 })
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null

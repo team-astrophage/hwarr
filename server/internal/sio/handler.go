@@ -2,30 +2,41 @@ package sio
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
+	"github.com/homepy/hwarr/server/internal/auth"
 	socketio "github.com/homeworldio/socketio-go"
 )
+
+// SessionRemoteAddrFunc retrieves the remote address for a given Engine.IO session ID.
+type SessionRemoteAddrFunc func(sid string) string
 
 // Handler wires application-level Socket.IO event handlers to a socketio.Server.
 // It owns the ConnectionManager and translates low-level connect/disconnect
 // callbacks into the same session lifecycle as the Python server.
 type Handler struct {
-	sio     *socketio.Server
-	manager *ConnectionManager
-	logger  *log.Logger
+	sio                *socketio.Server
+	manager            *ConnectionManager
+	logger             *log.Logger
+	tokenService       *auth.TokenService
+	maxConnectionsPerIP int
+	getRemoteAddr      SessionRemoteAddrFunc
 }
 
 // NewHandler creates a Handler and registers event handlers on the Socket.IO server.
-func NewHandler(sioServer *socketio.Server, logger *log.Logger) *Handler {
+func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService, maxConnectionsPerIP int, getRemoteAddr SessionRemoteAddrFunc) *Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
 	h := &Handler{
-		sio:     sioServer,
-		manager: NewConnectionManager(logger),
-		logger:  logger,
+		sio:                 sioServer,
+		manager:             NewConnectionManager(logger),
+		logger:              logger,
+		tokenService:        tokenService,
+		maxConnectionsPerIP: maxConnectionsPerIP,
+		getRemoteAddr:       getRemoteAddr,
 	}
 	h.registerHandlers()
 	return h
@@ -48,6 +59,7 @@ func (h *Handler) registerHandlers() {
 // connectAuth represents the auth payload sent by the client on connect.
 type connectAuth struct {
 	UserID string `json:"user_id,omitempty"`
+	Token  string `json:"token,omitempty"`
 }
 
 // handleConnect processes a new Socket.IO connection.
@@ -62,22 +74,40 @@ type connectAuth struct {
 func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 	h.logger.Printf("Client connecting: %s", sid)
 
-	// 1. Extract user_id from auth
-	var auth connectAuth
+	// 1. Extract auth payload
+	var authData connectAuth
 	if len(authRaw) > 0 {
-		_ = json.Unmarshal(authRaw, &auth) // ignore error — auth is optional
+		_ = json.Unmarshal(authRaw, &authData)
 	}
 
-	// 2. Check for previous session (reconnection detection)
+	// 2. Validate HMAC token
+	if authData.Token == "" {
+		return fmt.Errorf("authentication required")
+	}
+	userID, err := h.tokenService.Validate(authData.Token)
+	if err != nil {
+		return fmt.Errorf("invalid token: %w", err)
+	}
+
+	// 3. Check IP connection limit
+	remoteAddr := ""
+	if h.getRemoteAddr != nil {
+		remoteAddr = h.getRemoteAddr(sid)
+	}
+	if !h.manager.CanConnect(remoteAddr, h.maxConnectionsPerIP) {
+		return fmt.Errorf("too many connections from this IP")
+	}
+
+	// 4. Check for previous session (reconnection detection)
 	var previousRooms []string
-	if auth.UserID != "" {
-		if prev := h.manager.GetPreviousSession(auth.UserID); prev != nil {
+	if userID != "" {
+		if prev := h.manager.GetPreviousSession(userID); prev != nil {
 			previousRooms = prev.RoomNames()
 		}
 	}
 
-	// 3. Register connection in manager (sid→session map)
-	info := h.manager.Add(sid, auth.UserID)
+	// 5. Register connection in manager (sid→session map)
+	info := h.manager.Add(sid, userID, remoteAddr)
 
 	// 4. Restore room subscriptions on reconnect
 	if len(previousRooms) > 0 {
@@ -86,7 +116,7 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 			_ = h.sio.EnterRoom("/", sid, room)
 		}
 		h.logger.Printf("Restored %d rooms for reconnected user=%s sid=%s",
-			len(previousRooms), auth.UserID, sid)
+			len(previousRooms), userID, sid)
 	}
 
 	// 5. Emit "connected" ack to the connecting client
