@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { useFireStore } from '../stores/fireStore'
+import { useFireStore, type FireCell } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
 import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 import {
@@ -20,6 +20,7 @@ import {
   type SpriteSheet,
   type StageCfgForSprite,
 } from '../utils/fireParticleSprites'
+import { getNeighborFireCount, getDensityMultiplier } from '../utils/grid'
 
 // ── 파티클 타입 ──
 
@@ -229,6 +230,11 @@ const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
 
+/** Alpha quantization: 20 discrete levels */
+const ALPHA_BUCKETS = 20
+/** flameCmds flat array stride: [alpha, stageIdx, bucket, px, py, particleR] */
+const CMD_STRIDE = 6
+
 // ── 스프라이트 시트 lazy init ──
 
 let spriteSheetCache: SpriteSheet | null = null
@@ -256,6 +262,9 @@ interface GridRenderData {
   h: number
   cx: number
   cy: number
+  densityMul: number
+  effectiveFlames: number
+  effectiveSmokes: number
 }
 
 // ── 메인 컴포넌트 ──
@@ -291,6 +300,9 @@ export function FireCanvas() {
   const removeTrajectoryRef = useRef(removeTrajectory)
   removeTrajectoryRef.current = removeTrajectory
 
+  const densityCacheRef = useRef<Map<string, number>>(new Map())
+  const lastFiresIdRef = useRef<Map<string, FireCell> | null>(null)
+
   useEffect(() => {
     const container = map.getContainer()
     const canvas = document.createElement('canvas')
@@ -314,11 +326,32 @@ export function FireCanvas() {
     map.on('zoom', resize)
 
     let frameCount = 0
+    let lastFrameTime = 0
+    let fpsMultiplier = 1.0
+    // Reusable arrays for alpha-batched flame rendering
+    const flameCmds: number[] = []
+    const flameCmdIndices: number[] = []
+    // Pre-allocated counting sort buffers (ALPHA_BUCKETS + 1 slots)
+    const alphaBucketCounts = new Array<number>(ALPHA_BUCKETS + 1).fill(0)
+    const alphaBucketCounts2 = new Array<number>(ALPHA_BUCKETS + 1).fill(0)
+    const alphaBucketOffsets = new Array<number>(ALPHA_BUCKETS + 1).fill(0)
 
     const animate = () => {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       animRef.current = requestAnimationFrame(animate)
+
+      // FPS adaptive throttle
+      const frameNow = performance.now()
+      if (lastFrameTime > 0) {
+        const dt = frameNow - lastFrameTime
+        if (dt > 20) {
+          fpsMultiplier = Math.max(0.3, fpsMultiplier - 0.04)
+        } else if (dt < 18) {
+          fpsMultiplier = Math.min(1.0, fpsMultiplier + 0.03)
+        }
+      }
+      lastFrameTime = frameNow
 
       frameCount++
       const dpr = window.devicePixelRatio
@@ -335,6 +368,16 @@ export function FireCanvas() {
 
       const allSmokes = smokesRef.current
 
+      // Recompute density cache when fires change
+      const densityCache = densityCacheRef.current
+      if (currentFires !== lastFiresIdRef.current) {
+        lastFiresIdRef.current = currentFires
+        densityCache.clear()
+        for (const gridId of currentFires.keys()) {
+          densityCache.set(gridId, getNeighborFireCount(gridId, currentFires))
+        }
+      }
+
       // 불 없는 격자의 파티클 제거
       for (const gid of allFlames.keys()) {
         if (!currentFires.has(gid)) allFlames.delete(gid)
@@ -345,6 +388,7 @@ export function FireCanvas() {
 
       // ── Precompute grid render data for 2-pass rendering ──
       const grids: GridRenderData[] = []
+      let maxNeighborCount = 0
 
       for (const [gridId, cell] of currentFires) {
         const cfg = STAGES[cell.stage] ?? STAGES[1]
@@ -372,6 +416,10 @@ export function FireCanvas() {
         const margin = 30
         if (cx + margin < 0 || cx - margin > sw || cy + margin < 0 || cy - margin > sh) continue
 
+        const neighborCount = densityCache.get(gridId) ?? 0
+        if (neighborCount > maxNeighborCount) maxNeighborCount = neighborCount
+        const densityMul = getDensityMultiplier(neighborCount) * fpsMultiplier
+
         grids.push({
           gridId,
           cfg,
@@ -382,6 +430,9 @@ export function FireCanvas() {
           h,
           cx,
           cy,
+          densityMul,
+          effectiveFlames: Math.ceil(cfg.particleCount * densityMul),
+          effectiveSmokes: Math.ceil(cfg.smokeCount * densityMul),
         })
       }
 
@@ -391,7 +442,7 @@ export function FireCanvas() {
       ctx.globalCompositeOperation = 'source-over'
 
       for (const g of grids) {
-        const { gridId, cfg, left, top, w, h } = g
+        const { gridId, cfg, left, top, w, h, effectiveSmokes } = g
 
         if (zoom >= GLOW_DOT_ZOOM && w >= 3) {
           // ── 톤온톤 격자선 ──
@@ -406,14 +457,14 @@ export function FireCanvas() {
             const smokes = allSmokes.get(gridId)!
 
             // 오브젝트 풀링: 부족하면 추가, 초과하면 비활성화
-            while (smokes.length < cfg.smokeCount) {
+            while (smokes.length < effectiveSmokes) {
               const s = createSmoke()
               resetSmoke(s, cfg)
               s.ry = cfg.maxHeight * 0.6 + Math.random() * cfg.smokeMaxHeight * 0.5
               s.life = Math.random() * s.maxLife
               smokes.push(s)
             }
-            for (let i = cfg.smokeCount; i < smokes.length; i++) {
+            for (let i = effectiveSmokes; i < smokes.length; i++) {
               smokes[i].active = false
             }
 
@@ -462,7 +513,7 @@ export function FireCanvas() {
       ctx.globalCompositeOperation = 'lighter'
 
       for (const g of grids) {
-        const { gridId, cfg, stageIdx, left, top, w, h, cx, cy } = g
+        const { gridId, cfg, stageIdx, left, top, w, h, cx, cy, effectiveFlames } = g
 
         // ── 줌 축소: 글로우 도트 ──
         if (zoom < GLOW_DOT_ZOOM) {
@@ -489,14 +540,14 @@ export function FireCanvas() {
         const flames = allFlames.get(gridId)!
 
         // 오브젝트 풀링: 부족하면 추가, 초과하면 비활성화
-        while (flames.length < cfg.particleCount) {
+        while (flames.length < effectiveFlames) {
           const f = createFlame()
           resetFlame(f, cfg)
           f.ry = Math.random() * cfg.maxHeight
           f.life = Math.random() * f.maxLife
           flames.push(f)
         }
-        for (let i = cfg.particleCount; i < flames.length; i++) {
+        for (let i = effectiveFlames; i < flames.length; i++) {
           flames[i].active = false
         }
 
@@ -508,7 +559,7 @@ export function FireCanvas() {
         ctx.globalAlpha = 1
         ctx.drawImage(sprites.coreGlow[stageIdx], coreX - coreR, coreY - coreR, coreDiameter, coreDiameter)
 
-        // ── 화염 파티클 업데이트 & 렌더 ──
+        // ── 화염 파티클: 물리 업데이트 + 렌더 커맨드 수집 ──
         for (let i = flames.length - 1; i >= 0; i--) {
           const f = flames[i]
           if (!f.active) continue
@@ -530,11 +581,9 @@ export function FireCanvas() {
           const heightRatio = f.ry / cfg.maxHeight
           const lifeRatio = f.life / f.maxLife
 
-          // 화면 좌표 (정수)
           const px = (left + f.rx * w) | 0
           const py = ((top + h) - f.ry * h) | 0
 
-          // 크기: 바닥에서 크고, 위로 갈수록 작아짐 (역삼각형 형태)
           const sizeDecay = (1 - heightRatio * 0.7)
           const particleR = (w * f.size * sizeDecay * 0.5) | 0
           if (particleR < 1) continue
@@ -542,17 +591,60 @@ export function FireCanvas() {
           const ca = lerpAlpha(cfg.colorStops, heightRatio)
           const edgeFadeTop = Math.min(1, (cfg.maxHeight - f.ry) / (cfg.maxHeight * 0.3))
           const edgeFadeBottom = Math.min(1, (f.ry + 0.15) / 0.15)
-          const alpha = ca * lifeRatio * sizeDecay * edgeFadeTop * edgeFadeBottom
+          const rawAlpha = ca * lifeRatio * sizeDecay * edgeFadeTop * edgeFadeBottom
 
-          if (alpha < 0.01) continue
+          if (rawAlpha < 0.01) continue
 
-          // 스프라이트 캐시에서 버킷 선택
+          const alphaBucket = Math.max(1, Math.min((rawAlpha * ALPHA_BUCKETS + 0.5) | 0, ALPHA_BUCKETS))
+
           const bucket = Math.min((heightRatio * (FLAME_BUCKET_COUNT - 1)) | 0, FLAME_BUCKET_COUNT - 1)
-          const d = particleR * 2
-          ctx.globalAlpha = alpha
-          ctx.drawImage(sprites.flame[stageIdx][bucket], px - particleR, py - particleR, d, d)
+          flameCmds.push(alphaBucket, stageIdx, bucket, px, py, particleR)
         }
       }
+
+      // ── Batch render flames by alpha bucket (counting sort, O(n)) ──
+      const cmdCount = flameCmds.length / CMD_STRIDE
+      if (cmdCount > 0) {
+        // Counting sort: group commands by alpha bucket (0..ALPHA_BUCKETS)
+        const bucketCounts = alphaBucketCounts
+        for (let b = 0; b <= ALPHA_BUCKETS; b++) bucketCounts[b] = 0
+        for (let i = 0; i < cmdCount; i++) bucketCounts[flameCmds[i * CMD_STRIDE]]++
+
+        // Build offset table
+        const bucketOffsets = alphaBucketOffsets
+        bucketOffsets[0] = 0
+        for (let b = 1; b <= ALPHA_BUCKETS; b++) bucketOffsets[b] = bucketOffsets[b - 1] + bucketCounts[b - 1]
+
+        // Place indices into sorted order
+        while (flameCmdIndices.length < cmdCount) flameCmdIndices.push(0)
+        flameCmdIndices.length = cmdCount
+        const placeCounts = alphaBucketCounts2
+        for (let b = 0; b <= ALPHA_BUCKETS; b++) placeCounts[b] = 0
+        for (let i = 0; i < cmdCount; i++) {
+          const ab = flameCmds[i * CMD_STRIDE]
+          flameCmdIndices[bucketOffsets[ab] + placeCounts[ab]] = i
+          placeCounts[ab]++
+        }
+
+        // Render in alpha-bucket order
+        let prevBucket = -1
+        for (let ii = 0; ii < cmdCount; ii++) {
+          const base = flameCmdIndices[ii] * CMD_STRIDE
+          const ab = flameCmds[base]
+          const si = flameCmds[base + 1]
+          const bucket = flameCmds[base + 2]
+          const px = flameCmds[base + 3]
+          const py = flameCmds[base + 4]
+          const pr = flameCmds[base + 5]
+          if (ab !== prevBucket) {
+            ctx.globalAlpha = ab / ALPHA_BUCKETS
+            prevBucket = ab
+          }
+          const d = pr * 2
+          ctx.drawImage(sprites.flame[si][bucket], px - pr, py - pr, d, d)
+        }
+      }
+      flameCmds.length = 0
 
       // ── 성냥 던지기 포물선 ──
       const now = performance.now()
@@ -795,6 +887,26 @@ export function FireCanvas() {
 
         if (progress >= 1) {
           removeTrajectoryRef.current(traj.id)
+        }
+      }
+
+      // ════════════════════════════════════════════
+      // PASS 3: source-over (vignette + heat shimmer)
+      // ════════════════════════════════════════════
+      if (maxNeighborCount >= 4 && zoom >= GLOW_DOT_ZOOM) {
+        ctx.globalCompositeOperation = 'source-over'
+
+        // Vignette intensity scales with density: 4→subtle, 8→strong
+        const vignetteAlpha = Math.min((maxNeighborCount - 3) / 5, 1) * 0.55
+        ctx.globalAlpha = vignetteAlpha
+        ctx.drawImage(sprites.fireVignette, 0, 0, sw, sh)
+
+        // Heat shimmer at extreme density
+        if (maxNeighborCount >= 7) {
+          const shimmerX = Math.sin(frameCount * 0.05) * 1.5
+          const shimmerY = Math.cos(frameCount * 0.07) * 0.8
+          ctx.globalAlpha = 0.12
+          ctx.drawImage(sprites.fireVignette, shimmerX, shimmerY, sw, sh)
         }
       }
 
