@@ -390,7 +390,7 @@ resource "aws_ecs_service" "backend" {
 
   # Allow CI/CD to update task definition without Terraform drift
   lifecycle {
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 
   depends_on = [aws_lb_listener.http]
@@ -426,6 +426,24 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
+}
+
+resource "aws_appautoscaling_policy" "ecs_memory" {
+  name               = "${local.name_prefix}-memory-autoscaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = 75
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageMemoryUtilization"
     }
   }
 }
