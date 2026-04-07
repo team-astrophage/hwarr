@@ -128,9 +128,9 @@ export function MapPage() {
     ? isSameLocation(lat, lng, mapCenter.lat, mapCenter.lng)
     : true; // 초기 상태에서는 내 위치로 간주
 
-  // 주소: 도착 전에는 GPS 좌표, 도착 후에는 맵 중심 기반
-  const geocodeLat = arrived ? (mapCenter?.lat ?? lat) : lat;
-  const geocodeLng = arrived ? (mapCenter?.lng ?? lng) : lng;
+  // 주소: arrived 전에는 mapCenter가 null → GPS fallback, arrived 후에는 맵 중심 기반
+  const geocodeLat = mapCenter?.lat ?? lat;
+  const geocodeLng = mapCenter?.lng ?? lng;
   const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
 
   // tap → 성냥 던지기 + 불 이벤트
@@ -177,7 +177,7 @@ export function MapPage() {
         maxZoom={18}
       >
         <MapRef mapRef={mapRef} />
-        <MapCenterTracker onCenterChange={handleCenterChange} immediateRef={immediateRef} />
+        {arrived && <MapCenterTracker onCenterChange={handleCenterChange} immediateRef={immediateRef} />}
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
