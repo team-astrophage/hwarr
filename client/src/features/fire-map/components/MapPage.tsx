@@ -40,14 +40,11 @@ function isSameLocation(
   );
 }
 
-function FlyToUser({ lat, lng, onArrived }: { lat: number; lng: number; onArrived?: () => void }) {
+function FlyToUser({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   useEffect(() => {
     map.flyTo([lat, lng], 16, { duration: 2 });
-    if (onArrived) {
-      map.once('moveend', onArrived);
-    }
-  }, [map, lat, lng, onArrived]);
+  }, [map, lat, lng]);
   return null;
 }
 
@@ -93,7 +90,13 @@ function MapCenterTracker({
   const { lat, lng, immediate } = useMapCenter(800);
   immediateRef.current = immediate;
 
+  // 마운트 직후 초기 중심(KOREA_CENTER)은 건너뛰고, 실제 이동 후부터 보고
+  const isFirstRef = useRef(true);
   useEffect(() => {
+    if (isFirstRef.current) {
+      isFirstRef.current = false;
+      return;
+    }
     onCenterChange(lat, lng);
   }, [lat, lng, onCenterChange]);
 
@@ -104,8 +107,6 @@ export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const immediateRef = useRef<(() => void) | null>(null);
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
-  const [arrived, setArrived] = useState(false);
-  const handleArrived = useCallback(() => setArrived(true), []);
   const [locationDismissed, setLocationDismissed] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
   const fires = useFireStore((s) => s.fires);
@@ -128,7 +129,7 @@ export function MapPage() {
     ? isSameLocation(lat, lng, mapCenter.lat, mapCenter.lng)
     : true; // 초기 상태에서는 내 위치로 간주
 
-  // 주소: arrived 전에는 mapCenter가 null → GPS fallback, arrived 후에는 맵 중심 기반
+  // 주소: mapCenter가 null(초기 상태)이면 GPS fallback, 이동 후에는 맵 중심 기반
   const geocodeLat = mapCenter?.lat ?? lat;
   const geocodeLng = mapCenter?.lng ?? lng;
   const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
@@ -177,7 +178,7 @@ export function MapPage() {
         maxZoom={18}
       >
         <MapRef mapRef={mapRef} />
-        {arrived && <MapCenterTracker onCenterChange={handleCenterChange} immediateRef={immediateRef} />}
+        <MapCenterTracker onCenterChange={handleCenterChange} immediateRef={immediateRef} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -186,12 +187,12 @@ export function MapPage() {
         <FiretruckOverlay />
         {lat && lng && (
           <>
-            <FlyToUser lat={lat} lng={lng} onArrived={handleArrived} />
+            <FlyToUser lat={lat} lng={lng} />
             <UserLocationMarker lat={lat} lng={lng} />
             <LocateButton lat={lat} lng={lng} />
           </>
         )}
-        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} onArrived={handleArrived} />}
+        {locationDismissed && !lat && <FlyToUser lat={SEOUL_CENTER[0]} lng={SEOUL_CENTER[1]} />}
       </MapContainer>
 
       <Header />
