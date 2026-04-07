@@ -128,9 +128,9 @@ export function MapPage() {
     ? isSameLocation(lat, lng, mapCenter.lat, mapCenter.lng)
     : true; // 초기 상태에서는 내 위치로 간주
 
-  // 주소: 맵 중심 기반 (초기엔 GPS fallback)
-  const geocodeLat = mapCenter?.lat ?? lat;
-  const geocodeLng = mapCenter?.lng ?? lng;
+  // 주소: 도착 전에는 GPS 좌표, 도착 후에는 맵 중심 기반
+  const geocodeLat = arrived ? (mapCenter?.lat ?? lat) : lat;
+  const geocodeLng = arrived ? (mapCenter?.lng ?? lng) : lng;
   const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
 
   // tap → 성냥 던지기 + 불 이벤트
@@ -211,8 +211,8 @@ export function MapPage() {
         </div>
       )}
 
-      {/* 현재 위치 도로명 주소 — 초기 fly 도착 후 표시 */}
-      {arrived && parts && (
+      {/* 현재 위치 도로명 주소 */}
+      {parts && (
         <div className='absolute top-14 left-4 z-[1000]'>
           {parts.city && (
             <p className='text-4xl font-extrabold text-white leading-tight'>
