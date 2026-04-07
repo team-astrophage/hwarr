@@ -15,12 +15,19 @@ type Config struct {
 	RedisDB          int
 	RedisTLS         bool
 	AdminGeoJSONPath string
+	AllowedOrigins   []string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	redisURL := envOr("REDIS_URL", "redis://localhost:6379/0")
 	addr, password, db, useTLS := parseRedisURL(redisURL)
+
+	originsStr := envOr("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")
+	origins := strings.Split(originsStr, ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
 
 	return &Config{
 		Host:             envOr("HOST", "0.0.0.0"),
@@ -30,6 +37,7 @@ func Load() *Config {
 		RedisDB:          db,
 		RedisTLS:         useTLS,
 		AdminGeoJSONPath: envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
+		AllowedOrigins:   origins,
 	}
 }
 
