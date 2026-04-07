@@ -8,8 +8,10 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/homepy/hwarr/server-go/internal/geodata"
 	"github.com/homepy/hwarr/server-go/internal/grid"
 	"github.com/homepy/hwarr/server-go/internal/model"
+	"github.com/homepy/hwarr/server-go/internal/ranking"
 	socketio "github.com/homeworldio/socketio-go"
 )
 
@@ -99,6 +101,7 @@ func RegisterFireIgniteHandler(
 	sioServer *socketio.Server,
 	manager *ConnectionManager,
 	redis RedisFireWriter,
+	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
 ) {
 	if logger == nil {
@@ -150,7 +153,7 @@ func RegisterFireIgniteHandler(
 
 		// Register fire in Redis (may spread to neighbor if threshold exceeded)
 		ctx := context.Background()
-		reg, err := registerFireEvent(ctx, redis, requestedGridID, eventID, expireAt, logger)
+		reg, err := registerFireEvent(ctx, redis, requestedGridID, eventID, expireAt, resolver, logger)
 		if err != nil {
 			logger.Printf("fire:ignite from %s Redis error: %v", sid, err)
 			return []interface{}{map[string]interface{}{
@@ -251,6 +254,7 @@ func registerFireEvent(
 	redis RedisFireWriter,
 	gridID, eventID string,
 	expireAt float64,
+	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
 ) (*fireRegistration, error) {
 	now := fmt.Sprintf("%f", float64(time.Now().Unix()))
@@ -306,10 +310,8 @@ func registerFireEvent(
 
 	// Increment daily ranking for the location region
 	rankingKey := fmt.Sprintf("stats:daily_ranking:%s", todayStr)
-	regionName := grid.GetLocationName(currentGrid)
-	if regionName != "" {
-		_ = redis.ZIncrBy(ctx, rankingKey, 1, regionName)
-	}
+	member := ranking.ResolveMember(currentGrid, resolver)
+	_ = redis.ZIncrBy(ctx, rankingKey, 1, member)
 
 	// Get final active count
 	activeCount, err := redis.ZCount(ctx, landingKey, now, "+inf")

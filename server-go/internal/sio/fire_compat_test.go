@@ -75,7 +75,7 @@ func TestFireCompatHandler_RegistersFireInRedis(t *testing.T) {
 	lng := 126.9769
 
 	// Use the same registerFireEvent function as the handler
-	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-compat-test", 9999999999.0, nil)
+	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-compat-test", 9999999999.0, nil, nil)
 	if err != nil {
 		t.Fatalf("registerFireEvent failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestFireCompatHandler_SpreadUpdatesCoordinates(t *testing.T) {
 		redis.sortedSet[gridKey][fmt.Sprintf("fire-%d", i)] = 9999999999.0
 	}
 
-	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-spread-compat", 9999999999.0, nil)
+	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-spread-compat", 9999999999.0, nil, nil)
 	if err != nil {
 		t.Fatalf("registerFireEvent failed: %v", err)
 	}

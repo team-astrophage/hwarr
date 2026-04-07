@@ -92,7 +92,7 @@ func TestRegisterFireEvent_BasicRegistration(t *testing.T) {
 	redis := newMockRedisFireWriter()
 	ctx := context.Background()
 
-	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-abc123", 9999999999.0, nil)
+	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-abc123", 9999999999.0, nil, nil)
 	if err != nil {
 		t.Fatalf("registerFireEvent failed: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRegisterFireEvent_SpreadOnThreshold(t *testing.T) {
 		redis.sortedSet[gridKey][fmt.Sprintf("fire-%d", i)] = 9999999999.0
 	}
 
-	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-spread-test", 9999999999.0, nil)
+	reg, err := registerFireEvent(ctx, redis, "41733:115426", "fire-spread-test", 9999999999.0, nil, nil)
 	if err != nil {
 		t.Fatalf("registerFireEvent failed: %v", err)
 	}

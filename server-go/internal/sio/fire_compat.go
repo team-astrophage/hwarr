@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/homepy/hwarr/server-go/internal/geodata"
 	"github.com/homepy/hwarr/server-go/internal/grid"
 	"github.com/homepy/hwarr/server-go/internal/model"
 	socketio "github.com/homeworldio/socketio-go"
@@ -37,6 +38,7 @@ func RegisterFireCompatHandler(
 	sioServer *socketio.Server,
 	manager *ConnectionManager,
 	redis RedisFireWriter,
+	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
 ) {
 	if logger == nil {
@@ -71,7 +73,7 @@ func RegisterFireCompatHandler(
 
 		// Register fire in Redis (may spread to neighbor if threshold exceeded)
 		ctx := context.Background()
-		reg, err := registerFireEvent(ctx, redis, requestedGridID, eventID, expireAt, logger)
+		reg, err := registerFireEvent(ctx, redis, requestedGridID, eventID, expireAt, resolver, logger)
 		if err != nil {
 			logger.Printf("fire (compat) from %s Redis error: %v", sid, err)
 			return nil, nil

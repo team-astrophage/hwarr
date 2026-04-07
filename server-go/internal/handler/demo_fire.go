@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server-go/internal/geodata"
 	"github.com/homepy/hwarr/server-go/internal/grid"
 	"github.com/homepy/hwarr/server-go/internal/model"
+	"github.com/homepy/hwarr/server-go/internal/ranking"
 )
 
 // FireTTLSec is the default fire TTL in seconds (12 hours).
@@ -73,11 +75,12 @@ type DemoFireResponse struct {
 type DemoFireHandler struct {
 	redis       RedisFireWriter
 	broadcaster Broadcaster
+	resolver    *geodata.AdminRegionResolver
 }
 
 // NewDemoFireHandler creates a new DemoFireHandler.
-func NewDemoFireHandler(redis RedisFireWriter, broadcaster Broadcaster) *DemoFireHandler {
-	return &DemoFireHandler{redis: redis, broadcaster: broadcaster}
+func NewDemoFireHandler(redis RedisFireWriter, broadcaster Broadcaster, resolver *geodata.AdminRegionResolver) *DemoFireHandler {
+	return &DemoFireHandler{redis: redis, broadcaster: broadcaster, resolver: resolver}
 }
 
 // Handle ignites a fire at a demo location without GPS.
@@ -250,7 +253,8 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 
 	// Increment daily ranking for the location region
 	rankingKey := fmt.Sprintf("stats:daily_ranking:%s", todayStr)
-	_ = h.redis.ZIncrBy(ctx, rankingKey, 1, currentGrid)
+	member := ranking.ResolveMember(currentGrid, h.resolver)
+	_ = h.redis.ZIncrBy(ctx, rankingKey, 1, member)
 
 	// Get final active count
 	activeCount, err := h.redis.ZCount(ctx, landingKey, now, "+inf")

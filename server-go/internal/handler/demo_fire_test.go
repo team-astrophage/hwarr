@@ -71,7 +71,7 @@ func (m *mockBroadcaster) Broadcast(event string, _ interface{}) error {
 func setupDemoFireRouter(redis RedisFireWriter, broadcaster Broadcaster) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewDemoFireHandler(redis, broadcaster)
+	h := NewDemoFireHandler(redis, broadcaster, nil)
 	h.Register(r)
 	return r
 }
@@ -228,7 +228,7 @@ func TestDemoFire_SpreadBroadcastOnThreshold(t *testing.T) {
 		threshold: FireSpreadThreshold,
 	}
 	bc := &mockBroadcaster{}
-	h := NewDemoFireHandler(spreadMock, bc)
+	h := NewDemoFireHandler(spreadMock, bc, nil)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
