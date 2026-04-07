@@ -56,12 +56,11 @@ export function lerpAlpha(
 function makeRadial(
   size: number,
   stops: [number, string][],
-  innerRadiusRatio = 0,
 ): OffscreenCanvas {
   const oc = new OffscreenCanvas(size, size)
   const ctx = oc.getContext('2d')!
   const half = size / 2
-  const grad = ctx.createRadialGradient(half, half, half * innerRadiusRatio, half, half, half)
+  const grad = ctx.createRadialGradient(half, half, 0, half, half, half)
   for (const [offset, color] of stops) {
     grad.addColorStop(offset, color)
   }
@@ -93,8 +92,6 @@ export interface SpriteSheet {
   explosionCore: OffscreenCanvas
   /** Explosion fireball sprite */
   explosionFireball: OffscreenCanvas
-  /** Screen-edge vignette for fire-surrounded state */
-  fireVignette: OffscreenCanvas
 }
 
 export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
@@ -193,14 +190,6 @@ export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
     [1, 'rgba(120, 10, 0, 0)'],
   ])
 
-  // ── Fire vignette (screen-edge overlay for surrounded state) ──
-  const fireVignetteCanvas = makeRadial(256, [
-    [0, 'rgba(0, 0, 0, 0)'],
-    [0.5, 'rgba(80, 10, 0, 0.15)'],
-    [0.75, 'rgba(180, 40, 0, 0.35)'],
-    [1, 'rgba(120, 15, 0, 0.6)'],
-  ], 0.45)
-
   return {
     flame,
     smoke,
@@ -212,7 +201,6 @@ export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
     matchFlash,
     explosionCore,
     explosionFireball,
-    fireVignette: fireVignetteCanvas,
   }
 }
 
