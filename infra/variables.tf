@@ -55,13 +55,13 @@ variable "availability_zones" {
 variable "ecs_cpu" {
   description = "CPU units for the Fargate task (1 vCPU = 1024)"
   type        = number
-  default     = 256
+  default     = 512
 }
 
 variable "ecs_memory" {
   description = "Memory (MiB) for the Fargate task"
   type        = number
-  default     = 512
+  default     = 1024
 }
 
 variable "ecs_desired_count" {
