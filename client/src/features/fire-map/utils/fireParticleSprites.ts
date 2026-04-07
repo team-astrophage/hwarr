@@ -103,14 +103,14 @@ export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
   for (const cfg of stages) {
     // ── Flame sprites per height bucket ──
     const buckets: OffscreenCanvas[] = []
-    for (let b = 0; b < FLAME_BUCKETS; b++) {
-      const heightRatio = b / (FLAME_BUCKETS - 1)
+    for (let bi = 0; bi < FLAME_BUCKETS; bi++) {
+      const heightRatio = bi / (FLAME_BUCKETS - 1)
       const [r, g, b] = lerpColor(cfg.colorStops, heightRatio)
       const ri = Math.round(r)
       const gi = Math.round(g)
-      const bi = Math.round(b)
+      const bri = Math.round(b)
       buckets.push(makeRadial(SPRITE_SIZE, [
-        [0, `rgba(${ri}, ${gi}, ${bi}, 1)`],
+        [0, `rgba(${ri}, ${gi}, ${bri}, 1)`],
         [0.4, `rgba(${Math.round(r * 0.9)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.5)}, 0.6)`],
         [1, `rgba(${Math.round(r * 0.5)}, ${Math.round(g * 0.2)}, 0, 0)`],
       ]))
