@@ -10,7 +10,7 @@
 | 개념 | 설명 |
 |------|------|
 | Grid ID | GPS 좌표를 100m x 100m 격자로 변환한 `"{grid_lat}:{grid_lng}"` 형식 |
-| 불 이벤트 | Sorted Set member. score는 만료 시각(`now + FIRE_TTL_SEC`, 기본 2400초) |
+| 불 이벤트 | Sorted Set member. score는 만료 시각(`now + FIRE_TTL_SEC`, 기본 43200초 = 12시간) |
 | 단계(stage) | 활성 불 개수에 따라 0~5단계: 없음(0) / 불씨(1-9) / 모닥불(10-39) / 화재(40-119) / 대화재(120-279) / 전소(280+) |
 | 확산(spread) | 격자당 불 500개 이상이면 인접 8방향 중 랜덤 격자로 cascade (최대 8hop) |
 

@@ -176,7 +176,7 @@ curl http://localhost:8000/api/stats
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis 접속 URL |
 | `HOST` | `0.0.0.0` | 서버 바인드 주소 |
 | `PORT` | `8000` | 서버 포트 |
-| `FIRE_TTL_SEC` | `2400` (40분) | 불 지속 시간(초) |
+| `FIRE_TTL_SEC` | `43200` (12시간) | 불 지속 시간(초) |
 | `ADMIN_GEOJSON_PATH` | `data/admin_dong.geojson` | 행정동 GeoJSON 경로 |
 | `FEEDBACK_DISCORD_WEBHOOK_URL` | (빈 문자열) | 피드백 전송용 Discord webhook URL |
 

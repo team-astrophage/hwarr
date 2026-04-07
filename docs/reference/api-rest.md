@@ -74,13 +74,15 @@ GPS 좌표에 불을 점화합니다. Redis에 fire event를 등록하고, Socke
 
 ```json
 {
-  "grid_id": "37.4979_127.0276",
+  "grid_id": "41664:115479",
   "event_id": "fire-a1b2c3d4e5f6",
   "active_count": 15,
   "stage": 2,
   "stage_info": {
-    "label": "...",
-    "firefighter_trigger": false
+    "stage": 2,
+    "label_ko": "모닥불",
+    "label_en": "campfire",
+    "triggers_firefighter": false
   }
 }
 ```
@@ -91,12 +93,12 @@ GPS 좌표에 불을 점화합니다. Redis에 fire event를 등록하고, Socke
 | `event_id` | `string` | 고유 fire event 식별자 (`fire-` prefix + 12자 hex) |
 | `active_count` | `int` | 해당 grid의 현재 활성 fire 수 |
 | `stage` | `int` | 현재 화재 단계 (0-5) |
-| `stage_info` | `object` | 단계 metadata (label, firefighter trigger 등) |
+| `stage_info` | `object` | 단계 metadata (`stage`, `label_ko`, `label_en`, `triggers_firefighter`) |
 
 **동작 흐름:**
 
 1. GPS (lat, lng) -> grid cell ID 변환
-2. 고유 event ID 생성, TTL 40분(`FIRE_TTL_SEC=2400`) 설정
+2. 고유 event ID 생성, TTL 12시간(`FIRE_TTL_SEC=43200`) 설정
 3. Redis에 fire event 등록 (인접 grid 확산, 단계 판정, 소방관 NPC spawn 포함)
 4. Socket.IO broadcast
 5. 호출자에게 grid state 반환
@@ -136,10 +138,10 @@ curl -X POST http://localhost:8000/api/fire \
 {
   "grids": [
     {
-      "grid_id": "37.4979_127.0276",
+      "grid_id": "41664:115479",
       "active_count": 15,
       "stage": 2,
-      "stage_info": { "...": "..." },
+      "stage_info": { "stage": 2, "label_ko": "모닥불", "label_en": "campfire", "triggers_firefighter": false },
       "lat": 37.4979,
       "lng": 127.0276
     }
@@ -176,18 +178,20 @@ curl "http://localhost:8000/api/grid/viewport?ne_lat=37.6&ne_lng=127.1&sw_lat=37
 
 | 파라미터 | 타입 | 설명 |
 |----------|------|------|
-| `grid_id` | `string` | Grid cell ID (예: `"37.4979_127.0276"`) |
+| `grid_id` | `string` | Grid cell ID (예: `"41664:115479"`) |
 
 **응답 (200 OK):**
 
 ```json
 {
-  "grid_id": "37.4979_127.0276",
+  "grid_id": "41664:115479",
   "active_count": 15,
   "stage": 2,
   "stage_info": {
-    "label": "...",
-    "firefighter_trigger": false
+    "stage": 2,
+    "label_ko": "모닥불",
+    "label_en": "campfire",
+    "triggers_firefighter": false
   }
 }
 ```
@@ -201,7 +205,7 @@ curl "http://localhost:8000/api/grid/viewport?ne_lat=37.6&ne_lng=127.1&sw_lat=37
 **curl 예시:**
 
 ```bash
-curl http://localhost:8000/api/grid/37.4979_127.0276
+curl http://localhost:8000/api/grid/41664:115479
 ```
 
 > **참고:** `/api/grid/viewport` 경로가 `/api/grid/{grid_id}`보다 먼저 등록되어 있으므로, `"viewport"` 문자열이 grid_id로 잘못 캡처되지 않습니다.
@@ -321,7 +325,7 @@ Router prefix: `/api`, tag: `news`
 ```json
 [
   {
-    "id": "news-bf-37.4979_127.0276",
+    "id": "news-bf-41664:115479",
     "icon": "🔥",
     "icon_bg": "rgba(255,68,68,0.15)",
     "headline_parts": [
@@ -412,7 +416,7 @@ Router prefix: `/api`, tag: `map`
       "name": "광화문광장",
       "lat": 37.576,
       "lng": 126.9769,
-      "grid_id": "37.5756_126.9769",
+      "grid_id": "41751:115433",
       "description": "서울 광화문광장"
     }
   ]
@@ -492,7 +496,7 @@ Router prefix: `/api/demo`, tag: `demo`
   "name": "강남역",
   "lat": 37.4979,
   "lng": 127.0276,
-  "grid_id": "37.4975_127.0275",
+  "grid_id": "41663:115479",
   "description": "서울 강남역 사거리",
   "demo": true
 }
@@ -530,7 +534,7 @@ curl "http://localhost:8000/api/demo/location?location_id=gangnam"
       "name": "광화문광장",
       "lat": 37.576,
       "lng": 126.9769,
-      "grid_id": "37.5756_126.9769",
+      "grid_id": "41751:115433",
       "description": "서울 광화문광장",
       "demo": true
     }
@@ -570,7 +574,7 @@ Body 자체를 생략해도 됩니다 (빈 body 또는 `{}`).
 
 ```json
 {
-  "grid_id": "37.4975_127.0275",
+  "grid_id": "41663:115479",
   "event_id": "fire-demo-a1b2c3d4e5f6",
   "active_count": 3,
   "stage": 1,
@@ -580,7 +584,7 @@ Body 자체를 생략해도 됩니다 (빈 body 또는 `{}`).
     "name": "강남역",
     "lat": 37.4979,
     "lng": 127.0276,
-    "grid_id": "37.4975_127.0275",
+    "grid_id": "41663:115479",
     "description": "서울 강남역 사거리",
     "demo": true
   },
