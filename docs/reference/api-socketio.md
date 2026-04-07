@@ -542,7 +542,7 @@ Client                          Server
 
 | Room | 용도 | 가입 방법 |
 |---|---|---|
-| `<grid_id>` (예: `37.5:126.9`) | viewport 기반 불 이벤트 구독 | `subscribe:viewport` 이벤트 |
+| `<grid_id>` (예: `41740:115434`) | viewport 기반 불 이벤트 구독 | `subscribe:viewport` 이벤트 |
 | `chat:global` | 글로벌 익명 채팅 | `chat:join` 이벤트 |
 
 - **Grid room**: `subscribe:viewport` 호출 시 이전 viewport의 모든 grid room에서 leave하고 새 viewport의 grid room에 join한다. 한 client는 동시에 하나의 viewport만 구독.

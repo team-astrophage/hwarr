@@ -11,11 +11,13 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 | 0 | 없음 | none | 0 | 0 | - | 0 |
 | 1 | 불씨 | ember | 1 | 1 -- 9 | - | 0 |
 | 2 | 모닥불 | campfire | 10 | 10 -- 39 | - | 0 |
-| 3 | 불기둥 | fire | 40 | 40 -- 119 | - | 0 |
-| 4 | 불바다 | big fire | 120 | 120 -- 279 | O | 2 |
-| 5 | 불지옥 (MAX) | total burn | 280 | 280+ | O | 3 |
+| 3 | 화재 | fire | 40 | 40 -- 119 | - | 0 |
+| 4 | 대화재 | big fire | 120 | 120 -- 279 | O | 2 |
+| 5 | 전소 (MAX) | total burn | 280 | 280+ | O | 3 |
 
 > 소스: `server/models/fire.py` -- `STAGE_CONFIGS` dict
+>
+> **참고:** 클라이언트 UI(`BottomPanel.tsx`의 `STAGE_LABELS`)에서는 3단계를 "불기둥", 4단계를 "불바다", 5단계를 "불지옥"으로 별도 표시합니다. 위 표는 서버 `label_ko` 기준입니다.
 
 ## 단계 전환 (Stage Transition) 로직
 
@@ -61,16 +63,16 @@ def get_stage(active_count: int) -> FireStage:
 
 ### 스폰 조건
 
-- **단계 4 (불바다, 120+) 이상**에서만 스폰됩니다.
-- `triggers_firefighter` 필드가 `True`인 단계: 4(불바다), 5(불지옥)
+- **단계 4 (대화재, 120+) 이상**에서만 스폰됩니다.
+- `triggers_firefighter` 필드가 `True`인 단계: 4(대화재), 5(전소)
 
 ### `remove_per_sweep` 값
 
 | 단계 | `remove_per_sweep` | 비고 |
 |:---:|:---:|---|
 | 0 -- 3 | 0 | 소방관 스폰 없음 |
-| 4 (불바다) | 2 | 정보 표시용 (실제 suppression 없음) |
-| 5 (불지옥) | 3 | 정보 표시용 (실제 suppression 없음) |
+| 4 (대화재) | 2 | 정보 표시용 (실제 suppression 없음) |
+| 5 (전소) | 3 | 정보 표시용 (실제 suppression 없음) |
 
 ### NPC 생성 흐름
 
@@ -141,7 +143,7 @@ Score:  now + FIRE_TTL_SEC (만료 시각)
 Member: unique event ID
 ```
 
-- **`FIRE_TTL_SEC`**: 기본 **2400초 (40분)**, 환경변수 `FIRE_TTL_SEC`로 override 가능
+- **`FIRE_TTL_SEC`**: 기본 **43200초 (12시간)**, 환경변수 `FIRE_TTL_SEC`로 override 가능
 
 활성 fire 판별: `score > current_time`인 member만 활성으로 간주합니다.
 
@@ -158,10 +160,10 @@ Member: unique event ID
 >
 > | 위치 | 상수명 | 값 |
 > |---|---|---|
-> | Server (`config.py`) | `FIRE_TTL_SEC` | **2400초 (40분)** |
+> | Server (`config.py`) | `FIRE_TTL_SEC` | **43200초 (12시간)** |
 > | Client | `TTL_SECONDS` | **1800초 (30분)** |
 >
-> 서버는 40분 동안 fire를 활성 상태로 유지하지만, 클라이언트는 30분 후에 자체적으로 fire를 제거할 수 있습니다. 이로 인해 서버에서는 아직 활성인 fire가 클라이언트 화면에서 사라지는 **10분간의 유령 fire(ghost fire)** 구간이 발생할 수 있습니다.
+> 서버는 12시간 동안 fire를 활성 상태로 유지하지만, 클라이언트는 30분을 기준으로 불의 잔여 수명을 계산합니다. 클라이언트는 주기적으로 서버와 동기화(`fires:sync`, `subscribe:viewport`)하므로 실질적인 유령 fire 문제는 제한적이나, 클라이언트 자체 TTL 만료 후 서버에는 여전히 활성 fire가 남아있을 수 있습니다.
 
 ## 관련 설정값 (config.py)
 
@@ -169,7 +171,7 @@ Member: unique event ID
 
 | 상수 | 기본값 | 환경변수 override | 설명 |
 |---|---|---|---|
-| `FIRE_TTL_SEC` | `2400` (40분) | `FIRE_TTL_SEC` | fire event의 TTL |
+| `FIRE_TTL_SEC` | `43200` (12시간) | `FIRE_TTL_SEC` | fire event의 TTL |
 | `KST` | `Asia/Seoul` | - | 일별 통계 기준 timezone |
 | `STATS_TOTAL_FIRES_KEY` | `"stats:total_fires"` | - | 누적 fire 수 Redis key |
 | `STATS_DAILY_FIRES_PREFIX` | `"stats:daily_fires:"` | - | 일별 fire 수 key prefix |

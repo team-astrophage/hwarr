@@ -14,7 +14,7 @@
 | `REDIS_URL` | `str` | `redis://localhost:6379/0` | Redis 연결 URL. `main.py`에서 사용 |
 | `HOST` | `str` | `0.0.0.0` | 서버 바인드 주소 |
 | `PORT` | `int` | `8000` | 서버 리스닝 포트 |
-| `FIRE_TTL_SEC` | `int` | `2400` (40분) | 불(fire) 데이터의 Redis TTL (초) |
+| `FIRE_TTL_SEC` | `int` | `43200` (12시간) | 불(fire) 데이터의 Redis TTL (초) |
 | `NEWS_TTL_SEC` | `int` | `86400` (1일) | 뉴스 데이터의 Redis TTL (초) |
 | `ADMIN_GEOJSON_PATH` | `str` | `server/data/admin_dong.geojson` | 행정동 GeoJSON 파일 경로. 일별 랭킹에 사용 |
 | `FEEDBACK_DISCORD_WEBHOOK_URL` | `str` | `""` (빈 문자열) | 피드백 전송용 Discord Webhook URL. 미설정 시 피드백 전송 비활성화 |
@@ -75,10 +75,10 @@
 
 ## TTL 불일치 경고
 
-> **서버 `FIRE_TTL_SEC` = 2400 (40분) vs 클라이언트 `TTL_SECONDS` = 1800 (30분)**
+> **서버 `FIRE_TTL_SEC` = 43200 (12시간) vs 클라이언트 `TTL_SECONDS` = 1800 (30분)**
 
-서버는 Redis에서 불 데이터를 40분간 유지하지만, 클라이언트는 30분을 기준으로 불의 잔여 수명을 계산한다.
-이로 인해 클라이언트에서 이미 소멸 처리된 불이 서버에는 10분간 더 남아있을 수 있다.
+서버는 Redis에서 불 데이터를 12시간 유지하지만, 클라이언트는 30분을 기준으로 불의 잔여 수명을 계산한다.
+클라이언트는 주기적으로 서버와 동기화(`fires:sync`, `subscribe:viewport`)하므로 실질적인 문제는 제한적이나, 클라이언트 자체 TTL 만료 시점과 서버의 실제 만료 시점에 차이가 있을 수 있다.
 
-- 클라이언트가 새로고침하면 서버에 남아있는 "만료된" 불이 다시 표시될 수 있음
-- 의도된 설계인지, 동기화가 필요한지 확인 필요
+- 클라이언트가 새로고침하면 서버에 남아있는 불이 다시 표시됨
+- 서버 동기화를 통해 실시간 상태는 항상 정확하게 반영됨
