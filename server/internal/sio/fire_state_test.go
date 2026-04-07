@@ -9,8 +9,8 @@ import (
 
 // mockFireStateRedis is a mock implementation of RedisFireStateReader.
 type mockFireStateRedis struct {
-	members    map[string][]string     // key → members
-	zCounts    map[string]int64        // key → count
+	members    map[string][]string // key → members
+	zCounts    map[string]int64    // key → count
 	smemberErr error
 	zcountErr  error
 }
@@ -265,8 +265,8 @@ func getStageInfoForTest(stage int) map[string]interface{} {
 	triggersFF := stage >= 4
 	return map[string]interface{}{
 		"stage":                float64(stage),
-		"label_ko":            l[0],
-		"label_en":            l[1],
+		"label_ko":             l[0],
+		"label_en":             l[1],
 		"triggers_firefighter": triggersFF,
 	}
 }

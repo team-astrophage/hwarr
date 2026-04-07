@@ -15,9 +15,9 @@ import (
 
 // mockRedisNewsReader implements RedisNewsReader for testing.
 type mockRedisNewsReader struct {
-	members   map[string][]string         // key -> set members
-	counts    map[string]int64            // key -> zcount result
-	zrevrange map[string][]model.ZMember        // key -> sorted set members
+	members   map[string][]string        // key -> set members
+	counts    map[string]int64           // key -> zcount result
+	zrevrange map[string][]model.ZMember // key -> sorted set members
 	err       error
 }
 

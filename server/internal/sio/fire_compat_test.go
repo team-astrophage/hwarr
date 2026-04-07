@@ -144,4 +144,3 @@ func TestFireCompatHandler_SpreadUpdatesCoordinates(t *testing.T) {
 		t.Error("expected at least one spread hop when grid is at threshold")
 	}
 }
-

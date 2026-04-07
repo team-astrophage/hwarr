@@ -146,10 +146,10 @@ func TestRegisterFireEvent_SpreadOnThreshold(t *testing.T) {
 
 func TestFireIgniteData_Parsing(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		wantLat *float64
-		wantLng *float64
+		name     string
+		input    string
+		wantLat  *float64
+		wantLng  *float64
 		wantDemo bool
 	}{
 		{
@@ -239,8 +239,8 @@ func TestRandomHexSIO(t *testing.T) {
 func TestGridStateInfoToMap(t *testing.T) {
 	info := model.FireStageInfo{
 		Stage:               3,
-		LabelKo:            "화재",
-		LabelEn:            "fire",
+		LabelKo:             "화재",
+		LabelEn:             "fire",
 		TriggersFirefighter: false,
 	}
 	m := gridStateInfoToMap(info)

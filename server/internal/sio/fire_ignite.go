@@ -331,8 +331,8 @@ func registerFireEvent(
 func gridStateInfoToMap(info model.FireStageInfo) map[string]interface{} {
 	return map[string]interface{}{
 		"stage":                info.Stage,
-		"label_ko":            info.LabelKo,
-		"label_en":            info.LabelEn,
+		"label_ko":             info.LabelKo,
+		"label_en":             info.LabelEn,
 		"triggers_firefighter": info.TriggersFirefighter,
 	}
 }
