@@ -42,11 +42,11 @@ func NewStatsHandler(redis RedisStatsReader, connections ConnectionCounter) *Sta
 
 // statsResponse matches the Python stats endpoint response (camelCase).
 type statsResponse struct {
-	ActiveGrids    int `json:"activeGrids"`
-	TotalFires     int `json:"totalFires"`
+	ActiveGrids     int `json:"activeGrids"`
+	TotalFires      int `json:"totalFires"`
 	CumulativeFires int `json:"cumulativeFires"`
-	DailyFires     int `json:"dailyFires"`
-	OnlineUsers    int `json:"onlineUsers"`
+	DailyFires      int `json:"dailyFires"`
+	OnlineUsers     int `json:"onlineUsers"`
 }
 
 // Handle returns global fire statistics.

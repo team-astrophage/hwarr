@@ -43,7 +43,7 @@ func NewNamespace(path string) *Namespace {
 		path:          path,
 		eventHandlers: make(map[string]EventHandler),
 		sockets:       make(map[string]bool),
-		middleware:     NewMiddlewareChain(),
+		middleware:    NewMiddlewareChain(),
 		Rooms:         NewRoomManager(),
 	}
 }

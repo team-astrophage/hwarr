@@ -25,11 +25,11 @@ type RedisChatWriter interface {
 
 // chatSendData is the client payload for chat:send.
 type chatSendData struct {
-	Text     *string `json:"text"`
-	UserID   *string `json:"user_id"`
-	Nickname *string `json:"nickname,omitempty"`
-	Avatar   *string `json:"avatar,omitempty"`
-	AvatarBg *string `json:"avatar_bg,omitempty"`
+	Text      *string `json:"text"`
+	UserID    *string `json:"user_id"`
+	Nickname  *string `json:"nickname,omitempty"`
+	Avatar    *string `json:"avatar,omitempty"`
+	AvatarBg  *string `json:"avatar_bg,omitempty"`
 	NameColor *string `json:"name_color,omitempty"`
 }
 
