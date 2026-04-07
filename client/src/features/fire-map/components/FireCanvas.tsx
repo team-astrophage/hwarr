@@ -12,6 +12,14 @@ import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
 import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
+import {
+  createSpriteSheet,
+  lerpAlpha,
+  FLAME_BUCKET_COUNT,
+  SMOKE_BUCKET_COUNT,
+  type SpriteSheet,
+  type StageCfgForSprite,
+} from '../utils/fireParticleSprites'
 
 // ── 파티클 타입 ──
 
@@ -25,6 +33,7 @@ interface Flame {
   size: number
   /** 높이 비율에 따라 색상 결정 (0=바닥 밝은색, 1=꼭대기 어두운색) */
   seed: number
+  active: boolean  // object pooling flag
 }
 
 interface Smoke {
@@ -35,6 +44,7 @@ interface Smoke {
   life: number
   maxLife: number
   size: number
+  active: boolean  // object pooling flag
 }
 
 // ── 단계별 설정 ──
@@ -175,20 +185,43 @@ const STAGES: (StageCfg | null)[] = [
   },
 ]
 
-// ── 연기 파티클 생성 ──
+// ── 오브젝트 풀링: 인플레이스 리셋 ──
 
-function spawnSmoke(cfg: StageCfg): Smoke {
-  const life = 60 + Math.random() * 80
-  return {
-    rx: 0.2 + Math.random() * 0.6,
-    ry: cfg.maxHeight * 0.6 + Math.random() * cfg.maxHeight * 0.3, // 불꽃 위에서 시작
-    vx: (Math.random() - 0.5) * 0.015,
-    vy: 0.003 + Math.random() * 0.004,
-    life,
-    maxLife: life,
-    size: 0.3 + Math.random() * 0.4,
-  }
+function resetFlame(f: Flame, cfg: StageCfg): void {
+  const life = 40 + Math.random() * 50
+  f.rx = 0.3 + Math.random() * 0.4
+  f.ry = 0
+  f.vx = (Math.random() - 0.5) * cfg.spreadX * 0.02
+  f.vy = cfg.baseSpeed * (0.7 + Math.random() * 0.6)
+  f.life = life
+  f.maxLife = life
+  f.size = cfg.baseSize * (0.6 + Math.random() * 0.8)
+  f.seed = Math.random()
+  f.active = true
 }
+
+function resetSmoke(s: Smoke, cfg: StageCfg): void {
+  const life = 60 + Math.random() * 80
+  s.rx = 0.2 + Math.random() * 0.6
+  s.ry = cfg.maxHeight * 0.6 + Math.random() * cfg.maxHeight * 0.3
+  s.vx = (Math.random() - 0.5) * 0.015
+  s.vy = 0.003 + Math.random() * 0.004
+  s.life = life
+  s.maxLife = life
+  s.size = 0.3 + Math.random() * 0.4
+  s.active = true
+}
+
+function createFlame(): Flame {
+  return { rx: 0, ry: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0, seed: 0, active: false }
+}
+
+function createSmoke(): Smoke {
+  return { rx: 0, ry: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0, active: false }
+}
+
+// ── 폭발 파편 색상 (모듈 상수) ──
+const EXPLOSION_DEBRIS_COLORS = ['#ffaa44', '#ff6622', '#cc2200', '#661100']
 
 // ── 줌 임계값 ──
 const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환
@@ -196,37 +229,33 @@ const GLOW_DOT_ZOOM = 15   // 이 줌 미만이면 글로우 도트로 전환
 /** 성냥 비행 시간 (ms) */
 const MATCH_DURATION = 500
 
-// ── 파티클 생성 ──
+// ── 스프라이트 시트 lazy init ──
 
-function spawnFlame(cfg: StageCfg): Flame {
-  const life = 40 + Math.random() * 50
-  return {
-    rx: 0.3 + Math.random() * 0.4, // 중앙 근처에서 시작
-    ry: 0,
-    vx: (Math.random() - 0.5) * cfg.spreadX * 0.02,
-    vy: cfg.baseSpeed * (0.7 + Math.random() * 0.6),
-    life,
-    maxLife: life,
-    size: cfg.baseSize * (0.6 + Math.random() * 0.8),
-    seed: Math.random(),
+let spriteSheetCache: SpriteSheet | null = null
+
+function getSpriteSheet(): SpriteSheet {
+  if (spriteSheetCache) return spriteSheetCache
+  const cfgs: StageCfgForSprite[] = []
+  for (let i = 1; i <= 5; i++) {
+    const s = STAGES[i]!
+    cfgs.push({ colorStops: s.colorStops, coreAlpha: s.coreAlpha, dotColor: s.dotColor })
   }
+  spriteSheetCache = createSpriteSheet(cfgs)
+  return spriteSheetCache
 }
 
-// ── 높이에 따른 색상 보간 ──
+// ── Per-grid precomputed data for 2-pass rendering ──
 
-function getFlameColor(cfg: StageCfg, heightRatio: number): [number, number, number, number] {
-  const stops = cfg.colorStops
-  const t = Math.min(heightRatio, 1) * (stops.length - 1)
-  const i = Math.floor(t)
-  const f = t - i
-  const a = stops[Math.min(i, stops.length - 1)]
-  const b = stops[Math.min(i + 1, stops.length - 1)]
-  return [
-    a[0] + (b[0] - a[0]) * f,
-    a[1] + (b[1] - a[1]) * f,
-    a[2] + (b[2] - a[2]) * f,
-    a[3] + (b[3] - a[3]) * f,
-  ]
+interface GridRenderData {
+  gridId: string
+  cfg: StageCfg
+  stageIdx: number  // 0-4
+  left: number
+  top: number
+  w: number
+  h: number
+  cx: number
+  cy: number
 }
 
 // ── 메인 컴포넌트 ──
@@ -297,11 +326,12 @@ export function FireCanvas() {
       ctx.save()
       ctx.scale(dpr, dpr)
 
+      const sprites = getSpriteSheet()
       const zoom = map.getZoom()
       const currentFires = firesRef.current
       const allFlames = flamesRef.current
-      const sw = canvas.width / dpr
-      const sh = canvas.height / dpr
+      const sw = (canvas.width / dpr) | 0
+      const sh = (canvas.height / dpr) | 0
 
       const allSmokes = smokesRef.current
 
@@ -312,6 +342,9 @@ export function FireCanvas() {
       for (const gid of allSmokes.keys()) {
         if (!currentFires.has(gid)) allSmokes.delete(gid)
       }
+
+      // ── Precompute grid render data for 2-pass rendering ──
+      const grids: GridRenderData[] = []
 
       for (const [gridId, cell] of currentFires) {
         const cfg = STAGES[cell.stage] ?? STAGES[1]
@@ -324,7 +357,6 @@ export function FireCanvas() {
         const tl = map.latLngToContainerPoint(L.latLng(gLat + LAT_UNIT, gLng))
         const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
 
-        // 줌 축소 시 불꽃이 너무 작아지지 않도록 최소 크기 보정
         const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.5)
         const rawW = Math.abs(br.x - tl.x)
         const rawH = Math.abs(br.y - tl.y)
@@ -333,41 +365,119 @@ export function FireCanvas() {
         const left = Math.min(tl.x, br.x) - (w - rawW) / 2
         const top = Math.min(tl.y, br.y) - (h - rawH) / 2
 
-        const cx = left + w / 2
-        const cy = top + h / 2
+        const cx = (left + w / 2) | 0
+        const cy = (top + h / 2) | 0
 
         // 화면 밖이면 스킵 (여유 포함)
         const margin = 30
         if (cx + margin < 0 || cx - margin > sw || cy + margin < 0 || cy - margin > sh) continue
 
+        grids.push({
+          gridId,
+          cfg,
+          stageIdx: Math.max(0, cell.stage - 1),
+          left,
+          top,
+          w,
+          h,
+          cx,
+          cy,
+        })
+      }
+
+      // ════════════════════════════════════════════
+      // PASS 1: source-over (grid lines + smoke)
+      // ════════════════════════════════════════════
+      ctx.globalCompositeOperation = 'source-over'
+
+      for (const g of grids) {
+        const { gridId, cfg, left, top, w, h } = g
+
+        if (zoom >= GLOW_DOT_ZOOM && w >= 3) {
+          // ── 톤온톤 격자선 ──
+          ctx.globalAlpha = 1
+          ctx.strokeStyle = 'rgba(120, 60, 60, 0.25)'
+          ctx.lineWidth = zoom >= 15 ? 1.5 : 1
+          ctx.strokeRect((left + 0.5) | 0, (top + 0.5) | 0, (w - 1) | 0, (h - 1) | 0)
+
+          // ── 연기 파티클 (4~5단계) — 물리 + 렌더 ──
+          if (cfg.smokeCount > 0) {
+            if (!allSmokes.has(gridId)) allSmokes.set(gridId, [])
+            const smokes = allSmokes.get(gridId)!
+
+            // 오브젝트 풀링: 부족하면 추가, 초과하면 비활성화
+            while (smokes.length < cfg.smokeCount) {
+              const s = createSmoke()
+              resetSmoke(s, cfg)
+              s.ry = cfg.maxHeight * 0.6 + Math.random() * cfg.smokeMaxHeight * 0.5
+              s.life = Math.random() * s.maxLife
+              smokes.push(s)
+            }
+            for (let i = cfg.smokeCount; i < smokes.length; i++) {
+              smokes[i].active = false
+            }
+
+            for (let i = smokes.length - 1; i >= 0; i--) {
+              const s = smokes[i]
+              if (!s.active) continue
+
+              s.ry += s.vy
+              s.rx += s.vx
+              s.vx += (Math.random() - 0.5) * 0.002
+              s.vx *= 0.99
+              s.life--
+
+              if (s.life <= 0 || s.ry > cfg.smokeMaxHeight) {
+                resetSmoke(s, cfg)
+                continue
+              }
+
+              s.rx = Math.max(0, Math.min(1, s.rx))
+              const lifeRatio = s.life / s.maxLife
+              const heightRatio = Math.min(s.ry / cfg.smokeMaxHeight, 1)
+
+              const px = (left + s.rx * w) | 0
+              const py = ((top + h) - s.ry * h) | 0
+
+              const smokeR = (w * s.size * (0.8 + heightRatio * 0.5)) | 0
+              if (smokeR < 1) continue
+
+              const fadeIn = Math.min(1, (1 - lifeRatio) * 3)
+              const fadeOut = lifeRatio
+              const alpha = cfg.smokeAlpha * fadeIn * fadeOut * (1 - heightRatio * 0.5)
+              if (alpha < 0.01) continue
+
+              const bucket = Math.min((heightRatio * (SMOKE_BUCKET_COUNT - 1)) | 0, SMOKE_BUCKET_COUNT - 1)
+              const d = smokeR * 2
+              ctx.globalAlpha = alpha
+              ctx.drawImage(sprites.smoke[bucket], px - smokeR, py - smokeR, d, d)
+            }
+          }
+        }
+      }
+
+      // ════════════════════════════════════════════
+      // PASS 2: lighter (glow dots, core glow, flames, effects)
+      // ════════════════════════════════════════════
+      ctx.globalCompositeOperation = 'lighter'
+
+      for (const g of grids) {
+        const { gridId, cfg, stageIdx, left, top, w, h, cx, cy } = g
+
         // ── 줌 축소: 글로우 도트 ──
         if (zoom < GLOW_DOT_ZOOM) {
           const pulse = Math.sin(frameCount * cfg.dotPulse) * 0.3 + 0.7
-          const dotR = Math.max(cfg.dotSize, 6) * pulse
-
-          ctx.globalCompositeOperation = 'lighter'
+          const dotR = (Math.max(cfg.dotSize, 6) * pulse) | 0
 
           // 외부 글로우
-          const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotR * 2.5)
-          outerGlow.addColorStop(0, cfg.dotColor + '60')
-          outerGlow.addColorStop(0.5, cfg.dotColor + '20')
-          outerGlow.addColorStop(1, cfg.dotColor + '00')
+          const outerD = (dotR * 5) | 0
           ctx.globalAlpha = 1
-          ctx.fillStyle = outerGlow
-          ctx.beginPath()
-          ctx.arc(cx, cy, dotR * 2.5, 0, Math.PI * 2)
-          ctx.fill()
+          ctx.drawImage(sprites.glowDotOuter[stageIdx], cx - (outerD >> 1), cy - (outerD >> 1), outerD, outerD)
 
           // 내부 밝은 코어
-          const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotR)
-          coreGlow.addColorStop(0, '#ffffcc')
-          coreGlow.addColorStop(0.4, cfg.dotColor)
-          coreGlow.addColorStop(1, cfg.dotColor + '00')
+          const coreD = dotR * 2
           ctx.globalAlpha = pulse
-          ctx.fillStyle = coreGlow
-          ctx.beginPath()
-          ctx.arc(cx, cy, dotR, 0, Math.PI * 2)
-          ctx.fill()
+          ctx.drawImage(sprites.glowDotCore[stageIdx], cx - dotR, cy - dotR, coreD, coreD)
 
           continue
         }
@@ -375,162 +485,73 @@ export function FireCanvas() {
         // ── 줌 확대: 화염 파티클 ──
         if (w < 3) continue
 
-        // ── 톤온톤 격자선 ──
-        ctx.save()
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.strokeStyle = 'rgba(120, 60, 60, 0.25)'
-        ctx.lineWidth = zoom >= 15 ? 1.5 : 1
-        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1)
-        ctx.restore()
-
         if (!allFlames.has(gridId)) allFlames.set(gridId, [])
         const flames = allFlames.get(gridId)!
 
-        // 파티클 보충
+        // 오브젝트 풀링: 부족하면 추가, 초과하면 비활성화
         while (flames.length < cfg.particleCount) {
-          const f = spawnFlame(cfg)
+          const f = createFlame()
+          resetFlame(f, cfg)
           f.ry = Math.random() * cfg.maxHeight
           f.life = Math.random() * f.maxLife
           flames.push(f)
         }
-        // 초과 파티클 제거
-        while (flames.length > cfg.particleCount) {
-          flames.pop()
+        for (let i = cfg.particleCount; i < flames.length; i++) {
+          flames[i].active = false
         }
 
-        // 클리핑 없이 자연스러운 페이드로 경계 처리
-        ctx.save()
-
-        ctx.globalCompositeOperation = 'lighter'
-
-        // ── 바닥 코어 글로우 ── (중심을 격자 바닥보다 살짝 위로)
+        // ── 바닥 코어 글로우 ──
         const coreX = cx
-        const coreY = top + h * 0.85
-        const coreR = w * cfg.glowRadius
-
-        const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, coreR)
-        coreGrad.addColorStop(0, `rgba(255, 220, 100, ${cfg.coreAlpha})`)
-        coreGrad.addColorStop(0.3, `rgba(255, 150, 30, ${cfg.coreAlpha * 0.6})`)
-        coreGrad.addColorStop(0.7, `rgba(200, 50, 0, ${cfg.coreAlpha * 0.2})`)
-        coreGrad.addColorStop(1, 'rgba(150, 20, 0, 0)')
+        const coreY = (top + h * 0.85) | 0
+        const coreR = (w * cfg.glowRadius) | 0
+        const coreDiameter = coreR * 2
         ctx.globalAlpha = 1
-        ctx.fillStyle = coreGrad
-        ctx.beginPath()
-        ctx.arc(coreX, coreY, coreR, 0, Math.PI * 2)
-        ctx.fill()
+        ctx.drawImage(sprites.coreGlow[stageIdx], coreX - coreR, coreY - coreR, coreDiameter, coreDiameter)
 
         // ── 화염 파티클 업데이트 & 렌더 ──
         for (let i = flames.length - 1; i >= 0; i--) {
           const f = flames[i]
+          if (!f.active) continue
 
           // 물리
           f.ry += f.vy
           f.rx += f.vx
           f.vx += (Math.random() - 0.5) * cfg.turbulence
-          // 위로 갈수록 좌우 흔들림 증가
           f.vx *= 0.98
           f.life--
 
           if (f.life <= 0 || f.ry > cfg.maxHeight) {
-            flames[i] = spawnFlame(cfg)
+            resetFlame(f, cfg)
             continue
           }
 
-          // rx 범위 제한
           f.rx = Math.max(0.05, Math.min(0.95, f.rx))
 
           const heightRatio = f.ry / cfg.maxHeight
           const lifeRatio = f.life / f.maxLife
 
-          // 화면 좌표
-          const px = left + f.rx * w
-          const py = (top + h) - f.ry * h  // 바닥에서 위로
+          // 화면 좌표 (정수)
+          const px = (left + f.rx * w) | 0
+          const py = ((top + h) - f.ry * h) | 0
 
           // 크기: 바닥에서 크고, 위로 갈수록 작아짐 (역삼각형 형태)
           const sizeDecay = (1 - heightRatio * 0.7)
-          const particleR = w * f.size * sizeDecay * 0.5
-          if (particleR < 0.5) continue
+          const particleR = (w * f.size * sizeDecay * 0.5) | 0
+          if (particleR < 1) continue
 
-          // 높이에 따른 색상
-          const [cr, cg, cb, ca] = getFlameColor(cfg, heightRatio)
-          // 격자 경계 근처에서 자연스럽게 페이드아웃
+          const ca = lerpAlpha(cfg.colorStops, heightRatio)
           const edgeFadeTop = Math.min(1, (cfg.maxHeight - f.ry) / (cfg.maxHeight * 0.3))
           const edgeFadeBottom = Math.min(1, (f.ry + 0.15) / 0.15)
           const alpha = ca * lifeRatio * sizeDecay * edgeFadeTop * edgeFadeBottom
 
           if (alpha < 0.01) continue
 
-          // 소프트 라디얼 그라디언트 파티클
-          const grad = ctx.createRadialGradient(px, py, 0, px, py, particleR)
-          grad.addColorStop(0, `rgba(${Math.round(cr)}, ${Math.round(cg)}, ${Math.round(cb)}, ${alpha})`)
-          grad.addColorStop(0.4, `rgba(${Math.round(cr * 0.9)}, ${Math.round(cg * 0.7)}, ${Math.round(cb * 0.5)}, ${alpha * 0.6})`)
-          grad.addColorStop(1, `rgba(${Math.round(cr * 0.5)}, ${Math.round(cg * 0.2)}, 0, 0)`)
-
-          ctx.globalAlpha = 1
-          ctx.fillStyle = grad
-          ctx.beginPath()
-          ctx.arc(px, py, particleR, 0, Math.PI * 2)
-          ctx.fill()
+          // 스프라이트 캐시에서 버킷 선택
+          const bucket = Math.min((heightRatio * (FLAME_BUCKET_COUNT - 1)) | 0, FLAME_BUCKET_COUNT - 1)
+          const d = particleR * 2
+          ctx.globalAlpha = alpha
+          ctx.drawImage(sprites.flame[stageIdx][bucket], px - particleR, py - particleR, d, d)
         }
-
-        // ── 연기 파티클 (4~5단계) ──
-        if (cfg.smokeCount > 0) {
-          if (!allSmokes.has(gridId)) allSmokes.set(gridId, [])
-          const smokes = allSmokes.get(gridId)!
-
-          while (smokes.length < cfg.smokeCount) {
-            const s = spawnSmoke(cfg)
-            s.ry = cfg.maxHeight * 0.6 + Math.random() * cfg.smokeMaxHeight * 0.5
-            s.life = Math.random() * s.maxLife
-            smokes.push(s)
-          }
-          while (smokes.length > cfg.smokeCount) smokes.pop()
-
-          ctx.globalCompositeOperation = 'source-over'
-
-          for (let i = smokes.length - 1; i >= 0; i--) {
-            const s = smokes[i]
-            s.ry += s.vy
-            s.rx += s.vx
-            s.vx += (Math.random() - 0.5) * 0.002
-            s.vx *= 0.99
-            s.life--
-
-            if (s.life <= 0 || s.ry > cfg.smokeMaxHeight) {
-              smokes[i] = spawnSmoke(cfg)
-              continue
-            }
-
-            s.rx = Math.max(0, Math.min(1, s.rx))
-            const lifeRatio = s.life / s.maxLife
-            const heightRatio = Math.min(s.ry / cfg.smokeMaxHeight, 1)
-
-            const px = left + s.rx * w
-            const py = (top + h) - s.ry * h
-
-            const smokeR = w * s.size * (0.8 + heightRatio * 0.5)
-            if (smokeR < 1) continue
-
-            const fadeIn = Math.min(1, (1 - lifeRatio) * 3)
-            const fadeOut = lifeRatio
-            const alpha = cfg.smokeAlpha * fadeIn * fadeOut * (1 - heightRatio * 0.5)
-            if (alpha < 0.01) continue
-
-            const gray = Math.round(30 + heightRatio * 20)
-            const grad = ctx.createRadialGradient(px, py, 0, px, py, smokeR)
-            grad.addColorStop(0, `rgba(${gray}, ${gray}, ${gray}, ${alpha})`)
-            grad.addColorStop(0.6, `rgba(${gray}, ${gray}, ${gray}, ${alpha * 0.4})`)
-            grad.addColorStop(1, `rgba(${gray}, ${gray}, ${gray}, 0)`)
-
-            ctx.globalAlpha = 1
-            ctx.fillStyle = grad
-            ctx.beginPath()
-            ctx.arc(px, py, smokeR, 0, Math.PI * 2)
-            ctx.fill()
-          }
-        }
-
-        ctx.restore() // clip 해제
       }
 
       // ── 성냥 던지기 포물선 ──
@@ -548,10 +569,10 @@ export function FireCanvas() {
         const startX = sw / 2
         const startY = sh - 80
         const t = progress
-        const x = startX + (targetPt.x - startX) * t
+        const x = (startX + (targetPt.x - startX) * t) | 0
         const parabola = -4 * t * (t - 1)
         const baseY = startY + (targetPt.y - startY) * t
-        const y = baseY - parabola * 120
+        const y = (baseY - parabola * 120) | 0
 
         const rotation = t * Math.PI * 4
 
@@ -591,25 +612,22 @@ export function FireCanvas() {
           ctx.globalCompositeOperation = 'lighter'
           const impP = Math.min(impactT, 1)
 
-          // 중심 플래시
-          const flashR = 32 + impP * 60
-          const fg = ctx.createRadialGradient(targetPt.x, targetPt.y, 0, targetPt.x, targetPt.y, flashR)
-          fg.addColorStop(0, `rgba(255,255,200,${0.9 * (1 - impP)})`)
-          fg.addColorStop(0.3, `rgba(255,180,40,${0.6 * (1 - impP)})`)
-          fg.addColorStop(1, 'rgba(255,60,0,0)')
-          ctx.fillStyle = fg
-          ctx.beginPath()
-          ctx.arc(targetPt.x, targetPt.y, flashR, 0, Math.PI * 2)
-          ctx.fill()
+          // 중심 플래시 (sprite)
+          const flashR = ((32 + impP * 60) | 0)
+          const flashD = flashR * 2
+          const tpx = targetPt.x | 0
+          const tpy = targetPt.y | 0
+          ctx.globalAlpha = 1 - impP
+          ctx.drawImage(sprites.matchFlash, tpx - flashR, tpy - flashR, flashD, flashD)
 
           // 스파크 방사
           const sparkCount = 18
           for (let si = 0; si < sparkCount; si++) {
             const angle = (si / sparkCount) * Math.PI * 2 + impP * 0.5
-            const sparkDist = impP * (45 + ((si * 31) % 17) * 3.5)
-            const spx = targetPt.x + Math.cos(angle) * sparkDist
-            const spy = targetPt.y + Math.sin(angle) * sparkDist
-            const sparkSize = (1 - impP) * (2.5 + (si % 3) * 1.5)
+            const sparkDist = (impP * (45 + ((si * 31) % 17) * 3.5)) | 0
+            const spx = (tpx + Math.cos(angle) * sparkDist) | 0
+            const spy = (tpy + Math.sin(angle) * sparkDist) | 0
+            const sparkSize = ((1 - impP) * (2.5 + (si % 3) * 1.5)) | 0
             ctx.globalAlpha = (1 - impP) * 0.95
             ctx.fillStyle = si % 3 === 0 ? '#ffffff' : si % 3 === 1 ? '#ffdd44' : '#ff6600'
             ctx.beginPath()
@@ -622,13 +640,13 @@ export function FireCanvas() {
           ctx.lineCap = 'round'
           for (let li = 0; li < 10; li++) {
             const a = (li / 10) * Math.PI * 2
-            const len = impP * (20 + (li * 19) % 25)
-            const ex = targetPt.x + Math.cos(a) * len
-            const ey = targetPt.y + Math.sin(a) * len
+            const len = (impP * (20 + (li * 19) % 25)) | 0
+            const ex = (tpx + Math.cos(a) * len) | 0
+            const ey = (tpy + Math.sin(a) * len) | 0
             ctx.globalAlpha = (1 - impP) * 0.7
             ctx.strokeStyle = li % 2 === 0 ? '#ffaa00' : '#ff4400'
             ctx.beginPath()
-            ctx.moveTo(targetPt.x + Math.cos(a) * 8, targetPt.y + Math.sin(a) * 8)
+            ctx.moveTo((tpx + Math.cos(a) * 8) | 0, (tpy + Math.sin(a) * 8) | 0)
             ctx.lineTo(ex, ey)
             ctx.stroke()
           }
@@ -648,8 +666,9 @@ export function FireCanvas() {
         const eCenterLat = Number(eLat) * LAT_UNIT + LAT_UNIT / 2
         const eCenterLng = Number(eLng) * LNG_UNIT + LNG_UNIT / 2
         const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
+        const epx = ePt.x | 0
+        const epy = ePt.y | 0
 
-        // 강한 ease-out (초반 폭발감)
         const easeOut = 1 - Math.pow(1 - progress, 3)
 
         ctx.globalCompositeOperation = 'lighter'
@@ -658,72 +677,57 @@ export function FireCanvas() {
         if (elapsed < 80) {
           const p = elapsed / 80
           const coreAlpha = 1 - p
-          const coreRadius = 20 + p * 140
-          const coreGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, coreRadius)
-          coreGrad.addColorStop(0, `rgba(255, 255, 255, ${coreAlpha})`)
-          coreGrad.addColorStop(0.35, `rgba(255, 245, 210, ${coreAlpha * 0.95})`)
-          coreGrad.addColorStop(0.7, `rgba(255, 180, 80, ${coreAlpha * 0.6})`)
-          coreGrad.addColorStop(1, 'rgba(255, 120, 20, 0)')
-          ctx.globalAlpha = 1
-          ctx.fillStyle = coreGrad
-          ctx.beginPath()
-          ctx.arc(ePt.x, ePt.y, coreRadius, 0, Math.PI * 2)
-          ctx.fill()
+          const coreRadius = (20 + p * 140) | 0
+          const coreD = coreRadius * 2
+          ctx.globalAlpha = coreAlpha
+          ctx.drawImage(sprites.explosionCore, epx - coreRadius, epy - coreRadius, coreD, coreD)
         }
 
-        // ── 파이어볼 (가운데 확 부풀었다 사그라드는 공) ──
+        // ── 파이어볼 ──
         if (progress < 0.6) {
           const ballProgress = progress / 0.6
-          const ballRadius = 40 + easeOut * 120
-          const ballAlpha = Math.pow(1 - ballProgress, 1.1) * 1.0
-          const ballGrad = ctx.createRadialGradient(ePt.x, ePt.y, 0, ePt.x, ePt.y, ballRadius)
-          ballGrad.addColorStop(0, `rgba(255, 250, 220, ${ballAlpha})`)
-          ballGrad.addColorStop(0.25, `rgba(255, 180, 60, ${ballAlpha})`)
-          ballGrad.addColorStop(0.6, `rgba(230, 80, 20, ${ballAlpha * 0.7})`)
-          ballGrad.addColorStop(1, 'rgba(120, 10, 0, 0)')
-          ctx.globalAlpha = 1
-          ctx.fillStyle = ballGrad
-          ctx.beginPath()
-          ctx.arc(ePt.x, ePt.y, ballRadius, 0, Math.PI * 2)
-          ctx.fill()
+          const ballRadius = (40 + easeOut * 120) | 0
+          const ballAlpha = Math.pow(1 - ballProgress, 1.1)
+          const ballD = ballRadius * 2
+          ctx.globalAlpha = ballAlpha
+          ctx.drawImage(sprites.explosionFireball, epx - ballRadius, epy - ballRadius, ballD, ballD)
         }
 
         // ── 충격파 링 (이중, 빠르게) ──
         if (elapsed < 180) {
           const p1 = elapsed / 180
-          const r1 = p1 * 180
+          const r1 = (p1 * 180) | 0
           ctx.globalAlpha = (1 - p1) * 0.95
           ctx.strokeStyle = '#ffffff'
           ctx.lineWidth = 4 - p1 * 3
           ctx.beginPath()
-          ctx.arc(ePt.x, ePt.y, r1, 0, Math.PI * 2)
+          ctx.arc(epx, epy, r1, 0, Math.PI * 2)
           ctx.stroke()
         }
         if (elapsed < 280 && elapsed > 60) {
           const p2 = (elapsed - 60) / 220
-          const r2 = p2 * 240
+          const r2 = (p2 * 240) | 0
           ctx.globalAlpha = (1 - p2) * 0.7
           ctx.strokeStyle = '#ffaa44'
           ctx.lineWidth = 3 - p2 * 2.5
           ctx.beginPath()
-          ctx.arc(ePt.x, ePt.y, r2, 0, Math.PI * 2)
+          ctx.arc(epx, epy, r2, 0, Math.PI * 2)
           ctx.stroke()
         }
 
-        // ── 파편 파티클 (적당, 근거리 산발) ──
+        // ── 파편 파티클 ──
         const particleCount = 18
         const maxRadius = 110
-        const colorChoices = ['#ffaa44', '#ff6622', '#cc2200', '#661100']
         for (let i = 0; i < particleCount; i++) {
           const baseAngle = (i / particleCount) * Math.PI * 2
           const angle = baseAngle + (Math.random() - 0.5) * (Math.PI / 2)
           const speed = 0.4 + Math.random() * 0.9
-          const radius = maxRadius * easeOut * speed
-          const px = ePt.x + Math.cos(angle) * radius
-          const py = ePt.y + Math.sin(angle) * radius
+          const radius = (maxRadius * easeOut * speed) | 0
+          const px = (epx + Math.cos(angle) * radius) | 0
+          const py = (epy + Math.sin(angle) * radius) | 0
           const decay = Math.pow(1 - progress, 1.4)
-          const pSize = decay * (3 + Math.random() * 5)
-          ctx.fillStyle = colorChoices[i % colorChoices.length]
+          const pSize = (decay * (3 + Math.random() * 5)) | 0
+          ctx.fillStyle = EXPLOSION_DEBRIS_COLORS[i % EXPLOSION_DEBRIS_COLORS.length]
           ctx.globalAlpha = decay * 0.7
           ctx.beginPath()
           ctx.arc(px, py, pSize, 0, Math.PI * 2)
@@ -738,7 +742,7 @@ export function FireCanvas() {
       // ── 불 확산 궤적 (500 하드캡 초과 → 이웃 그리드로) ──
       const TRAJECTORY_DURATION = 400
       const TRAJECTORY_PARTICLES = 6
-      const TRAJECTORY_ARC = 0.35  // 포물선 꼭대기 높이 (이동 거리 대비)
+      const TRAJECTORY_ARC = 0.35
 
       for (const traj of trajectoriesRef.current) {
         const elapsed = now - traj.startTime
@@ -758,55 +762,35 @@ export function FireCanvas() {
         const dy = dstPt.y - srcPt.y
         const dist = Math.hypot(dx, dy)
 
-        ctx.globalCompositeOperation = 'lighter'
-
-        // 파편 여러 개가 조금씩 시차를 두고 날아감
         for (let i = 0; i < TRAJECTORY_PARTICLES; i++) {
-          const stagger = i * 0.06  // 각 파편은 60ms씩 지연
+          const stagger = i * 0.06
           const localP = Math.min(Math.max(progress - stagger, 0), 1)
           if (localP <= 0 || localP >= 1) continue
 
-          // ease-out으로 자연스럽게 도달
           const eased = 1 - Math.pow(1 - localP, 2)
-          // 포물선: y = -4h*t*(1-t) (t=0과 1에서 0, t=0.5에서 -h)
           const arcOffset = -4 * TRAJECTORY_ARC * dist * eased * (1 - eased)
           const jitter = (Math.sin(i * 1.7) + Math.cos(i * 2.3)) * 4
-          const px = srcPt.x + dx * eased + jitter
-          const py = srcPt.y + dy * eased + arcOffset
+          const px = (srcPt.x + dx * eased + jitter) | 0
+          const py = (srcPt.y + dy * eased + arcOffset) | 0
 
-          // 크기/알파: 중반에 가장 크고 밝음 → 끝에서 페이드
           const fade = Math.sin(localP * Math.PI)
-          const pSize = 2 + fade * 3
+          const pSize = ((2 + fade * 3) * 2) | 0
           const pAlpha = 0.85 * fade
 
-          // 색: 오렌지→빨강 그라디언트
-          const grad = ctx.createRadialGradient(px, py, 0, px, py, pSize * 2)
-          grad.addColorStop(0, `rgba(255, 230, 140, ${pAlpha})`)
-          grad.addColorStop(0.4, `rgba(255, 140, 40, ${pAlpha * 0.85})`)
-          grad.addColorStop(1, 'rgba(180, 40, 0, 0)')
-          ctx.globalAlpha = 1
-          ctx.fillStyle = grad
-          ctx.beginPath()
-          ctx.arc(px, py, pSize * 2, 0, Math.PI * 2)
-          ctx.fill()
+          ctx.globalAlpha = pAlpha
+          ctx.drawImage(sprites.trajectoryParticle, px - (pSize >> 1), py - (pSize >> 1), pSize, pSize)
         }
 
         // 도착 지점 작은 파편 폭발 (마지막 25%)
         if (progress > 0.75) {
           const landP = (progress - 0.75) / 0.25
           const landFade = 1 - landP
-          const landR = 3 + landP * 10
-          const landGrad = ctx.createRadialGradient(
-            dstPt.x, dstPt.y, 0, dstPt.x, dstPt.y, landR,
-          )
-          landGrad.addColorStop(0, `rgba(255, 220, 130, ${landFade * 0.9})`)
-          landGrad.addColorStop(0.5, `rgba(255, 120, 40, ${landFade * 0.6})`)
-          landGrad.addColorStop(1, 'rgba(180, 40, 0, 0)')
-          ctx.globalAlpha = 1
-          ctx.fillStyle = landGrad
-          ctx.beginPath()
-          ctx.arc(dstPt.x, dstPt.y, landR, 0, Math.PI * 2)
-          ctx.fill()
+          const landR = (3 + landP * 10) | 0
+          const landD = landR * 2
+          const dpx = dstPt.x | 0
+          const dpy = dstPt.y | 0
+          ctx.globalAlpha = landFade
+          ctx.drawImage(sprites.trajectoryLanding, dpx - landR, dpy - landR, landD, landD)
         }
 
         if (progress >= 1) {
