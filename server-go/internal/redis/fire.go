@@ -4,7 +4,7 @@
 // Each fire grid is stored as a Redis Sorted Set where:
 //   - Key:    fire:{gridId}   (e.g., "fire:37.576:126.977")
 //   - Member: unique event ID (e.g., "fire-a1b2c3d4e5f6")
-//   - Score:  expiration timestamp (Unix seconds, typically now + 2400)
+//   - Score:  expiration timestamp (Unix seconds, typically now + 43200)
 //
 // Active fires are counted via ZCOUNT with score range [now, +inf].
 // Expired fires are cleaned up via ZREMRANGEBYSCORE with range [-inf, now].

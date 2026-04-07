@@ -49,7 +49,7 @@ func TestZAdd_And_ZCount(t *testing.T) {
 	defer rdb.Del(ctx, key)
 
 	now := float64(time.Now().Unix())
-	expireAt := now + 2400 // 40 minutes from now
+	expireAt := now + 43200 // 12 hours from now
 
 	// Add 3 fire events with future expiration (active)
 	for i := 0; i < 3; i++ {
@@ -102,7 +102,7 @@ func TestZRemRangeByScore_Cleanup(t *testing.T) {
 
 	// Add active fires (future score)
 	for i := 0; i < 3; i++ {
-		err := client.ZAdd(ctx, key, now+2400+float64(i), fmt.Sprintf("active-%d", i))
+		err := client.ZAdd(ctx, key, now+43200+float64(i), fmt.Sprintf("active-%d", i))
 		if err != nil {
 			t.Fatalf("ZAdd active failed: %v", err)
 		}
@@ -250,7 +250,7 @@ func TestFireRegistration_FullFlow(t *testing.T) {
 	defer rdb.Del(ctx, fireKey, activeGridsKey, totalFiresKey)
 
 	now := float64(time.Now().Unix())
-	expireAt := now + 2400 // 40-minute TTL
+	expireAt := now + 43200 // 12-hour TTL
 
 	// Step 1: Register a new fire event (mirrors registerFireEvent in fire_ignite.go)
 	eventID := "fire-abc123def456"
@@ -385,7 +385,7 @@ func TestClient_ScoreFormat_CompatibleWithPython(t *testing.T) {
 	// Go uses time.Now().Unix() which returns int64 seconds.
 	// Both are stored as float64 scores in Redis.
 	now := float64(time.Now().Unix())
-	expireAt := now + 2400.0
+	expireAt := now + 43200.0
 
 	err := client.ZAdd(ctx, key, expireAt, "fire-compat-1")
 	if err != nil {

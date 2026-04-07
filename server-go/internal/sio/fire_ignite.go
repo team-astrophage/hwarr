@@ -13,8 +13,8 @@ import (
 	socketio "github.com/homeworldio/socketio-go"
 )
 
-// FireTTLSec is the default fire event TTL in seconds (40 minutes).
-const FireTTLSec = 2400
+// FireTTLSec is the default fire event TTL in seconds (12 hours).
+const FireTTLSec = 43200
 
 // StatsDailyFiresTTL is the TTL for daily fire counters (48h for KST date boundary safety).
 const StatsDailyFiresTTL = 48 * time.Hour

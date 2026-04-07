@@ -12,8 +12,8 @@ import (
 	"github.com/homepy/hwarr/server-go/internal/model"
 )
 
-// FireTTLSec is the default fire TTL in seconds (40 minutes).
-const FireTTLSec = 2400
+// FireTTLSec is the default fire TTL in seconds (12 hours).
+const FireTTLSec = 43200
 
 // FireSpreadThreshold is the active fire count above which fires spread to neighbors.
 const FireSpreadThreshold = 500
