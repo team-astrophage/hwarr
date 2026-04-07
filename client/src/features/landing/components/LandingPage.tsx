@@ -14,8 +14,8 @@ export function LandingPage() {
 
   return (
     <div className="relative flex min-h-svh flex-col bg-[var(--color-bg-base)]">
-      <title>화르르 — 지금, 이 자리에서 불을 질러라</title>
-      <meta name="description" content="GPS 기반 실시간 스트레스 해소 서비스. 내 위치에 불을 지르고, 전국에서 불타는 곳을 구경하세요." />
+      <title>화르르 — 지도 위에서 스트레스를 불태우세요</title>
+      <meta name="description" content="GPS 기반 가상 스트레스 해소 게임. 지도 위 내 위치에 가상의 불을 피우고, 전국의 실시간 현황을 구경하세요." />
       <Header />
 
       <main className="mt-5 flex flex-1 flex-col gap-8 px-5 pt-6 pb-[calc(7.75rem+env(safe-area-inset-bottom,0px))]">
