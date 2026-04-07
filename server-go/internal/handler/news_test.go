@@ -17,7 +17,7 @@ import (
 type mockRedisNewsReader struct {
 	members   map[string][]string         // key -> set members
 	counts    map[string]int64            // key -> zcount result
-	zrevrange map[string][]ZMember        // key -> sorted set members
+	zrevrange map[string][]model.ZMember        // key -> sorted set members
 	err       error
 }
 
@@ -35,7 +35,7 @@ func (m *mockRedisNewsReader) ZCount(_ context.Context, key, _, _ string) (int64
 	return m.counts[key], nil
 }
 
-func (m *mockRedisNewsReader) ZRevRangeWithScores(_ context.Context, key string, _, _ int64) ([]ZMember, error) {
+func (m *mockRedisNewsReader) ZRevRangeWithScores(_ context.Context, key string, _, _ int64) ([]model.ZMember, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -81,7 +81,7 @@ func TestGetNews_SingleSmallFire(t *testing.T) {
 	mock := &mockRedisNewsReader{
 		members:   map[string][]string{"active_grids": {gridID}},
 		counts:    map[string]int64{fireKey: 3},
-		zrevrange: map[string][]ZMember{fireKey: {{Member: "user1", Score: now + 86400}}},
+		zrevrange: map[string][]model.ZMember{fireKey: {{Member: "user1", Score: now + 86400}}},
 	}
 	router := setupNewsRouter(mock)
 
@@ -133,7 +133,7 @@ func TestGetNews_MultipleFires_SortedByStageAndCount(t *testing.T) {
 			fmt.Sprintf("fire:%s", grid2): 25,  // stage 2 (모닥불)
 			fmt.Sprintf("fire:%s", grid3): 5,   // stage 1 (불씨)
 		},
-		zrevrange: map[string][]ZMember{
+		zrevrange: map[string][]model.ZMember{
 			fmt.Sprintf("fire:%s", grid1): {{Score: now + 86400}},
 			fmt.Sprintf("fire:%s", grid2): {{Score: now + 86400}},
 			fmt.Sprintf("fire:%s", grid3): {{Score: now + 86400}},
@@ -173,7 +173,7 @@ func TestGetNews_MaxItems(t *testing.T) {
 	// Create 7 grids — should return only 5
 	gridIDs := make([]string, 7)
 	counts := make(map[string]int64)
-	zrev := make(map[string][]ZMember)
+	zrev := make(map[string][]model.ZMember)
 	now := float64(1700000000)
 
 	for i := 0; i < 7; i++ {
@@ -181,7 +181,7 @@ func TestGetNews_MaxItems(t *testing.T) {
 		gridIDs[i] = gid
 		key := fmt.Sprintf("fire:%s", gid)
 		counts[key] = int64((i + 1) * 5) // 5, 10, 15, 20, 25, 30, 35
-		zrev[key] = []ZMember{{Score: now + 86400}}
+		zrev[key] = []model.ZMember{{Score: now + 86400}}
 	}
 
 	mock := &mockRedisNewsReader{
@@ -219,7 +219,7 @@ func TestGetNews_SkipsZeroCountGrids(t *testing.T) {
 			fmt.Sprintf("fire:%s", grid1): 0,  // no active fires
 			fmt.Sprintf("fire:%s", grid2): 10, // campfire
 		},
-		zrevrange: map[string][]ZMember{
+		zrevrange: map[string][]model.ZMember{
 			fmt.Sprintf("fire:%s", grid2): {{Score: now + 86400}},
 		},
 	}
@@ -257,7 +257,7 @@ func TestGetNews_BigFireTemplate(t *testing.T) {
 	mock := &mockRedisNewsReader{
 		members:   map[string][]string{"active_grids": {gridID}},
 		counts:    map[string]int64{fireKey: 150}, // stage 4
-		zrevrange: map[string][]ZMember{fireKey: {{Score: now + 86400}}},
+		zrevrange: map[string][]model.ZMember{fireKey: {{Score: now + 86400}}},
 	}
 	router := setupNewsRouter(mock)
 
@@ -288,7 +288,7 @@ func TestGetNews_FireActiveTemplate(t *testing.T) {
 	mock := &mockRedisNewsReader{
 		members:   map[string][]string{"active_grids": {gridID}},
 		counts:    map[string]int64{fireKey: 50}, // stage 3
-		zrevrange: map[string][]ZMember{fireKey: {{Score: now + 86400}}},
+		zrevrange: map[string][]model.ZMember{fireKey: {{Score: now + 86400}}},
 	}
 	router := setupNewsRouter(mock)
 
@@ -319,7 +319,7 @@ func TestGetNews_ResponseFormat(t *testing.T) {
 	mock := &mockRedisNewsReader{
 		members:   map[string][]string{"active_grids": {gridID}},
 		counts:    map[string]int64{fireKey: 3},
-		zrevrange: map[string][]ZMember{fireKey: {{Score: now + 86400}}},
+		zrevrange: map[string][]model.ZMember{fireKey: {{Score: now + 86400}}},
 	}
 	router := setupNewsRouter(mock)
 

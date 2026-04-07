@@ -8,15 +8,16 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server-go/internal/model"
 )
 
 // mockRedisRankingReader implements RedisRankingReader for testing.
 type mockRedisRankingReader struct {
-	members []ZMember
+	members []model.ZMember
 	err     error
 }
 
-func (m *mockRedisRankingReader) ZRevRangeWithScores(_ context.Context, _ string, _, _ int64) ([]ZMember, error) {
+func (m *mockRedisRankingReader) ZRevRangeWithScores(_ context.Context, _ string, _, _ int64) ([]model.ZMember, error) {
 	return m.members, m.err
 }
 
@@ -29,7 +30,7 @@ func setupRankingRouter(mock *mockRedisRankingReader) *gin.Engine {
 }
 
 func TestRankingHandler_EmptyResult(t *testing.T) {
-	r := setupRankingRouter(&mockRedisRankingReader{members: []ZMember{}})
+	r := setupRankingRouter(&mockRedisRankingReader{members: []model.ZMember{}})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/ranking/today", nil)
@@ -54,7 +55,7 @@ func TestRankingHandler_EmptyResult(t *testing.T) {
 
 func TestRankingHandler_WithData(t *testing.T) {
 	mock := &mockRedisRankingReader{
-		members: []ZMember{
+		members: []model.ZMember{
 			{Member: "서초동", Score: 42},
 			{Member: "강남동", Score: 30},
 			{Member: "역삼동", Score: 15},
@@ -104,9 +105,9 @@ func TestRankingHandler_WithData(t *testing.T) {
 
 func TestRankingHandler_DefaultLimit(t *testing.T) {
 	// Default limit is 10; provide more than 10 members
-	members := make([]ZMember, 15)
+	members := make([]model.ZMember, 15)
 	for i := range members {
-		members[i] = ZMember{Member: "region", Score: float64(15 - i)}
+		members[i] = model.ZMember{Member: "region", Score: float64(15 - i)}
 	}
 
 	mock := &mockRedisRankingReader{members: members}
@@ -134,7 +135,7 @@ func TestRankingHandler_DefaultLimit(t *testing.T) {
 }
 
 func TestRankingHandler_LimitClamping(t *testing.T) {
-	mock := &mockRedisRankingReader{members: []ZMember{}}
+	mock := &mockRedisRankingReader{members: []model.ZMember{}}
 	r := setupRankingRouter(mock)
 
 	// Test limit > 50 gets clamped
@@ -182,7 +183,7 @@ func TestRankingHandler_RedisError(t *testing.T) {
 
 func TestRankingHandler_ResponseShape(t *testing.T) {
 	mock := &mockRedisRankingReader{
-		members: []ZMember{
+		members: []model.ZMember{
 			{Member: "종로구", Score: 10},
 		},
 	}

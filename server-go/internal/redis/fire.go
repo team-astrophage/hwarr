@@ -16,14 +16,9 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
-)
 
-// ZMember represents a sorted set member with its score.
-// Used by ZRevRangeWithScores and compatible with handler.ZMember.
-type ZMember struct {
-	Member string
-	Score  float64
-}
+	"github.com/homepy/hwarr/server-go/internal/model"
+)
 
 // Client wraps a go-redis client and provides methods that satisfy
 // all fire-related Redis interfaces defined across the codebase.
@@ -96,14 +91,14 @@ func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (in
 // ZRevRangeWithScores returns the specified range of elements in the sorted set
 // stored at key, ordered from highest to lowest score.
 // Used to get the latest fire event timestamp.
-func (c *Client) ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]ZMember, error) {
+func (c *Client) ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]model.ZMember, error) {
 	result, err := c.rdb.ZRevRangeWithScores(ctx, key, start, stop).Result()
 	if err != nil {
 		return nil, err
 	}
-	members := make([]ZMember, len(result))
+	members := make([]model.ZMember, len(result))
 	for i, z := range result {
-		members[i] = ZMember{
+		members[i] = model.ZMember{
 			Member: fmt.Sprintf("%v", z.Member),
 			Score:  z.Score,
 		}

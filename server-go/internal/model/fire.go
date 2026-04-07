@@ -1,5 +1,12 @@
 package model
 
+// ZMember represents a sorted set member with its score.
+// Shared across handler and redis packages to avoid adapter boilerplate.
+type ZMember struct {
+	Member string
+	Score  float64
+}
+
 // FireStage represents fire intensity stages.
 type FireStage int
 

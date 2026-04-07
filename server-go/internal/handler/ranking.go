@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server-go/internal/model"
 )
 
 // Redis key prefix for daily ranking sorted sets.
@@ -16,7 +17,7 @@ const StatsDailyRankingPrefix = "stats:daily_ranking:"
 type RedisRankingReader interface {
 	// ZRevRangeWithScores returns the specified range of elements in the
 	// sorted set at key, ordered from high to low score.
-	ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]ZMember, error)
+	ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]model.ZMember, error)
 }
 
 // RankingHandler serves the GET /api/ranking/today endpoint.

@@ -27,12 +27,6 @@ var newsTTLSec = func() float64 {
 	return 86400 // 1 day default
 }()
 
-// ZMember represents a sorted set member with its score.
-type ZMember struct {
-	Member string
-	Score  float64
-}
-
 // RedisNewsReader abstracts the Redis operations needed by NewsHandler.
 type RedisNewsReader interface {
 	// SMembers returns all members of the set at key.
@@ -42,7 +36,7 @@ type RedisNewsReader interface {
 	ZCount(ctx context.Context, key, min, max string) (int64, error)
 	// ZRevRangeWithScores returns the specified range of elements in the
 	// sorted set at key, ordered from high to low score.
-	ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]ZMember, error)
+	ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]model.ZMember, error)
 }
 
 // NewsHandler serves the GET /api/news endpoint.
