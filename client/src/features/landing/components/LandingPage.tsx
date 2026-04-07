@@ -20,7 +20,7 @@ export function LandingPage() {
 
       <main className="mt-5 flex flex-1 flex-col gap-8 px-5 pt-6 pb-[calc(7.75rem+env(safe-area-inset-bottom,0px))]">
         {/* Hero */}
-        <section className="pt-20 pb-2">
+        <section className="py-5">
           <h1
             className="text-[2.375rem] font-bold text-[var(--color-text-max)] leading-[1.08] tracking-[-0.035em]"
             style={{ textWrap: 'balance' }}
@@ -43,9 +43,14 @@ export function LandingPage() {
 
         {/* 상황판 */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-[1rem] font-bold leading-none tracking-tight text-[var(--color-text-base)]">
-            상황판
-          </h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-[1rem] font-bold leading-none tracking-tight text-[var(--color-text-base)]">
+              상황판
+            </h2>
+            <p className="text-[0.75rem] leading-relaxed text-[var(--color-text-secondary)]">
+              개별 불씨는 12시간 후 자연 소멸되며, 매일 00시에 초기화됩니다.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-2.5">
             <StatCard
               label="실시간 화재 구역"
