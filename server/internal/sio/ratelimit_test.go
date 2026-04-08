@@ -8,8 +8,8 @@ import (
 func TestAllow_WithinLimit(t *testing.T) {
 	rl := NewRateLimiter(nil)
 
-	// fire:ignite has burst=3, so the first 3 calls should succeed.
-	for i := 0; i < 3; i++ {
+	// fire:ignite has burst=17, so the first 17 calls should succeed.
+	for i := 0; i < 17; i++ {
 		if !rl.Allow("s1", "fire:ignite") {
 			t.Fatalf("expected Allow to return true on call %d", i+1)
 		}
@@ -19,8 +19,8 @@ func TestAllow_WithinLimit(t *testing.T) {
 func TestAllow_ExceedsLimit(t *testing.T) {
 	rl := NewRateLimiter(nil)
 
-	// Exhaust the burst for fire:ignite (burst=3).
-	for i := 0; i < 3; i++ {
+	// Exhaust the burst for fire:ignite (burst=17).
+	for i := 0; i < 17; i++ {
 		rl.Allow("s1", "fire:ignite")
 	}
 
@@ -50,7 +50,7 @@ func TestAllow_DisconnectAfterMaxViolations(t *testing.T) {
 	})
 
 	// Exhaust burst for fire:ignite.
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 17; i++ {
 		rl.Allow("s1", "fire:ignite")
 	}
 
@@ -114,7 +114,7 @@ func TestRemove_AfterDisconnect_NoState(t *testing.T) {
 	rl := NewRateLimiter(func(sid string) {})
 
 	// Exhaust and trigger disconnect.
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 17; i++ {
 		rl.Allow("s1", "fire:ignite")
 	}
 	for i := 0; i < maxViolations+1; i++ {
