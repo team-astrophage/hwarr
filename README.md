@@ -51,6 +51,16 @@ npm run dev
 
 > 상세 가이드: [로컬 개발 환경 구축](docs/how-to/local-dev-setup.md)
 
+## 개발 환경 설정
+
+### Git Hooks 활성화
+
+프로젝트는 커밋 시 Go 코드를 자동 포매팅하는 pre-commit hook을 사용한다. clone 후 한 번만 실행하면 된다.
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## 프로젝트 구조
 
 ```
