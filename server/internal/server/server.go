@@ -49,7 +49,10 @@ func Run(cfg *config.Config) error {
 		logger.Printf("Admin region resolver loaded: %d regions", resolver.RegionCount())
 	}
 
-	registerSocketEvents(sioServer, manager, redisClient, resolver, logger)
+	batcher := sio.NewFireBatcher(sioServer, 200*time.Millisecond, logger)
+	batcher.Start()
+
+	registerSocketEvents(sioServer, manager, redisClient, resolver, logger, batcher)
 
 	// Background engines
 	progressionEngine, cleanupEngine := startBackgroundEngines(redisClient, sioServer, logger)
@@ -80,6 +83,7 @@ func Run(cfg *config.Config) error {
 
 		logger.Println("Shutting down...")
 
+		batcher.Stop()
 		reaper.Stop()
 		progressionEngine.Stop()
 		cleanupEngine.Stop()
@@ -157,14 +161,14 @@ func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Serve
 }
 
 // registerSocketEvents wires all Socket.IO event handlers.
-func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger) {
+func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher) {
 	// Fire events
-	sio.RegisterFireIgniteHandler(sioServer, manager, redisClient, resolver, logger)
+	sio.RegisterFireIgniteHandler(sioServer, manager, redisClient, resolver, logger, batcher)
 	sio.RegisterFireStateHandler(sioServer, redisClient, logger)
 	sio.RegisterSubscribeViewportHandler(sioServer, manager, redisClient, logger)
 
 	// Compat events (mock server)
-	sio.RegisterFireCompatHandler(sioServer, manager, redisClient, resolver, logger)
+	sio.RegisterFireCompatHandler(sioServer, manager, redisClient, resolver, logger, batcher)
 	sio.RegisterGetFiresCompatHandler(sioServer, redisClient, logger)
 
 	// Chat events

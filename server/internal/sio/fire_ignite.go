@@ -93,7 +93,7 @@ var predefinedDemoLocations = []demoLocation{
 //  1. Converts GPS to grid ID (or picks random demo location if demo=true without coords)
 //  2. Registers fire event in Redis (with neighbor spreading if threshold exceeded)
 //  3. Broadcasts fire:ignite to grid room (viewport subscribers)
-//  4. Broadcasts fire:global_update to all clients
+//  4. Enqueues fire:update to batcher (room-scoped, replaces global broadcast)
 //  5. Returns ack with full fire state to the igniting client
 //
 // Mirrors Python server/sio/events.py handle_fire_ignite.
@@ -103,6 +103,7 @@ func RegisterFireIgniteHandler(
 	redis RedisFireWriter,
 	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
+	batcher *FireBatcher,
 ) {
 	if logger == nil {
 		logger = log.Default()
@@ -192,28 +193,32 @@ func RegisterFireIgniteHandler(
 			logger.Printf("fire:ignite broadcast to room %s failed: %v", gridID, err)
 		}
 
-		// Broadcast fire:global_update to all clients
-		globalPayload := map[string]interface{}{
-			"grid_id":      gridID,
-			"active_count": activeCount,
-			"stage":        state.Stage,
-			"stage_info":   gridStateInfoToMap(state.StageInfo),
-			"timestamp":    now,
-		}
+		// Enqueue batched room-scoped update (replaces global broadcast)
+		batcher.Add(FireUpdate{
+			GridID:      gridID,
+			ActiveCount: activeCount,
+			Stage:       state.Stage,
+			EventID:     eventID,
+			Timestamp:   now,
+		})
 
-		if _, err := sioServer.BroadcastToNamespace("/", "fire:global_update", globalPayload); err != nil {
-			logger.Printf("fire:global_update broadcast failed: %v", err)
-		}
-
-		// Broadcast fire:spread animation event if the fire moved to a neighbor
+		// Broadcast fire:spread animation to affected grid rooms only
 		if len(spreadPath) > 0 {
 			spreadPayload := map[string]interface{}{
 				"path":      spreadPath,
 				"event_id":  eventID,
 				"timestamp": now,
 			}
-			if _, err := sioServer.BroadcastToNamespace("/", "fire:spread", spreadPayload); err != nil {
-				logger.Printf("fire:spread broadcast failed: %v", err)
+			// Collect unique grid IDs involved in the spread path
+			affectedGrids := make(map[string]struct{})
+			for _, sp := range reg.SpreadPath {
+				affectedGrids[sp[0]] = struct{}{}
+				affectedGrids[sp[1]] = struct{}{}
+			}
+			for room := range affectedGrids {
+				if _, err := sioServer.BroadcastToRoom("/", room, "fire:spread", spreadPayload); err != nil {
+					logger.Printf("fire:spread broadcast to room %s failed: %v", room, err)
+				}
 			}
 		}
 

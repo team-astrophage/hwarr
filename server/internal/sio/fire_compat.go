@@ -40,6 +40,7 @@ func RegisterFireCompatHandler(
 	redis RedisFireWriter,
 	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
+	batcher *FireBatcher,
 ) {
 	if logger == nil {
 		logger = log.Default()
@@ -97,18 +98,14 @@ func RegisterFireCompatHandler(
 		lngP := &lng
 		state := model.BuildGridState(gridID, activeCount, latP, lngP)
 
-		// Broadcast in camelCase format (mock server compat)
-		fireUpdatePayload := map[string]interface{}{
-			"gridId":      gridID,
-			"activeCount": activeCount,
-			"stage":       state.Stage,
-			"lat":         lat,
-			"lng":         lng,
-		}
-
-		if _, err := sioServer.BroadcastToNamespace("/", "fire:update", fireUpdatePayload); err != nil {
-			logger.Printf("fire:update broadcast failed: %v", err)
-		}
+		// Enqueue batched room-scoped update (replaces global broadcast)
+		batcher.Add(FireUpdate{
+			GridID:      gridID,
+			ActiveCount: activeCount,
+			Stage:       state.Stage,
+			Lat:         &lat,
+			Lng:         &lng,
+		})
 
 		logger.Printf("fire (compat) sid=%s requested=%s landed=%s count=%d stage=%d spread=%d",
 			sid, requestedGridID, gridID, activeCount, state.Stage, len(reg.SpreadPath))
