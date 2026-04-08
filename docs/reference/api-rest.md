@@ -695,7 +695,7 @@ Router prefix: `/api`, tag: `feedback`
 
 | 코드 | 조건 | `detail` 값 |
 |------|------|-------------|
-| `422` | 유효성 검사 실패 (category 오류, message 빈값/초과 등) | Pydantic validation error |
+| `422` | 유효성 검사 실패 (category 오류, message 빈값/초과 등) | validation error |
 | `429` | Rate limit 초과 (10분 내 3회 초과) | `"rate_limited"` |
 | `502` | Discord webhook 전송 실패 | `"webhook_failed"` |
 | `503` | `FEEDBACK_DISCORD_WEBHOOK_URL` 미설정 | `"feedback_disabled"` |
@@ -740,7 +740,7 @@ Redis 연결이 끊어졌거나 FireProgressionEngine이 초기화되지 않은 
 
 ### 422 Unprocessable Entity
 
-Pydantic validation 실패 시 (잘못된 타입, 필수 필드 누락 등):
+Validation 실패 시 (잘못된 타입, 필수 필드 누락 등):
 
 ```json
 {
@@ -756,7 +756,7 @@ Pydantic validation 실패 시 (잘못된 타입, 필수 필드 누락 등):
 
 ### 일반 에러 형식
 
-FastAPI 기본 에러 응답 형식을 따릅니다:
+에러 응답 형식:
 
 ```json
 {

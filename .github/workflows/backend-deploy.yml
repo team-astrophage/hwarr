@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "server-go/**"
+      - "server/**"
       - ".github/workflows/backend-deploy.yml"
   workflow_dispatch:
 
@@ -50,7 +50,7 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
                        -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                       ./server-go
+                       ./server
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT

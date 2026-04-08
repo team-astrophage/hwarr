@@ -565,7 +565,7 @@ socket.on('disconnect', (reason) => {
 
 ### 5.6 추가 설정 상수 (config.ts)
 
-불 시스템 관련 상수도 `config.ts`에 정의되어 있으며, 서버(`grid.py`)와 동일한 값을 유지해야 한다:
+불 시스템 관련 상수도 `config.ts`에 정의되어 있으며, 서버(`internal/grid/grid.go`)와 동일한 값을 유지해야 한다:
 
 | 상수 | 값 | 비고 |
 |------|-----|------|

@@ -13,8 +13,8 @@
 ```
 houston/
 ├── server/
-│   ├── config.py              # Redis key, TTL 등 설정 상수
-│   └── routes/stats.py        # GET /api/stats 엔드포인트
+│   ├── internal/config/config.go   # 설정
+│   └── internal/handler/stats.go   # GET /api/stats 핸들러
 └── client/
     └── src/features/landing/
         ├── api/useStats.ts            # TanStack Query 훅 & 타입 정의
@@ -26,7 +26,7 @@ houston/
 데이터 흐름은 다음과 같습니다.
 
 ```
-Redis → server/routes/stats.py → JSON 응답 → useStats 훅 → LandingPage → StatCard
+Redis → server/internal/handler/stats.go → JSON 응답 → useStats 훅 → LandingPage → StatCard
 ```
 
 ---
@@ -37,54 +37,15 @@ Redis → server/routes/stats.py → JSON 응답 → useStats 훅 → LandingPag
 
 ### 2-1. Redis key 등록 (필요시)
 
-새 통계가 Redis에 저장되는 값이라면, `server/config.py`에 key를 등록합니다.
+새 통계가 Redis에 저장되는 값이라면, `server/internal/engine/constants.go`에 key 상수를 등록합니다.
 
-```python
-# server/config.py
+### 2-2. handler 응답에 필드 추가
 
-# 기존 키들
-STATS_TOTAL_FIRES_KEY = "stats:total_fires"
-STATS_DAILY_FIRES_PREFIX = "stats:daily_fires:"
-
-# 새로 추가
-STATS_PEAK_USERS_KEY = "stats:peak_users"
-```
-
-### 2-2. endpoint 응답에 필드 추가
-
-`server/routes/stats.py`의 `get_stats()` 함수에서 새 값을 조회하고 응답 dict에 포함시킵니다.
-
-```python
-# server/routes/stats.py
-
-from config import KST, STATS_TOTAL_FIRES_KEY, STATS_DAILY_FIRES_PREFIX, STATS_PEAK_USERS_KEY
-
-@router.get("/stats", summary="Get global fire statistics for landing page")
-async def get_stats() -> dict:
-    engine = _get_engine()
-    mgr = _get_manager()
-    redis = engine._redis
-    now = time.time()
-
-    # ... 기존 로직 ...
-
-    # 새 통계 조회
-    peak_raw = await redis.get(STATS_PEAK_USERS_KEY)
-    peak_users = int(peak_raw) if peak_raw else 0
-
-    return {
-        "activeGrids": active_grids,
-        "totalFires": total_fires,
-        "cumulativeFires": cumulative_fires,
-        "dailyFires": daily_fires,
-        "onlineUsers": mgr.active_count,
-        "peakUsers": peak_users,           # 새 필드
-    }
-```
+`server/internal/handler/stats.go`의 핸들러에서 새 값을 조회하고 응답에 포함시킵니다.
 
 **핵심 규칙:**
-- 응답 필드명은 **camelCase**를 사용합니다 (frontend 호환).
-- Redis에서 가져온 값이 `None`일 수 있으므로 반드시 fallback 처리합니다.
+- 응답 필드명은 **camelCase**를 사용합니다 (frontend 호환, `json:"camelCase"` 태그).
+- Redis에서 가져온 값이 빈 문자열일 수 있으므로 반드시 fallback 처리합니다.
 
 ---
 
@@ -195,14 +156,13 @@ interface StatCardProps {
 ```bash
 # 프로젝트 루트에서
 cd server
-pip install -r requirements.txt   # 첫 실행시
-uvicorn main:app --reload --port 8000
+go run .
 ```
 
 API 응답을 직접 확인합니다:
 
 ```bash
-curl http://localhost:8000/api/stats | python -m json.tool
+curl http://localhost:8000/api/stats | jq .
 ```
 
 기대 응답:
@@ -246,7 +206,7 @@ pnpm dev
 ```bash
 git checkout -b feat/add-online-users-stat
 
-git add server/routes/stats.py server/config.py
+git add server/internal/handler/stats.go server/internal/engine/constants.go
 git add client/src/features/landing/api/useStats.ts
 git add client/src/features/landing/components/LandingPage.tsx
 
@@ -294,8 +254,8 @@ refactor(client): extract stat tone config
 
 | 파일 | 변경 내용 |
 |------|----------|
-| `server/config.py` | Redis key 상수 추가 (새 통계인 경우) |
-| `server/routes/stats.py` | endpoint 응답에 새 필드 포함 |
+| `server/internal/engine/constants.go` | Redis key 상수 추가 (새 통계인 경우) |
+| `server/internal/handler/stats.go` | handler 응답에 새 필드 포함 |
 | `client/src/features/landing/api/useStats.ts` | `StatsData` interface에 필드 추가 |
 | `client/src/features/landing/components/LandingPage.tsx` | `StatCard` 추가 |
 | `client/src/features/landing/components/StatCard.tsx` | 새 tone 추가 (필요시만) |

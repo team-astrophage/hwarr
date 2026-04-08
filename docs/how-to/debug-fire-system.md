@@ -91,7 +91,7 @@ redis-cli KEYS "stats:*"
 
 ## 2. 서버 로그 패턴으로 문제 추적
 
-서버는 Python `logging` 모듈을 사용한다. 주요 로그 패턴은 다음과 같다.
+서버는 Go `log` 패키지를 사용한다. 주요 로그 패턴은 다음과 같다.
 
 ### 2.1 단계 변경 (stage change)
 

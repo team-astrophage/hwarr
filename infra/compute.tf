@@ -260,14 +260,30 @@ resource "aws_ecs_task_definition" "backend" {
           name  = "REDIS_URL"
           value = "rediss://${aws_elasticache_serverless_cache.redis.endpoint[0].address}:6379/0"
         },
+        {
+          name  = "ALLOWED_ORIGINS"
+          value = "https://${var.domain_name},https://www.${var.domain_name}"
+        },
+        {
+          name  = "MAX_CONNECTIONS_PER_IP"
+          value = "50"
+        },
+        {
+          name  = "TOKEN_TTL_MIN"
+          value = "30"
+        },
       ]
 
       # Sensitive values sourced from SSM Parameter Store (SecureString).
-      # Created out-of-band via scripts/put-feedback-secrets.sh.
+      # Created out-of-band: aws ssm put-parameter --name <path> --type SecureString --value <value>
       secrets = [
         {
           name      = "FEEDBACK_DISCORD_WEBHOOK_URL"
           valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/feedback_discord_webhook_url"
+        },
+        {
+          name      = "TOKEN_SECRET"
+          valueFrom = "arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.ssm_prefix}/token_secret"
         },
       ]
 

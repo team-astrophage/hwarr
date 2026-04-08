@@ -12,7 +12,7 @@ GitHub Actions 워크플로우 5개가 CI/CD 및 자동화를 담당한다.
 
 | 워크플로우 | 파일 | 트리거 | 역할 |
 |---|---|---|---|
-| **CI** | `.github/workflows/ci.yml` | `main` branch push / PR (`server/**` 변경 시) | Lint (ruff) + Test (pytest) |
+| **CI** | `.github/workflows/ci.yml` | `main` branch push / PR (`server/**` 변경 시) | Lint (go vet/gofmt) + Test (go test) |
 | **Backend CI/CD** | `.github/workflows/backend-deploy.yml` | `main` branch push (`server/**` 변경 시) / 수동 | Docker build → ECR push → ECS deploy |
 | **Frontend CI/CD** | `.github/workflows/frontend-deploy.yml` | `main` branch push (`client/**` 변경 시) / 수동 | Vite build → S3 sync → CloudFront invalidation |
 
@@ -49,9 +49,9 @@ git push (server/** 변경)
 
 `server/Dockerfile` 기반으로 빌드된다.
 
-- Base image: `python:3.12-slim`
+- Multi-stage build: Go 빌드 후 Alpine 3.20 런타임 이미지 사용
 - 행정동 GeoJSON 데이터를 build 시 다운로드하여 `data/` 에 포함
-- 엔트리포인트: `uvicorn main:combined_app --host 0.0.0.0 --port 8000`
+- 엔트리포인트: `./hwarr-server` (Go 바이너리)
 - Health check: `/health` 엔드포인트
 
 ### ECS 구성

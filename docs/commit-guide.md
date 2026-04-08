@@ -18,7 +18,7 @@
 | 스코프   | 대상                          | 예시                                    |
 | -------- | ----------------------------- | --------------------------------------- |
 | `client` | `client/` (React 프론트엔드)  | `feat(client): 랜딩 페이지 통계 구현`   |
-| `server` | `server/` (FastAPI 백엔드)    | `fix(server): 불 단계 계산 오류 수정`   |
+| `server` | `server/` (Go Gin 백엔드)     | `fix(server): 불 단계 계산 오류 수정`   |
 | `infra`  | Terraform, Docker, CI/CD      | `chore(infra): ECS 메모리 제한 조정`    |
 | `docs`   | `docs/` 문서                  | `docs: Socket.IO 이벤트 문서 추가`      |
 
@@ -169,4 +169,4 @@ feat(client): 소방차 오버레이 렌더링 구현
 - [ ] 제목이 구체적인가?
 - [ ] 타입과 스코프가 올바른가?
 - [ ] 프론트: 타입 체크 통과 (`cd client && npx tsc --noEmit`)
-- [ ] 백엔드: 린트 통과 (`cd server && ruff check .`)
+- [ ] 백엔드: 린트 통과 (`cd server && go vet ./...`)
