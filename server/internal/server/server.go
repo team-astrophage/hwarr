@@ -43,8 +43,15 @@ func Run(cfg *config.Config) error {
 	// Socket.IO + Engine.IO
 	sioServer, eioServer := setupSocketServers(cfg, logger)
 
+	// Rate limiter — created early so its cleanup callback can be passed to the
+	// disconnect handler registered inside NewHandler, avoiding the previous bug
+	// where a second OnDisconnect call overwrote the first.
+	rl := sio.NewRateLimiter(func(sid string) {
+		sioServer.DisconnectAll(sid, "rate limit exceeded")
+	})
+
 	// Connection manager + SIO event handlers
-	sioHandler := sio.NewHandler(sioServer, logger, tokenService)
+	sioHandler := sio.NewHandler(sioServer, logger, tokenService, rl.Remove)
 	manager := sioHandler.Manager()
 
 	// Admin region resolver (optional — for daily ranking)
@@ -56,7 +63,7 @@ func Run(cfg *config.Config) error {
 	batcher := sio.NewFireBatcher(sioServer, 200*time.Millisecond, logger)
 	batcher.Start()
 
-	registerSocketEvents(sioServer, manager, redisClient, resolver, logger, batcher)
+	registerSocketEvents(sioServer, manager, redisClient, resolver, logger, batcher, rl)
 
 	// Background engines
 	progressionEngine, cleanupEngine := startBackgroundEngines(redisClient, sioServer, logger)
@@ -165,17 +172,12 @@ func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Serve
 }
 
 // registerSocketEvents wires all Socket.IO event handlers.
-func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher) {
+func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher, rl *sio.RateLimiter) {
 	// Rate limiting middleware — must be registered before event handlers.
-	rl := sio.NewRateLimiter(func(sid string) {
-		sioServer.DisconnectAll(sid, "rate limit exceeded")
-	})
+	// The RateLimiter itself is created in Run() and its cleanup is handled
+	// by the disconnect handler registered in NewHandler to avoid overwriting.
 	sioServer.Use(sio.NewRateLimitMiddleware(rl, logger))
 
-	// Cleanup rate limiter state on disconnect.
-	sioServer.OnDisconnect(func(sid string, reason string) {
-		rl.Remove(sid)
-	})
 	// Fire events
 	sio.RegisterFireIgniteHandler(sioServer, manager, redisClient, resolver, logger, batcher)
 	sio.RegisterFireStateHandler(sioServer, redisClient, logger)

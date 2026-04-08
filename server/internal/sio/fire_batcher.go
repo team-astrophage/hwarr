@@ -104,5 +104,8 @@ func (b *FireBatcher) flush() {
 		if _, err := b.sioServer.BroadcastToRoom("/", u.GridID, "fire:update", payload); err != nil {
 			b.logger.Printf("fire:update batch broadcast to room %s failed: %v", u.GridID, err)
 		}
+		if _, err := b.sioServer.BroadcastToNamespace("/", "fire:update", payload); err != nil {
+			b.logger.Printf("fire:update batch global broadcast failed: %v", err)
+		}
 	}
 }
