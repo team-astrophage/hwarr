@@ -6,7 +6,6 @@ package sio
 
 import (
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -27,7 +26,6 @@ type ConnectionInfo struct {
 	Rooms          map[string]struct{} // set of room names (grid IDs)
 	UserID         string              // optional stable ID for reconnection
 	ReconnectCount int
-	RemoteAddr     string // client IP address for per-IP connection limiting
 }
 
 // newConnectionInfo creates a ConnectionInfo with sensible defaults.
@@ -62,10 +60,9 @@ func (ci *ConnectionInfo) RoomNames() []string {
 //   - Reconnection state restoration via user_id
 type ConnectionManager struct {
 	mu            sync.RWMutex
-	connections   map[string]*ConnectionInfo // sid → ConnectionInfo
-	userSessions  map[string]*ConnectionInfo // user_id → last known ConnectionInfo
-	ipConnections map[string]int             // IP → active connection count
-	logger        *log.Logger
+	connections  map[string]*ConnectionInfo // sid → ConnectionInfo
+	userSessions map[string]*ConnectionInfo // user_id → last known ConnectionInfo
+	logger       *log.Logger
 }
 
 // NewConnectionManager creates a new ConnectionManager.
@@ -74,10 +71,9 @@ func NewConnectionManager(logger *log.Logger) *ConnectionManager {
 		logger = log.Default()
 	}
 	return &ConnectionManager{
-		connections:   make(map[string]*ConnectionInfo),
-		userSessions:  make(map[string]*ConnectionInfo),
-		ipConnections: make(map[string]int),
-		logger:        logger,
+		connections:  make(map[string]*ConnectionInfo),
+		userSessions: make(map[string]*ConnectionInfo),
+		logger:       logger,
 	}
 }
 
@@ -110,11 +106,9 @@ func (m *ConnectionManager) Get(sid string) *ConnectionInfo {
 // increments the reconnect count (matching Python behavior).
 //
 // Returns the newly created ConnectionInfo.
-func (m *ConnectionManager) Add(sid string, userID string, remoteAddr string) *ConnectionInfo {
+func (m *ConnectionManager) Add(sid string, userID string) *ConnectionInfo {
 	now := float64(time.Now().UnixMilli()) / 1000.0 // seconds with ms precision
 	reconnectCount := 0
-
-	ip := extractIP(remoteAddr)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -129,12 +123,7 @@ func (m *ConnectionManager) Add(sid string, userID string, remoteAddr string) *C
 	}
 
 	info := newConnectionInfo(sid, userID, now, reconnectCount)
-	info.RemoteAddr = ip
 	m.connections[sid] = info
-
-	if ip != "" {
-		m.ipConnections[ip]++
-	}
 
 	if userID != "" {
 		m.userSessions[userID] = info
@@ -155,14 +144,6 @@ func (m *ConnectionManager) Remove(sid string) *ConnectionInfo {
 	if !ok {
 		m.logger.Printf("Attempted to remove unknown sid: %s", sid)
 		return nil
-	}
-
-	// Decrement IP connection count
-	if info.RemoteAddr != "" {
-		m.ipConnections[info.RemoteAddr]--
-		if m.ipConnections[info.RemoteAddr] <= 0 {
-			delete(m.ipConnections, info.RemoteAddr)
-		}
 	}
 
 	delete(m.connections, sid)
@@ -244,28 +225,3 @@ func (m *ConnectionManager) GetRooms(sid string) []string {
 	return info.RoomNames()
 }
 
-// CanConnect checks whether the given remote address is allowed to open a new connection
-// based on the per-IP connection limit.
-func (m *ConnectionManager) CanConnect(remoteAddr string, maxPerIP int) bool {
-	ip := extractIP(remoteAddr)
-	if ip == "" {
-		return true
-	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.ipConnections[ip] < maxPerIP
-}
-
-// extractIP parses the host part from a host:port address string.
-func extractIP(remoteAddr string) string {
-	if remoteAddr == "" {
-		return ""
-	}
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		// No port, use as-is
-		return remoteAddr
-	}
-	return host
-}

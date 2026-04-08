@@ -10,33 +10,26 @@ import (
 	socketio "github.com/homeworldio/socketio-go"
 )
 
-// SessionRemoteAddrFunc retrieves the remote address for a given Engine.IO session ID.
-type SessionRemoteAddrFunc func(sid string) string
-
 // Handler wires application-level Socket.IO event handlers to a socketio.Server.
 // It owns the ConnectionManager and translates low-level connect/disconnect
 // callbacks into the same session lifecycle as the Python server.
 type Handler struct {
-	sio                *socketio.Server
-	manager            *ConnectionManager
-	logger             *log.Logger
-	tokenService       *auth.TokenService
-	maxConnectionsPerIP int
-	getRemoteAddr      SessionRemoteAddrFunc
+	sio          *socketio.Server
+	manager      *ConnectionManager
+	logger       *log.Logger
+	tokenService *auth.TokenService
 }
 
 // NewHandler creates a Handler and registers event handlers on the Socket.IO server.
-func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService, maxConnectionsPerIP int, getRemoteAddr SessionRemoteAddrFunc) *Handler {
+func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService) *Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
 	h := &Handler{
-		sio:                 sioServer,
-		manager:             NewConnectionManager(logger),
-		logger:              logger,
-		tokenService:        tokenService,
-		maxConnectionsPerIP: maxConnectionsPerIP,
-		getRemoteAddr:       getRemoteAddr,
+		sio:          sioServer,
+		manager:      NewConnectionManager(logger),
+		logger:       logger,
+		tokenService: tokenService,
 	}
 	h.registerHandlers()
 	return h
@@ -89,16 +82,7 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 		return fmt.Errorf("invalid token: %w", err)
 	}
 
-	// 3. Check IP connection limit
-	remoteAddr := ""
-	if h.getRemoteAddr != nil {
-		remoteAddr = h.getRemoteAddr(sid)
-	}
-	if !h.manager.CanConnect(remoteAddr, h.maxConnectionsPerIP) {
-		return fmt.Errorf("too many connections from this IP")
-	}
-
-	// 4. Check for previous session (reconnection detection)
+	// 3. Check for previous session (reconnection detection)
 	var previousRooms []string
 	if userID != "" {
 		if prev := h.manager.GetPreviousSession(userID); prev != nil {
@@ -106,8 +90,8 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 		}
 	}
 
-	// 5. Register connection in manager (sid→session map)
-	info := h.manager.Add(sid, userID, remoteAddr)
+	// 4. Register connection in manager (sid→session map)
+	info := h.manager.Add(sid, userID)
 
 	// 4. Restore room subscriptions on reconnect
 	if len(previousRooms) > 0 {

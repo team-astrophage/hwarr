@@ -145,7 +145,7 @@ func TestViewportGridIDsComputation(t *testing.T) {
 
 func TestJoinViewportRoomsUpdatesManager(t *testing.T) {
 	manager := NewConnectionManager(nil)
-	manager.Add("test-sid", "user1", "")
+	manager.Add("test-sid", "user1")
 
 	// Initially no rooms
 	rooms := manager.GetRooms("test-sid")

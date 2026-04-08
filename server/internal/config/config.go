@@ -17,8 +17,7 @@ type Config struct {
 	AdminGeoJSONPath    string
 	AllowedOrigins      []string
 	TokenSecret         string
-	TokenTTLMin         int
-	MaxConnectionsPerIP int
+	TokenTTLMin int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -39,13 +38,6 @@ func Load() *Config {
 		}
 	}
 
-	maxConnsPerIP := 5
-	if v := os.Getenv("MAX_CONNECTIONS_PER_IP"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxConnsPerIP = n
-		}
-	}
-
 	return &Config{
 		Host:                envOr("HOST", "0.0.0.0"),
 		Port:                envOr("PORT", "8000"),
@@ -56,8 +48,7 @@ func Load() *Config {
 		AdminGeoJSONPath:    envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
 		AllowedOrigins:      origins,
 		TokenSecret:         envOr("TOKEN_SECRET", "dev-secret-change-in-production"),
-		TokenTTLMin:         tokenTTL,
-		MaxConnectionsPerIP: maxConnsPerIP,
+		TokenTTLMin: tokenTTL,
 	}
 }
 
