@@ -14,22 +14,25 @@ import (
 // It owns the ConnectionManager and translates low-level connect/disconnect
 // callbacks into the same session lifecycle as the Python server.
 type Handler struct {
-	sio          *socketio.Server
-	manager      *ConnectionManager
-	logger       *log.Logger
-	tokenService *auth.TokenService
+	sio                  *socketio.Server
+	manager              *ConnectionManager
+	logger               *log.Logger
+	tokenService         *auth.TokenService
+	onDisconnectCleanup  func(sid string)
 }
 
 // NewHandler creates a Handler and registers event handlers on the Socket.IO server.
-func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService) *Handler {
+// onDisconnectCleanup is called on disconnect for additional cleanup (e.g., rate limiter removal).
+func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService, onDisconnectCleanup func(sid string)) *Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
 	h := &Handler{
-		sio:          sioServer,
-		manager:      NewConnectionManager(logger),
-		logger:       logger,
-		tokenService: tokenService,
+		sio:                  sioServer,
+		manager:              NewConnectionManager(logger),
+		logger:               logger,
+		tokenService:         tokenService,
+		onDisconnectCleanup:  onDisconnectCleanup,
 	}
 	h.registerHandlers()
 	return h
@@ -45,7 +48,7 @@ func (h *Handler) Manager() *ConnectionManager {
 // Disconnect is registered separately via RegisterDisconnectHandler for chat:presence support.
 func (h *Handler) registerHandlers() {
 	h.sio.OnConnect(h.handleConnect)
-	RegisterDisconnectHandler(h.sio, h.manager, h.logger)
+	RegisterDisconnectHandler(h.sio, h.manager, h.logger, h.onDisconnectCleanup)
 	h.sio.On("heartbeat", h.handleHeartbeat)
 }
 

@@ -67,6 +67,7 @@ export const socket: Socket = io(SOCKET_URL, {
       cb({ user_id, token })
     } catch (err) {
       console.error('[Socket] Failed to fetch auth token', err)
+      cb({})
     }
   },
 })

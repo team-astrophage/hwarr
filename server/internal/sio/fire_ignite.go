@@ -193,7 +193,17 @@ func RegisterFireIgniteHandler(
 			logger.Printf("fire:ignite broadcast to room %s failed: %v", gridID, err)
 		}
 
-		// Enqueue batched room-scoped update (replaces global broadcast)
+		// Global broadcast so clients without viewport subscription also receive the update
+		updatePayload := map[string]interface{}{
+			"gridId":      gridID,
+			"activeCount": activeCount,
+			"stage":       state.Stage,
+		}
+		if _, err := sioServer.BroadcastToNamespace("/", "fire:update", updatePayload); err != nil {
+			logger.Printf("fire:ignite global broadcast failed: %v", err)
+		}
+
+		// Enqueue batched room-scoped update
 		batcher.Add(FireUpdate{
 			GridID:      gridID,
 			ActiveCount: activeCount,
