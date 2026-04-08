@@ -42,7 +42,7 @@ func TestChatLeaveRoomTracking(t *testing.T) {
 	manager := NewConnectionManager(log.Default())
 	sid := "test-sid-leave"
 
-	manager.Add(sid, "user-123", "")
+	manager.Add(sid, "user-123")
 	info := manager.Get(sid)
 	if info == nil {
 		t.Fatal("expected non-nil info after Add")

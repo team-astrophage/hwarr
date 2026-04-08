@@ -43,17 +43,8 @@ func Run(cfg *config.Config) error {
 	// Socket.IO + Engine.IO
 	sioServer, eioServer := setupSocketServers(cfg, logger)
 
-	// Provide a function to look up remote address from Engine.IO session
-	getRemoteAddr := func(sid string) string {
-		s := eioServer.GetSession(sid)
-		if s == nil {
-			return ""
-		}
-		return s.RemoteAddr
-	}
-
 	// Connection manager + SIO event handlers
-	sioHandler := sio.NewHandler(sioServer, logger, tokenService, cfg.MaxConnectionsPerIP, getRemoteAddr)
+	sioHandler := sio.NewHandler(sioServer, logger, tokenService)
 	manager := sioHandler.Manager()
 
 	// Admin region resolver (optional — for daily ranking)
