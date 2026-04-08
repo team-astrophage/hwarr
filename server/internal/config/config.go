@@ -8,14 +8,17 @@ import (
 
 // Config holds all server configuration loaded from environment variables.
 type Config struct {
-	Host             string
-	Port             string
-	RedisAddr        string
-	RedisPassword    string
-	RedisDB          int
-	RedisTLS         bool
-	AdminGeoJSONPath string
-	AllowedOrigins   []string
+	Host                string
+	Port                string
+	RedisAddr           string
+	RedisPassword       string
+	RedisDB             int
+	RedisTLS            bool
+	AdminGeoJSONPath    string
+	AllowedOrigins      []string
+	TokenSecret         string
+	TokenTTLMin         int
+	MaxConnectionsPerIP int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -29,15 +32,32 @@ func Load() *Config {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
 
+	tokenTTL := 30
+	if v := os.Getenv("TOKEN_TTL_MIN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tokenTTL = n
+		}
+	}
+
+	maxConnsPerIP := 5
+	if v := os.Getenv("MAX_CONNECTIONS_PER_IP"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxConnsPerIP = n
+		}
+	}
+
 	return &Config{
-		Host:             envOr("HOST", "0.0.0.0"),
-		Port:             envOr("PORT", "8000"),
-		RedisAddr:        addr,
-		RedisPassword:    password,
-		RedisDB:          db,
-		RedisTLS:         useTLS,
-		AdminGeoJSONPath: envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
-		AllowedOrigins:   origins,
+		Host:                envOr("HOST", "0.0.0.0"),
+		Port:                envOr("PORT", "8000"),
+		RedisAddr:           addr,
+		RedisPassword:       password,
+		RedisDB:             db,
+		RedisTLS:            useTLS,
+		AdminGeoJSONPath:    envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
+		AllowedOrigins:      origins,
+		TokenSecret:         envOr("TOKEN_SECRET", "dev-secret-change-in-production"),
+		TokenTTLMin:         tokenTTL,
+		MaxConnectionsPerIP: maxConnsPerIP,
 	}
 }
 

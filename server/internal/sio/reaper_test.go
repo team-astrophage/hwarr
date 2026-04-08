@@ -28,8 +28,8 @@ func TestReaper_ReapStaleConnections(t *testing.T) {
 	reaper := NewReaper(mgr, disconnectFn, WithReaperLogger(logger))
 
 	// Add a connection and make it stale by backdating its heartbeat
-	mgr.Add("sid-fresh", "user1")
-	mgr.Add("sid-stale", "user2")
+	mgr.Add("sid-fresh", "user1", "")
+	mgr.Add("sid-stale", "user2", "")
 
 	// Backdate the stale connection's heartbeat to 40 seconds ago
 	mgr.mu.Lock()
@@ -69,7 +69,7 @@ func TestReaper_FallbackOnDisconnectError(t *testing.T) {
 
 	reaper := NewReaper(mgr, disconnectFn, WithReaperLogger(logger))
 
-	mgr.Add("sid-fail", "user1")
+	mgr.Add("sid-fail", "user1", "")
 
 	// Backdate heartbeat
 	mgr.mu.Lock()
@@ -93,7 +93,7 @@ func TestReaper_NoDisconnectFunc(t *testing.T) {
 	// nil disconnect function — should just remove from tracking
 	reaper := NewReaper(mgr, nil, WithReaperLogger(logger))
 
-	mgr.Add("sid-nil", "user1")
+	mgr.Add("sid-nil", "user1", "")
 
 	mgr.mu.Lock()
 	if info, ok := mgr.connections["sid-nil"]; ok {
@@ -121,8 +121,8 @@ func TestReaper_NoStaleConnections(t *testing.T) {
 	reaper := NewReaper(mgr, disconnectFn, WithReaperLogger(logger))
 
 	// All connections are fresh
-	mgr.Add("sid1", "")
-	mgr.Add("sid2", "")
+	mgr.Add("sid1", "", "")
+	mgr.Add("sid2", "", "")
 
 	reaper.RunReap()
 
@@ -190,7 +190,7 @@ func TestReaper_LoopReapsStaleConnections(t *testing.T) {
 	)
 
 	// Add a stale connection
-	mgr.Add("sid-loop-stale", "user1")
+	mgr.Add("sid-loop-stale", "user1", "")
 	mgr.mu.Lock()
 	if info, ok := mgr.connections["sid-loop-stale"]; ok {
 		info.LastHeartbeat = float64(time.Now().Add(-40*time.Second).UnixMilli()) / 1000.0

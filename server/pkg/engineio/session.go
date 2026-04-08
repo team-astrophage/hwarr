@@ -11,6 +11,7 @@ import (
 type Session struct {
 	ID           string
 	Transport    string // "polling" or "websocket"
+	RemoteAddr   string // client IP:port from the initial HTTP request
 	PingInterval time.Duration
 	PingTimeout  time.Duration
 
