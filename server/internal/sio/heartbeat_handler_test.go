@@ -18,7 +18,7 @@ func newTestHandler() *Handler {
 	}
 	logger := log.Default()
 	ts := auth.NewTokenService("test-secret", 30)
-	return NewHandler(sioServer, logger, ts)
+	return NewHandler(sioServer, logger, ts, nil)
 }
 
 func TestHandleHeartbeat_ReturnsAck(t *testing.T) {
@@ -136,7 +136,7 @@ func TestHandleHeartbeat_RegisteredViaHandler(t *testing.T) {
 	sioServer.SendTo = func(sid string, data string) error {
 		return nil
 	}
-	_ = NewHandler(sioServer, log.Default(), auth.NewTokenService("test-secret", 30))
+	_ = NewHandler(sioServer, log.Default(), auth.NewTokenService("test-secret", 30), nil)
 
 	ns := sioServer.GetNamespace("/")
 	if ns == nil {

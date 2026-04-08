@@ -18,12 +18,14 @@ const ChatRoom = "chat:global"
 //  3. Broadcasts "users:count" with updated active count to all clients
 //  4. If the user was in the chat room, broadcasts updated "chat:presence"
 //     count to remaining chat room participants
+//  5. Calls onCleanup (e.g., rate limiter state removal) if provided
 //
 // Mirrors Python server/main.py disconnect handler.
 func RegisterDisconnectHandler(
 	sioServer *socketio.Server,
 	manager *ConnectionManager,
 	logger *log.Logger,
+	onCleanup func(sid string),
 ) {
 	if logger == nil {
 		logger = log.Default()
@@ -66,6 +68,11 @@ func RegisterDisconnectHandler(
 			if _, err := sioServer.BroadcastToRoom("/", ChatRoom, "chat:presence", presencePayload); err != nil {
 				logger.Printf("Failed to rebroadcast chat presence on disconnect: %v", err)
 			}
+		}
+
+		// 5. Run additional cleanup (e.g., rate limiter state removal)
+		if onCleanup != nil {
+			onCleanup(sid)
 		}
 
 		logger.Printf("Client disconnected: %s (total: %d)", sid, activeCount)
