@@ -12,7 +12,7 @@ func newTestManager() *ConnectionManager {
 func TestAdd_BasicConnection(t *testing.T) {
 	m := newTestManager()
 
-	info := m.Add("sid1", "", "")
+	info := m.Add("sid1", "")
 	if info == nil {
 		t.Fatal("Add returned nil")
 	}
@@ -36,7 +36,7 @@ func TestAdd_BasicConnection(t *testing.T) {
 func TestAdd_WithUserID(t *testing.T) {
 	m := newTestManager()
 
-	info := m.Add("sid1", "user-abc", "")
+	info := m.Add("sid1", "user-abc")
 	if info.UserID != "user-abc" {
 		t.Errorf("UserID = %q, want %q", info.UserID, "user-abc")
 	}
@@ -46,21 +46,21 @@ func TestAdd_ReconnectionDetection(t *testing.T) {
 	m := newTestManager()
 
 	// First connection
-	info1 := m.Add("sid1", "user-abc", "")
+	info1 := m.Add("sid1", "user-abc")
 	if info1.ReconnectCount != 0 {
 		t.Fatalf("first connection ReconnectCount = %d, want 0", info1.ReconnectCount)
 	}
 
 	// Simulate disconnect (remove sid1) then reconnect with same user_id
 	m.Remove("sid1")
-	info2 := m.Add("sid2", "user-abc", "")
+	info2 := m.Add("sid2", "user-abc")
 	if info2.ReconnectCount != 1 {
 		t.Errorf("reconnection ReconnectCount = %d, want 1", info2.ReconnectCount)
 	}
 
 	// Third connection
 	m.Remove("sid2")
-	info3 := m.Add("sid3", "user-abc", "")
+	info3 := m.Add("sid3", "user-abc")
 	if info3.ReconnectCount != 2 {
 		t.Errorf("third connection ReconnectCount = %d, want 2", info3.ReconnectCount)
 	}
@@ -68,7 +68,7 @@ func TestAdd_ReconnectionDetection(t *testing.T) {
 
 func TestGet_Found(t *testing.T) {
 	m := newTestManager()
-	m.Add("sid1", "", "")
+	m.Add("sid1", "")
 
 	info := m.Get("sid1")
 	if info == nil {
@@ -90,7 +90,7 @@ func TestGet_NotFound(t *testing.T) {
 
 func TestRemove_ExistingConnection(t *testing.T) {
 	m := newTestManager()
-	m.Add("sid1", "", "")
+	m.Add("sid1", "")
 
 	info := m.Remove("sid1")
 	if info == nil {
@@ -112,8 +112,8 @@ func TestRemove_UnknownSID(t *testing.T) {
 
 func TestActiveSIDs(t *testing.T) {
 	m := newTestManager()
-	m.Add("sid1", "", "")
-	m.Add("sid2", "", "")
+	m.Add("sid1", "")
+	m.Add("sid2", "")
 
 	sids := m.ActiveSIDs()
 	if len(sids) != 2 {
@@ -138,7 +138,7 @@ func TestGetPreviousSession(t *testing.T) {
 	}
 
 	// Add and remove — user_sessions should persist
-	info := m.Add("sid1", "user-abc", "")
+	info := m.Add("sid1", "user-abc")
 	info.Rooms["grid:1"] = struct{}{}
 	info.Rooms["grid:2"] = struct{}{}
 	m.Remove("sid1")
@@ -154,7 +154,7 @@ func TestGetPreviousSession(t *testing.T) {
 
 func TestRecordHeartbeat(t *testing.T) {
 	m := newTestManager()
-	m.Add("sid1", "", "")
+	m.Add("sid1", "")
 
 	ok := m.RecordHeartbeat("sid1")
 	if !ok {
@@ -169,7 +169,7 @@ func TestRecordHeartbeat(t *testing.T) {
 
 func TestSetAndGetRooms(t *testing.T) {
 	m := newTestManager()
-	m.Add("sid1", "", "")
+	m.Add("sid1", "")
 
 	m.SetRooms("sid1", []string{"room-a", "room-b"})
 	rooms := m.GetRooms("sid1")

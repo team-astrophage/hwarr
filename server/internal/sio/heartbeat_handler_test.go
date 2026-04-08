@@ -18,14 +18,14 @@ func newTestHandler() *Handler {
 	}
 	logger := log.Default()
 	ts := auth.NewTokenService("test-secret", 30)
-	return NewHandler(sioServer, logger, ts, 5, nil)
+	return NewHandler(sioServer, logger, ts)
 }
 
 func TestHandleHeartbeat_ReturnsAck(t *testing.T) {
 	h := newTestHandler()
 
 	// Register a connection first
-	h.manager.Add("test-hb-sid", "", "")
+	h.manager.Add("test-hb-sid", "")
 
 	// Call heartbeat with ts payload
 	tsVal := 1000.0
@@ -84,7 +84,7 @@ func TestHandleHeartbeat_UnknownSID(t *testing.T) {
 func TestHandleHeartbeat_NoData(t *testing.T) {
 	h := newTestHandler()
 
-	h.manager.Add("test-hb-sid-2", "", "")
+	h.manager.Add("test-hb-sid-2", "")
 
 	// Call heartbeat with no args (client sent no payload)
 	result, err := h.handleHeartbeat("test-hb-sid-2")
@@ -111,7 +111,7 @@ func TestHandleHeartbeat_NoData(t *testing.T) {
 func TestHandleHeartbeat_UpdatesTimestamp(t *testing.T) {
 	h := newTestHandler()
 
-	info := h.manager.Add("test-hb-sid-3", "", "")
+	info := h.manager.Add("test-hb-sid-3", "")
 	originalTS := info.LastHeartbeat
 
 	// Manually set last heartbeat to an old value
@@ -136,7 +136,7 @@ func TestHandleHeartbeat_RegisteredViaHandler(t *testing.T) {
 	sioServer.SendTo = func(sid string, data string) error {
 		return nil
 	}
-	_ = NewHandler(sioServer, log.Default(), auth.NewTokenService("test-secret", 30), 5, nil)
+	_ = NewHandler(sioServer, log.Default(), auth.NewTokenService("test-secret", 30))
 
 	ns := sioServer.GetNamespace("/")
 	if ns == nil {
@@ -150,7 +150,7 @@ func TestHandleHeartbeat_RegisteredViaHandler(t *testing.T) {
 func TestHandleHeartbeat_EmptyObject(t *testing.T) {
 	h := newTestHandler()
 
-	h.manager.Add("test-hb-sid-4", "", "")
+	h.manager.Add("test-hb-sid-4", "")
 
 	// Client sends empty object {} (no ts field)
 	data := json.RawMessage(`{}`)
