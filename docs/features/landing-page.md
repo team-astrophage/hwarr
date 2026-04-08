@@ -444,7 +444,7 @@ interface StatsData {
 
 > **주의**: `NewsFeed` 컴포넌트는 `client/src/features/landing/components/NewsFeed.tsx`에 구현되어 있으나, 현재 `LandingPage.tsx`에서 import 및 렌더링하고 있지 않다. 즉 **현재 랜딩 페이지에 표시되지 않는** 미사용(dormant) 컴포넌트이다. 아래는 컴포넌트 자체의 상세 명세이다.
 
-**소스**: `client/src/features/landing/components/NewsFeed.tsx`, `client/src/features/landing/api/useNews.ts`, `server/routes/news.py`
+**소스**: `client/src/features/landing/components/NewsFeed.tsx`, `client/src/features/landing/api/useNews.ts`, `server/internal/handler/news.go`
 
 ### 6.1 SectionHeader
 
@@ -559,7 +559,7 @@ className="mt-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[var(--color-t
 
 ### 6.3 서버 뉴스 생성 로직
 
-**소스**: `server/routes/news.py`
+**소스**: `server/internal/handler/news.go`
 
 #### 전체 흐름
 
@@ -618,7 +618,7 @@ grid ID → `grid_id_to_center(grid_id)` → `(lat, lng)` 좌표
 
 #### FireStage 참조
 
-**소스**: `server/models/fire.py`
+**소스**: `server/internal/model/fire.go`
 
 | Stage | enum 값 | label_ko | threshold (최소 active count) |
 |---|---|---|---|
@@ -640,7 +640,7 @@ grid ID → `grid_id_to_center(grid_id)` → `(lat, lng)` 좌표
 #### 뉴스 TTL 설정
 
 - `NEWS_TTL_SEC`: 환경변수 `NEWS_TTL_SEC`에서 읽으며 기본값 `86400` (1일)
-- 소스: `server/config.py` — `NEWS_TTL_SEC = int(os.getenv("NEWS_TTL_SEC", 86400))`
+- 소스: `server/internal/config/config.go` — `NEWS_TTL_SEC` 환경변수 (기본값 86400)
 - 최근 점화 시각 추정: `expiry_score - NEWS_TTL_SEC`
 
 ### 6.4 API: useNews 훅
@@ -1105,9 +1105,10 @@ client/src/
     └── config.ts                          # API_URL 등 설정
 
 server/
-├── routes/
-│   └── news.py                            # 속보 뉴스 API 엔드포인트
-├── models/
-│   └── fire.py                            # FireStage, STAGE_CONFIGS
-└── config.py                              # NEWS_TTL_SEC 등 설정
+├── internal/handler/
+│   └── news.go                            # 속보 뉴스 API 핸들러
+├── internal/model/
+│   └── fire.go                            # FireStage, StageConfigs
+└── internal/config/
+    └── config.go                          # NEWS_TTL_SEC 등 설정
 ```
