@@ -37,12 +37,12 @@ func NewRateLimiter(disconnectFn func(string)) *RateLimiter {
 		buckets:    make(map[string]map[string]*rate.Limiter),
 		violations: make(map[string]int),
 		limits: map[string]rate.Limit{
-			"fire:ignite":        rate.Every(500 * time.Millisecond), // 2/s
+			"fire:ignite":        rate.Limit(17), // 17/s
 			"chat:send":          rate.Every(1 * time.Second),        // 1/s
 			"subscribe:viewport": rate.Every(200 * time.Millisecond), // 5/s
 		},
 		bursts: map[string]int{
-			"fire:ignite":        3,
+			"fire:ignite":        17,
 			"chat:send":          2,
 			"subscribe:viewport": 5,
 		},
