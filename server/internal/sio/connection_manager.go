@@ -147,6 +147,13 @@ func (m *ConnectionManager) Remove(sid string) *ConnectionInfo {
 	}
 
 	delete(m.connections, sid)
+
+	if info.UserID != "" {
+		if current, ok := m.userSessions[info.UserID]; ok && current.SID == sid {
+			delete(m.userSessions, info.UserID)
+		}
+	}
+
 	m.logger.Printf("Connection removed: %s (total: %d)", sid, len(m.connections))
 	return info
 }
