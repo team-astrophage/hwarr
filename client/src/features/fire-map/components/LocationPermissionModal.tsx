@@ -1,4 +1,4 @@
-type ModalMode = 'pre-permission' | 'loading' | 'error'
+type ModalMode = 'loading' | 'error'
 
 interface LocationPermissionModalProps {
   mode: ModalMode
@@ -10,15 +10,6 @@ interface LocationPermissionModalProps {
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
 
 function getContent(mode: ModalMode, permissionDenied: boolean) {
-  if (mode === 'pre-permission') {
-    return {
-      icon: '🔥',
-      title: '내 위치에 불을 지르세요',
-      description: 'GPS 위치로 지도에 가상의 불을 피울 수 있어요.\n위치 권한을 허용해주세요.',
-      cta: '위치 허용하기',
-    }
-  }
-
   if (mode === 'loading') {
     return {
       icon: null,
