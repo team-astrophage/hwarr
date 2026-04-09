@@ -571,3 +571,83 @@ func TestWSUpgradeInvalidProbe(t *testing.T) {
 		t.Errorf("transport = %q, want %q", session.Transport, "polling")
 	}
 }
+
+func TestWSReadLimitRejectsOversizedFrame(t *testing.T) {
+	config := ServerConfig{
+		PingInterval:   10 * time.Second,
+		PingTimeout:    5 * time.Second,
+		MaxPayload:     1024, // 1KB limit for testing
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost"},
+	}
+	srv := NewServer(config)
+	server := httptest.NewServer(srv)
+	defer server.Close()
+
+	conn := dialWS(t, server, "/engine.io/?transport=websocket&EIO=4")
+	defer conn.Close()
+
+	// Read OPEN packet
+	readTextMessage(t, conn)
+
+	// Send a message larger than MaxPayload (2KB > 1KB limit)
+	oversized := make([]byte, 2048)
+	for i := range oversized {
+		oversized[i] = 'A'
+	}
+	payload := append([]byte("4"), oversized...)
+	err := conn.WriteMessage(websocket.TextMessage, payload)
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	// The server should close the connection due to read limit exceeded
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _, readErr := conn.ReadMessage()
+	if readErr == nil {
+		t.Error("expected connection close after oversized frame")
+	}
+}
+
+func TestWSReadLimitAllowsNormalFrame(t *testing.T) {
+	config := ServerConfig{
+		PingInterval:   10 * time.Second,
+		PingTimeout:    5 * time.Second,
+		MaxPayload:     1024, // 1KB limit for testing
+		Upgrades:       []string{"websocket"},
+		AllowedOrigins: []string{"http://localhost"},
+	}
+	srv := NewServer(config)
+
+	srv.OnConnect(func(s *Session) {
+		s.SetOnMessage(func(data []byte) {
+			s.Send(data)
+		})
+	})
+
+	server := httptest.NewServer(srv)
+	defer server.Close()
+
+	conn := dialWS(t, server, "/engine.io/?transport=websocket&EIO=4")
+	defer conn.Close()
+
+	// Read OPEN packet
+	readTextMessage(t, conn)
+
+	// Send a message under MaxPayload (512 bytes < 1KB limit)
+	small := make([]byte, 512)
+	for i := range small {
+		small[i] = 'B'
+	}
+	payload := append([]byte("4"), small...)
+	err := conn.WriteMessage(websocket.TextMessage, payload)
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	// Should receive echo back successfully
+	msg := readTextMessage(t, conn)
+	if msg[0] != '4' {
+		t.Errorf("expected message packet, got %q", msg[:1])
+	}
+}

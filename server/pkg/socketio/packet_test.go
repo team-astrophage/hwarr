@@ -1638,3 +1638,90 @@ func TestContainsBinary(t *testing.T) {
 		})
 	}
 }
+
+// --- Security limit tests ---
+
+func TestDecodeRejectsExcessiveAttachments(t *testing.T) {
+	_, err := Decode(`5999999999-["test",{"_placeholder":true,"num":0}]`)
+	if err != ErrTooManyAttachments {
+		t.Errorf("expected ErrTooManyAttachments, got %v", err)
+	}
+}
+
+func TestDecodeAcceptsBoundaryAttachments(t *testing.T) {
+	// MaxAttachments (100) should be accepted
+	p, err := Decode(`5100-["test",{"_placeholder":true,"num":0}]`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Attachments != 100 {
+		t.Errorf("expected 100 attachments, got %d", p.Attachments)
+	}
+}
+
+func TestDecodeRejectsAttachmentsOverBoundary(t *testing.T) {
+	_, err := Decode(`5101-["test",{"_placeholder":true,"num":0}]`)
+	if err != ErrTooManyAttachments {
+		t.Errorf("expected ErrTooManyAttachments, got %v", err)
+	}
+}
+
+func TestDecodeRejectsDeepJSON(t *testing.T) {
+	// Build 100-level nested array: [[[[...]]]]
+	var deep string
+	for i := 0; i < 100; i++ {
+		deep += "["
+	}
+	for i := 0; i < 100; i++ {
+		deep += "]"
+	}
+	_, err := Decode("2" + deep)
+	if err != ErrJSONTooDeep {
+		t.Errorf("expected ErrJSONTooDeep, got %v", err)
+	}
+}
+
+func TestDecodeAcceptsReasonableDepth(t *testing.T) {
+	// Build 30-level nested array (under the 32 limit)
+	var nested string
+	for i := 0; i < 30; i++ {
+		nested += "["
+	}
+	nested += `"event"`
+	for i := 0; i < 30; i++ {
+		nested += "]"
+	}
+	p, err := Decode("2" + nested)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != PacketEvent {
+		t.Errorf("expected EVENT type, got %d", p.Type)
+	}
+}
+
+func TestCheckJSONDepthBoundary(t *testing.T) {
+	// Exactly MaxJSONDepth (32) should pass
+	var atLimit string
+	for i := 0; i < MaxJSONDepth; i++ {
+		atLimit += "["
+	}
+	for i := 0; i < MaxJSONDepth; i++ {
+		atLimit += "]"
+	}
+	if err := checkJSONDepth([]byte(atLimit)); err != nil {
+		t.Errorf("expected no error at depth %d, got %v", MaxJSONDepth, err)
+	}
+
+	// MaxJSONDepth + 1 (33) should fail
+	var overLimit string
+	for i := 0; i < MaxJSONDepth+1; i++ {
+		overLimit += "["
+	}
+	for i := 0; i < MaxJSONDepth+1; i++ {
+		overLimit += "]"
+	}
+	if err := checkJSONDepth([]byte(overLimit)); err != ErrJSONTooDeep {
+		t.Errorf("expected ErrJSONTooDeep at depth %d, got %v", MaxJSONDepth+1, err)
+	}
+}
