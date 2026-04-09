@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as MapRouteImport } from './routes/map'
+import { Route as GuideRouteImport } from './routes/guide'
 import { Route as ArchiveRouteImport } from './routes/archive'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const MapRoute = MapRouteImport.update({
   id: '/map',
   path: '/map',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuideRoute = GuideRouteImport.update({
+  id: '/guide',
+  path: '/guide',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ArchiveRoute = ArchiveRouteImport.update({
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/archive': typeof ArchiveRoute
+  '/guide': typeof GuideRoute
   '/map': typeof MapRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/archive': typeof ArchiveRoute
+  '/guide': typeof GuideRoute
   '/map': typeof MapRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/archive': typeof ArchiveRoute
+  '/guide': typeof GuideRoute
   '/map': typeof MapRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$' | '/archive' | '/map'
+  fullPaths: '/' | '/$' | '/archive' | '/guide' | '/map'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$' | '/archive' | '/map'
-  id: '__root__' | '/' | '/$' | '/archive' | '/map'
+  to: '/' | '/$' | '/archive' | '/guide' | '/map'
+  id: '__root__' | '/' | '/$' | '/archive' | '/guide' | '/map'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   ArchiveRoute: typeof ArchiveRoute
+  GuideRoute: typeof GuideRoute
   MapRoute: typeof MapRoute
 }
 
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/map'
       fullPath: '/map'
       preLoaderRoute: typeof MapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guide': {
+      id: '/guide'
+      path: '/guide'
+      fullPath: '/guide'
+      preLoaderRoute: typeof GuideRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/archive': {
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   ArchiveRoute: ArchiveRoute,
+  GuideRoute: GuideRoute,
   MapRoute: MapRoute,
 }
 export const routeTree = rootRouteImport

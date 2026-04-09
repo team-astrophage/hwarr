@@ -130,3 +130,14 @@ body {
   0%   { opacity: 0.9; }
   100% { opacity: 0; }
 }
+
+/* Menu drawer */
+@keyframes drawer-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes drawer-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
