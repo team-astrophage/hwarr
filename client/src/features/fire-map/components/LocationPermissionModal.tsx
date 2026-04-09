@@ -67,7 +67,7 @@ export function LocationPermissionModal({
   }
 
   return (
-    <div className='fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[40vh] px-4'>
+    <div className='fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4'>
       <div className='bg-[var(--color-bg-surface)] rounded-[16px] shadow-[var(--shadow-heavy)] w-full max-w-[320px] px-6 py-6 flex flex-col items-center text-center'>
         {icon ? (
           <div className='text-5xl mb-3' aria-hidden='true'>

@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 
 const TABS = ['일별', '주별', '월별'] as const
@@ -49,12 +50,39 @@ const RANK_COLORS: Record<number, string> = {
 
 export function ArchivePage() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('일별')
-
   return (
     <div className="flex flex-col min-h-svh bg-[var(--color-bg-base)]">
-      <title>아카이브 — 화르르</title>
-      <meta name="description" content="화르르 역대 가상 화재 기록과 지역별 통계를 확인하세요." />
+      <title>주간 리포트 — 화르르</title>
+      <meta name="description" content="화르르 주간 화재 히트맵과 지역별 통계를 확인하세요." />
       <Header />
+
+      {/* Coming Soon overlay */}
+      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-6 w-full max-w-[340px] bg-[var(--color-bg-surface)] rounded-[20px] shadow-[var(--shadow-heavy)] p-6 text-center">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+            </div>
+            <h2 className="text-[1.125rem] font-extrabold text-[var(--color-text-base)] mb-2">
+              주간 리포트 준비 중
+            </h2>
+            <p className="text-[0.8125rem] text-[var(--color-text-secondary)] leading-relaxed mb-1">
+              지역별 히트맵, 주간·월간 화재 통계,
+            </p>
+            <p className="text-[0.8125rem] text-[var(--color-text-secondary)] leading-relaxed mb-5">
+              TOP 화재 지역 랭킹이 곧 찾아옵니다.
+            </p>
+            <Link
+              to="/"
+              className="block w-full rounded-[12px] bg-[var(--color-accent)] py-3 text-[0.875rem] font-bold text-black transition-transform active:scale-[0.96]"
+            >
+              상황판 보러가기
+            </Link>
+          </div>
+        </div>
 
       {/* 탭 */}
       <div className="flex gap-1 mx-5 mt-4 bg-[var(--color-bg-surface)] rounded-[12px] p-1">

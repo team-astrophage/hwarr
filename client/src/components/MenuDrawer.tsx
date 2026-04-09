@@ -5,12 +5,14 @@ import { useStats } from '../features/landing/api/useStats'
 interface MenuPopoverProps {
   open: boolean
   onClose: () => void
+  onFeedback: () => void
 }
 
 const NAV_ITEMS = [
   {
     to: '/map' as const,
     label: '실시간 지도',
+    comingSoon: false,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
@@ -22,6 +24,7 @@ const NAV_ITEMS = [
   {
     to: '/' as const,
     label: '상황판',
+    comingSoon: false,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -34,6 +37,7 @@ const NAV_ITEMS = [
   {
     to: '/guide' as const,
     label: '이용안내',
+    comingSoon: false,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" />
@@ -44,7 +48,8 @@ const NAV_ITEMS = [
   },
   {
     to: '/archive' as const,
-    label: '아카이브',
+    label: '주간 리포트',
+    comingSoon: true,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <line x1="18" y1="20" x2="18" y2="10" />
@@ -61,7 +66,7 @@ function formatNumber(n: number): string {
   return n.toLocaleString()
 }
 
-export function MenuDrawer({ open, onClose }: MenuPopoverProps) {
+export function MenuDrawer({ open, onClose, onFeedback }: MenuPopoverProps) {
   const { location } = useRouterState()
   const { data: stats } = useStats()
 
@@ -82,7 +87,11 @@ export function MenuDrawer({ open, onClose }: MenuPopoverProps) {
   useEffect(() => {
     if (open) {
       document.addEventListener('keydown', handleKeyDown)
-      return () => document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown)
+        document.body.style.overflow = ''
+      }
     }
   }, [open, handleKeyDown])
 
@@ -93,12 +102,13 @@ export function MenuDrawer({ open, onClose }: MenuPopoverProps) {
       {/* Invisible overlay to catch outside clicks */}
       <div className="fixed inset-0 z-[1100]" onClick={onClose} />
 
-      {/* Popover panel — anchored top-right below header */}
-      <div className="absolute top-11 right-3 z-[1100] w-[220px] bg-[var(--color-bg-surface)] rounded-[14px] shadow-[var(--shadow-heavy)] border border-[var(--color-bg-elevated)] overflow-hidden animate-[menu-pop-in_150ms_ease-out]">
+      {/* Popover panel — fixed top-right below header */}
+      <div className="fixed top-11 right-[max(calc((100vw-430px)/2+20px),20px)] z-[1100] w-[220px] bg-[var(--color-bg-surface)] rounded-[14px] shadow-[var(--shadow-heavy)] border border-[var(--color-bg-elevated)] overflow-hidden animate-[menu-pop-in_150ms_ease-out]">
         {/* Navigation */}
         <nav className="px-2 py-2 space-y-0.5">
-          {NAV_ITEMS.map(({ to, label, icon }) => {
+          {NAV_ITEMS.map(({ to, label, icon, comingSoon }) => {
             const isActive = location.pathname === to
+
             return (
               <Link
                 key={to}
@@ -111,6 +121,11 @@ export function MenuDrawer({ open, onClose }: MenuPopoverProps) {
               >
                 {icon}
                 {label}
+                {comingSoon && (
+                  <span className="ml-auto text-[0.5625rem] font-bold text-[var(--color-accent)] bg-[var(--color-accent)]/10 px-1.5 py-0.5 rounded-full leading-none">
+                    곧 출시
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -142,6 +157,21 @@ export function MenuDrawer({ open, onClose }: MenuPopoverProps) {
             </Link>
           </>
         )}
+
+        {/* Feedback */}
+        <div className="mx-3 h-px bg-[var(--color-bg-elevated)]" />
+        <div className="px-2 py-2">
+          <button
+            onClick={onFeedback}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-[10px] text-[0.8125rem] text-[var(--color-text-secondary)] font-medium transition-colors active:bg-[var(--color-bg-elevated)]"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            의견 보내기
+          </button>
+        </div>
       </div>
     </>
   )
