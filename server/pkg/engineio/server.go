@@ -47,12 +47,14 @@ type Server struct {
 
 	mu        sync.RWMutex
 	onConnect func(s *Session) // callback when a new session is created
+	done      chan struct{}     // closed by Close() to stop pingLoop
 }
 
 // NewServer creates a new Engine.IO server with the given configuration.
 func NewServer(config ServerConfig) *Server {
 	srv := &Server{
 		config: config,
+		done:   make(chan struct{}),
 	}
 	// Start ping/timeout loop
 	go srv.pingLoop()
@@ -77,6 +79,21 @@ func (srv *Server) GetSession(sid string) *Session {
 // RemoveSession removes a session from the server.
 func (srv *Server) RemoveSession(sid string) {
 	srv.sessions.Delete(sid)
+}
+
+// Close gracefully shuts down the Engine.IO server. It closes every active
+// session (triggering CLOSE packets for WebSocket clients and unblocking
+// polling Drain calls), then stops the pingLoop goroutine.
+func (srv *Server) Close() {
+	close(srv.done)
+
+	srv.sessions.Range(func(key, value interface{}) bool {
+		value.(*Session).Close("server shutting down")
+		return true
+	})
+
+	// Give wsWriteLoop goroutines time to flush CLOSE packets.
+	time.Sleep(100 * time.Millisecond)
 }
 
 // isOriginAllowed checks whether the given origin is in the server's allowed list.
@@ -270,26 +287,31 @@ func (srv *Server) pingLoop() {
 	ticker := time.NewTicker(srv.config.PingInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		now := time.Now()
-		srv.sessions.Range(func(key, value interface{}) bool {
-			session := value.(*Session)
-			if session.IsClosed() {
-				srv.sessions.Delete(key)
-				return true
-			}
+	for {
+		select {
+		case <-srv.done:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			srv.sessions.Range(func(key, value interface{}) bool {
+				session := value.(*Session)
+				if session.IsClosed() {
+					srv.sessions.Delete(key)
+					return true
+				}
 
-			// Check if session has timed out
-			deadline := session.LastActive().Add(srv.config.PingInterval + srv.config.PingTimeout)
-			if now.After(deadline) {
-				session.Close("ping timeout")
-				srv.sessions.Delete(key)
-				return true
-			}
+				// Check if session has timed out
+				deadline := session.LastActive().Add(srv.config.PingInterval + srv.config.PingTimeout)
+				if now.After(deadline) {
+					session.Close("ping timeout")
+					srv.sessions.Delete(key)
+					return true
+				}
 
-			// Send a ping packet
-			session.SendPacket(&Packet{Type: PacketPing})
-			return true
-		})
+				// Send a ping packet
+				session.SendPacket(&Packet{Type: PacketPing})
+				return true
+			})
+		}
 	}
 }
