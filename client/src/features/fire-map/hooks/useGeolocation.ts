@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface GeolocationState {
   lat: number | null
   lng: number | null
   error: string | null
   loading: boolean
+  idle: boolean
   permissionDenied: boolean
   retry: () => void
 }
@@ -16,14 +17,20 @@ declare global {
   }
 }
 
-export function useGeolocation(): GeolocationState {
+export function useGeolocation(options?: { enabled?: boolean }): GeolocationState {
+  const enabled = options?.enabled !== false
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(true)
+  const [loading, setLoading] = useState<boolean>(false)
+  const [idle, setIdle] = useState<boolean>(true)
   const [permissionDenied, setPermissionDenied] = useState<boolean>(false)
+  const hasRequested = useRef(false)
 
   const requestLocation = useCallback(() => {
+    setIdle(false)
+    hasRequested.current = true
+
     // Check backdoor first
     if (window.__MELTTOWN_GPS) {
       setLat(window.__MELTTOWN_GPS.lat)
@@ -82,8 +89,10 @@ export function useGeolocation(): GeolocationState {
         })
     }
 
-    requestLocation()
-  }, [requestLocation])
+    if (enabled && !hasRequested.current) {
+      requestLocation()
+    }
+  }, [requestLocation, enabled])
 
-  return { lat, lng, error, loading, permissionDenied, retry: requestLocation }
+  return { lat, lng, error, loading, idle, permissionDenied, retry: requestLocation }
 }
