@@ -8,39 +8,25 @@ import (
 	socketio "github.com/homeworldio/socketio-go"
 )
 
-// broadcastRecord captures a single BroadcastToRoom invocation.
+// broadcastRecord captures a single broadcast invocation.
 type broadcastRecord struct {
 	Room  string
 	Event string
 	Data  string // encoded packet
 }
 
-// newTestSIOServer returns a socketio.Server wired to record broadcasts.
-func newTestSIOServer() (*socketio.Server, *[]broadcastRecord, *sync.Mutex) {
-	s := socketio.NewServer()
-	var records []broadcastRecord
-	var mu sync.Mutex
-
-	s.SendTo = func(sid string, data string) error {
-		mu.Lock()
-		records = append(records, broadcastRecord{Room: sid, Event: "", Data: data})
-		mu.Unlock()
-		return nil
-	}
-
-	return s, &records, &mu
-}
-
-func TestFireBatcher_Add_And_Flush(t *testing.T) {
+// newBatcherTestServer returns a socketio.Server with a namespace client
+// registered so that BroadcastToNamespace delivers to it.
+func newBatcherTestServer(t *testing.T) (*socketio.Server, *[]broadcastRecord, *sync.Mutex) {
+	t.Helper()
 	sioServer := socketio.NewServer()
 
 	var sent []broadcastRecord
 	var mu sync.Mutex
 
-	// Wire up SendTo so BroadcastToRoom actually works.
-	// BroadcastToRoom sends to room members; we need a member in the room.
+	// Register a client in the namespace so BroadcastToNamespace has a target.
 	ns := sioServer.Of("/")
-	ns.Rooms.Join("client-1", "grid-A")
+	_ = ns.HandleConnect("client-1", nil)
 
 	sioServer.SendTo = func(sid string, data string) error {
 		mu.Lock()
@@ -48,6 +34,12 @@ func TestFireBatcher_Add_And_Flush(t *testing.T) {
 		mu.Unlock()
 		return nil
 	}
+
+	return sioServer, &sent, &mu
+}
+
+func TestFireBatcher_Add_And_Flush(t *testing.T) {
+	sioServer, sent, mu := newBatcherTestServer(t)
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 	batcher.Add(FireUpdate{
@@ -62,11 +54,11 @@ func TestFireBatcher_Add_And_Flush(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if len(sent) != 1 {
-		t.Fatalf("expected 1 broadcast, got %d", len(sent))
+	if len(*sent) != 1 {
+		t.Fatalf("expected 1 broadcast, got %d", len(*sent))
 	}
-	if sent[0].Room != "client-1" {
-		t.Errorf("expected broadcast to client-1, got %s", sent[0].Room)
+	if (*sent)[0].Room != "client-1" {
+		t.Errorf("expected broadcast to client-1, got %s", (*sent)[0].Room)
 	}
 
 	// Pending should be empty after flush
@@ -79,20 +71,7 @@ func TestFireBatcher_Add_And_Flush(t *testing.T) {
 }
 
 func TestFireBatcher_Coalesce_SameGrid(t *testing.T) {
-	sioServer := socketio.NewServer()
-
-	var sent []broadcastRecord
-	var mu sync.Mutex
-
-	ns := sioServer.Of("/")
-	ns.Rooms.Join("client-1", "grid-A")
-
-	sioServer.SendTo = func(sid string, data string) error {
-		mu.Lock()
-		sent = append(sent, broadcastRecord{Room: sid, Data: data})
-		mu.Unlock()
-		return nil
-	}
+	sioServer, sent, mu := newBatcherTestServer(t)
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 
@@ -106,28 +85,14 @@ func TestFireBatcher_Coalesce_SameGrid(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Only 1 broadcast should be sent (last update wins)
-	if len(sent) != 1 {
-		t.Fatalf("expected 1 broadcast (coalesced), got %d", len(sent))
+	// Only 1 broadcast should be sent (last update wins, coalesced)
+	if len(*sent) != 1 {
+		t.Fatalf("expected 1 broadcast (coalesced), got %d", len(*sent))
 	}
 }
 
 func TestFireBatcher_MultipleGrids(t *testing.T) {
-	sioServer := socketio.NewServer()
-
-	var sent []broadcastRecord
-	var mu sync.Mutex
-
-	ns := sioServer.Of("/")
-	ns.Rooms.Join("client-1", "grid-A")
-	ns.Rooms.Join("client-2", "grid-B")
-
-	sioServer.SendTo = func(sid string, data string) error {
-		mu.Lock()
-		sent = append(sent, broadcastRecord{Room: sid, Data: data})
-		mu.Unlock()
-		return nil
-	}
+	sioServer, sent, mu := newBatcherTestServer(t)
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 	batcher.Add(FireUpdate{GridID: "grid-A", ActiveCount: 1, Stage: 1})
@@ -138,9 +103,9 @@ func TestFireBatcher_MultipleGrids(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Each grid has one member, so 2 broadcasts total
-	if len(sent) != 2 {
-		t.Fatalf("expected 2 broadcasts, got %d", len(sent))
+	// Two grids → two namespace broadcasts → each hits the single registered client
+	if len(*sent) != 2 {
+		t.Fatalf("expected 2 broadcasts, got %d", len(*sent))
 	}
 }
 
@@ -170,7 +135,7 @@ func TestFireBatcher_StopPreventsFlush(t *testing.T) {
 
 	// Add after stop — the ticker loop has exited so flush won't run.
 	ns := sioServer.Of("/")
-	ns.Rooms.Join("client-1", "grid-A")
+	_ = ns.HandleConnect("client-1", nil)
 	batcher.Add(FireUpdate{GridID: "grid-A", ActiveCount: 1, Stage: 1})
 
 	time.Sleep(50 * time.Millisecond)
@@ -181,14 +146,9 @@ func TestFireBatcher_StopPreventsFlush(t *testing.T) {
 }
 
 func TestFireBatcher_TickerFlush(t *testing.T) {
-	sioServer := socketio.NewServer()
+	sioServer, _, mu := newBatcherTestServer(t)
 
-	var mu sync.Mutex
 	var count int
-
-	ns := sioServer.Of("/")
-	ns.Rooms.Join("client-1", "grid-A")
-
 	sioServer.SendTo = func(sid string, data string) error {
 		mu.Lock()
 		count++

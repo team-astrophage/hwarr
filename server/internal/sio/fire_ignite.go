@@ -156,7 +156,7 @@ func RegisterFireIgniteHandler(
 		ctx := context.Background()
 		reg, err := registerFireEvent(ctx, redis, requestedGridID, eventID, expireAt, resolver, logger)
 		if err != nil {
-			logger.Printf("fire:ignite from %s Redis error: %v", sid, err)
+			logger.Printf("ERROR fire:ignite from %s Redis error (grid=%s): %v", sid, requestedGridID, err)
 			return []interface{}{map[string]interface{}{
 				"error": "failed to register fire event",
 			}}, nil
@@ -189,8 +189,8 @@ func RegisterFireIgniteHandler(
 			"timestamp":    now,
 		}
 
-		if _, err := sioServer.BroadcastToRoom("/", gridID, "fire:ignite", ignitePayload); err != nil {
-			logger.Printf("fire:ignite broadcast to room %s failed: %v", gridID, err)
+		if _, err := sioServer.BroadcastToNamespace("/", "fire:ignite", ignitePayload); err != nil {
+			logger.Printf("fire:ignite global broadcast failed: %v", err)
 		}
 
 		// Global broadcast so clients without viewport subscription also receive the update
@@ -212,23 +212,15 @@ func RegisterFireIgniteHandler(
 			Timestamp:   now,
 		})
 
-		// Broadcast fire:spread animation to affected grid rooms only
+		// Broadcast fire:spread animation to all clients
 		if len(spreadPath) > 0 {
 			spreadPayload := map[string]interface{}{
 				"path":      spreadPath,
 				"event_id":  eventID,
 				"timestamp": now,
 			}
-			// Collect unique grid IDs involved in the spread path
-			affectedGrids := make(map[string]struct{})
-			for _, sp := range reg.SpreadPath {
-				affectedGrids[sp[0]] = struct{}{}
-				affectedGrids[sp[1]] = struct{}{}
-			}
-			for room := range affectedGrids {
-				if _, err := sioServer.BroadcastToRoom("/", room, "fire:spread", spreadPayload); err != nil {
-					logger.Printf("fire:spread broadcast to room %s failed: %v", room, err)
-				}
+			if _, err := sioServer.BroadcastToNamespace("/", "fire:spread", spreadPayload); err != nil {
+				logger.Printf("fire:spread global broadcast failed: %v", err)
 			}
 		}
 
