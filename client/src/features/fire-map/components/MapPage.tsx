@@ -110,17 +110,25 @@ export function MapPage() {
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation({
     enabled: locationRequested,
   });
-  const [locationDismissed, setLocationDismissed] = useState(false);
+  const [locationDismissed, setLocationDismissed] = useState(
+    () => sessionStorage.getItem('hwarr_location_dismissed') === '1',
+  );
+  const dismissLocation = useCallback(() => {
+    sessionStorage.setItem('hwarr_location_dismissed', '1');
+    setLocationDismissed(true);
+  }, []);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
+  const [permissionChecked, setPermissionChecked] = useState(false);
 
   // Auto-skip pre-permission for returning users with granted permission or demo mode
   useEffect(() => {
-    if (!disclaimerAccepted || locationRequested) return;
-    if (window.__MELTTOWN_GPS) { setLocationRequested(true); return; }
+    if (!disclaimerAccepted || locationRequested) { setPermissionChecked(true); return; }
+    if (window.__MELTTOWN_GPS) { setLocationRequested(true); setPermissionChecked(true); return; }
 
     navigator.permissions?.query?.({ name: 'geolocation' as PermissionName })
       .then((s) => { if (s.state === 'granted') setLocationRequested(true); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPermissionChecked(true));
   }, [disclaimerAccepted, locationRequested]);
   const fires = useFireStore((s) => s.fires);
   const gridId = lat && lng ? getGridId(lat, lng) : null;
@@ -147,13 +155,31 @@ export function MapPage() {
   const geocodeLng = mapCenter?.lng ?? lng;
   const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
 
-  // tap → 성냥 던지기 + 불 이벤트
+  // tap → 내 위치가 아니면 flyTo 후 성냥, 내 위치면 바로 성냥
+  const fireListenerRef = useRef<(() => void) | null>(null);
   const handleFire = useCallback(() => {
-    if (lat && lng && gridId) {
+    if (!lat || !lng || !gridId) return;
+
+    if (!isAtMyLocation && mapRef.current) {
+      // 이전 리스너 제거 (연타 시 누적 방지)
+      if (fireListenerRef.current) {
+        mapRef.current.off('moveend', fireListenerRef.current);
+      }
+      const onArrival = () => {
+        fireListenerRef.current = null;
+        immediateRef.current?.();
+        throwMatch(gridId);
+        fire(lat, lng);
+      };
+      fireListenerRef.current = onArrival;
+      const currentZoom = mapRef.current.getZoom();
+      mapRef.current.flyTo([lat, lng], currentZoom, { duration: 1 });
+      mapRef.current.once('moveend', onArrival);
+    } else {
       throwMatch(gridId);
       fire(lat, lng);
     }
-  }, [lat, lng, gridId, throwMatch, fire]);
+  }, [lat, lng, gridId, isAtMyLocation, throwMatch, fire]);
 
   // 랜덤 화재 지역 구경하기 (내 위치 제외)
   const visitListenerRef = useRef<(() => void) | null>(null);
@@ -175,6 +201,16 @@ export function MapPage() {
     mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
     mapRef.current.once('moveend', onArrival);
   }, [fires, gridId]);
+
+  // 언마운트 시 미완료 flyTo 리스너 정리
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        if (fireListenerRef.current) mapRef.current.off('moveend', fireListenerRef.current);
+        if (visitListenerRef.current) mapRef.current.off('moveend', visitListenerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className='relative h-svh w-full'>
@@ -246,8 +282,8 @@ export function MapPage() {
         </div>
       )}
 
-      {/* Location permission flow — only after disclaimer */}
-      {disclaimerAccepted && !locationDismissed && !lat && (() => {
+      {/* Location permission flow — only after disclaimer + permission check done */}
+      {disclaimerAccepted && permissionChecked && !locationDismissed && !lat && (() => {
         // GPS loading
         if (locationRequested && loading) {
           return (
@@ -255,7 +291,7 @@ export function MapPage() {
               mode='loading'
               permissionDenied={false}
               onRetry={retry}
-              onDismiss={() => setLocationDismissed(true)}
+              onDismiss={dismissLocation}
             />
           );
         }
@@ -266,7 +302,7 @@ export function MapPage() {
               mode='error'
               permissionDenied={permissionDenied}
               onRetry={retry}
-              onDismiss={() => setLocationDismissed(true)}
+              onDismiss={dismissLocation}
             />
           );
         }
@@ -277,7 +313,7 @@ export function MapPage() {
               mode='error'
               permissionDenied={true}
               onRetry={retry}
-              onDismiss={() => setLocationDismissed(true)}
+              onDismiss={dismissLocation}
             />
           );
         }
@@ -288,7 +324,7 @@ export function MapPage() {
               mode='pre-permission'
               permissionDenied={false}
               onRetry={() => setLocationRequested(true)}
-              onDismiss={() => setLocationDismissed(true)}
+              onDismiss={dismissLocation}
             />
           );
         }
