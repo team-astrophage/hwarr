@@ -1,7 +1,7 @@
 /**
  * Pre-rendered particle sprite cache for FireCanvas.
  *
- * Radial-gradient circles are baked into OffscreenCanvas at init time.
+ * Radial-gradient circles are baked into HTMLCanvasElement at init time.
  * At draw time only ctx.drawImage() is needed, eliminating per-frame
  * createRadialGradient / arc / fill calls.
  */
@@ -51,14 +51,16 @@ export function lerpAlpha(
   return a[3] + (b[3] - a[3]) * f
 }
 
-// ── Helper: create a small offscreen canvas with a radial gradient ──
+// ── Helper: create a small canvas with a radial gradient ──
 
 function makeRadial(
   size: number,
   stops: [number, string][],
-): OffscreenCanvas {
-  const oc = new OffscreenCanvas(size, size)
-  const ctx = oc.getContext('2d')!
+): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const ctx = c.getContext('2d')!
   const half = size / 2
   const grad = ctx.createRadialGradient(half, half, 0, half, half, half)
   for (const [offset, color] of stops) {
@@ -66,43 +68,43 @@ function makeRadial(
   }
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, size, size)
-  return oc
+  return c
 }
 
 // ── Public sprite sheet ──
 
 export interface SpriteSheet {
   /** flame[stageIdx][bucket] — stageIdx 0-4 corresponds to stage 1-5 */
-  flame: OffscreenCanvas[][]
+  flame: HTMLCanvasElement[][]
   /** smoke[bucket] */
-  smoke: OffscreenCanvas[]
+  smoke: HTMLCanvasElement[]
   /** Per-stage glow dot outer */
-  glowDotOuter: OffscreenCanvas[]
+  glowDotOuter: HTMLCanvasElement[]
   /** Per-stage glow dot core */
-  glowDotCore: OffscreenCanvas[]
+  glowDotCore: HTMLCanvasElement[]
   /** Per-stage floor core glow */
-  coreGlow: OffscreenCanvas[]
+  coreGlow: HTMLCanvasElement[]
   /** Trajectory particle sprite */
-  trajectoryParticle: OffscreenCanvas
+  trajectoryParticle: HTMLCanvasElement
   /** Trajectory landing glow sprite */
-  trajectoryLanding: OffscreenCanvas
+  trajectoryLanding: HTMLCanvasElement
   /** Match impact flash sprite */
-  matchFlash: OffscreenCanvas
+  matchFlash: HTMLCanvasElement
   /** Explosion core sprite */
-  explosionCore: OffscreenCanvas
+  explosionCore: HTMLCanvasElement
   /** Explosion fireball sprite */
-  explosionFireball: OffscreenCanvas
+  explosionFireball: HTMLCanvasElement
 }
 
 export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
-  const flame: OffscreenCanvas[][] = []
-  const glowDotOuter: OffscreenCanvas[] = []
-  const glowDotCore: OffscreenCanvas[] = []
-  const coreGlow: OffscreenCanvas[] = []
+  const flame: HTMLCanvasElement[][] = []
+  const glowDotOuter: HTMLCanvasElement[] = []
+  const glowDotCore: HTMLCanvasElement[] = []
+  const coreGlow: HTMLCanvasElement[] = []
 
   for (const cfg of stages) {
     // ── Flame sprites per height bucket ──
-    const buckets: OffscreenCanvas[] = []
+    const buckets: HTMLCanvasElement[] = []
     for (let bi = 0; bi < FLAME_BUCKETS; bi++) {
       const heightRatio = bi / (FLAME_BUCKETS - 1)
       const [r, g, b] = lerpColor(cfg.colorStops, heightRatio)
@@ -141,7 +143,7 @@ export function createSpriteSheet(stages: StageCfgForSprite[]): SpriteSheet {
   }
 
   // ── Smoke sprites per height bucket ──
-  const smoke: OffscreenCanvas[] = []
+  const smoke: HTMLCanvasElement[] = []
   for (let b = 0; b < SMOKE_BUCKETS; b++) {
     const heightRatio = b / (SMOKE_BUCKETS - 1)
     const gray = Math.round(30 + heightRatio * 20)
