@@ -64,7 +64,6 @@ func (rl *RateLimiter) Allow(sid, event string) bool {
 	}
 
 	rl.mu.Lock()
-	defer rl.mu.Unlock()
 
 	// Lazily create per-sid bucket map.
 	eventMap, exists := rl.buckets[sid]
@@ -82,19 +81,24 @@ func (rl *RateLimiter) Allow(sid, event string) bool {
 	}
 
 	if limiter.Allow() {
+		rl.mu.Unlock()
 		return true
 	}
 
 	// Violation path.
 	rl.violations[sid]++
-	if rl.violations[sid] > maxViolations {
-		// Disconnect the abusive client.
-		if rl.disconnectFn != nil {
-			rl.disconnectFn(sid)
-		}
-		// Cleanup while we still hold the lock.
+	shouldDisconnect := rl.violations[sid] > maxViolations
+	if shouldDisconnect {
 		delete(rl.buckets, sid)
 		delete(rl.violations, sid)
+	}
+	rl.mu.Unlock()
+
+	// Disconnect callback runs outside the lock to avoid deadlock:
+	// disconnectFn → DisconnectAll → onCleanup → rl.Remove() would
+	// re-acquire rl.mu.
+	if shouldDisconnect && rl.disconnectFn != nil {
+		rl.disconnectFn(sid)
 	}
 	return false
 }
