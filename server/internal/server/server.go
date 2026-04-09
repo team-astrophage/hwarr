@@ -98,6 +98,7 @@ func Run(cfg *config.Config) error {
 		reaper.Stop()
 		progressionEngine.Stop()
 		cleanupEngine.Stop()
+		eioServer.Close()
 		_ = redisClient.Close()
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
