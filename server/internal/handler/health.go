@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,14 +18,20 @@ type EngineStatusChecker interface {
 	IsRunning() bool
 }
 
+// RedisPinger checks the Redis connection health.
+type RedisPinger interface {
+	Ping(ctx context.Context) error
+}
+
 // HealthHandler serves the GET /health endpoint for ALB health checks.
 type HealthHandler struct {
 	connections ConnectionCounter
 	engine      EngineStatusChecker
+	redis       RedisPinger
 }
 
 // NewHealthHandler creates a new HealthHandler.
-// Both parameters may be nil; nil values default to 0 connections and engine not running.
+// All parameters may be nil; nil values default to safe zero values.
 func NewHealthHandler(connections ConnectionCounter, engine EngineStatusChecker) *HealthHandler {
 	return &HealthHandler{
 		connections: connections,
@@ -31,10 +39,15 @@ func NewHealthHandler(connections ConnectionCounter, engine EngineStatusChecker)
 	}
 }
 
+// SetRedis attaches a Redis pinger for health checks.
+func (h *HealthHandler) SetRedis(r RedisPinger) {
+	h.redis = r
+}
+
 // Handle responds with server health status.
 //
 //	GET /health
-//	Response: {"status": "ok", "connections": <int>, "engine_running": <bool>}
+//	Response: {"status": "ok", "connections": <int>, "engine_running": <bool>, "redis": "ok"|"<error>"}
 func (h *HealthHandler) Handle(c *gin.Context) {
 	conns := 0
 	if h.connections != nil {
@@ -46,10 +59,22 @@ func (h *HealthHandler) Handle(c *gin.Context) {
 		running = h.engine.IsRunning()
 	}
 
+	redisStatus := "not configured"
+	if h.redis != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := h.redis.Ping(ctx); err != nil {
+			redisStatus = err.Error()
+		} else {
+			redisStatus = "ok"
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":         "ok",
 		"connections":    conns,
 		"engine_running": running,
+		"redis":          redisStatus,
 	})
 }
 

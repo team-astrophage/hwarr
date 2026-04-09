@@ -234,7 +234,9 @@ func setupRouter(
 	r.Use(corsMiddleware(cfg.AllowedOrigins))
 
 	// Health
-	handler.NewHealthHandler(manager, progressionEngine).Register(r)
+	healthHandler := handler.NewHealthHandler(manager, progressionEngine)
+	healthHandler.SetRedis(redisClient)
+	healthHandler.Register(r)
 
 	// REST API
 	handler.NewGridHandler(redisClient).Register(r)
