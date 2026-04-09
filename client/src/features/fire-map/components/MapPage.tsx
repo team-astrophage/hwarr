@@ -107,7 +107,7 @@ export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const immediateRef = useRef<(() => void) | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
-  const { lat, lng, loading, idle, error, permissionDenied, retry } = useGeolocation({
+  const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation({
     enabled: locationRequested,
   });
   const [locationDismissed, setLocationDismissed] = useState(false);
