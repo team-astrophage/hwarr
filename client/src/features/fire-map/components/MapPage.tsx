@@ -110,25 +110,13 @@ export function MapPage() {
   const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation({
     enabled: locationRequested,
   });
-  const [locationDismissed, setLocationDismissed] = useState(
-    () => sessionStorage.getItem('hwarr_location_dismissed') === '1',
-  );
-  const dismissLocation = useCallback(() => {
-    sessionStorage.setItem('hwarr_location_dismissed', '1');
-    setLocationDismissed(true);
-  }, []);
+  const [locationDismissed, setLocationDismissed] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
-  const [permissionChecked, setPermissionChecked] = useState(false);
 
-  // Auto-skip pre-permission for returning users with granted permission or demo mode
+  // 면책동의 완료 후 바로 위치 요청 (pre-permission 모달 없이)
   useEffect(() => {
-    if (!disclaimerAccepted || locationRequested) { setPermissionChecked(true); return; }
-    if (window.__MELTTOWN_GPS) { setLocationRequested(true); setPermissionChecked(true); return; }
-
-    navigator.permissions?.query?.({ name: 'geolocation' as PermissionName })
-      .then((s) => { if (s.state === 'granted') setLocationRequested(true); })
-      .catch(() => {})
-      .finally(() => setPermissionChecked(true));
+    if (!disclaimerAccepted || locationRequested) return;
+    setLocationRequested(true);
   }, [disclaimerAccepted, locationRequested]);
   const fires = useFireStore((s) => s.fires);
   const gridId = lat && lng ? getGridId(lat, lng) : null;
@@ -282,8 +270,8 @@ export function MapPage() {
         </div>
       )}
 
-      {/* Location permission flow — only after disclaimer + permission check done */}
-      {disclaimerAccepted && permissionChecked && !locationDismissed && !lat && (() => {
+      {/* Location permission flow — loading/error only */}
+      {disclaimerAccepted && !locationDismissed && !lat && (() => {
         // GPS loading
         if (locationRequested && loading) {
           return (
@@ -291,7 +279,7 @@ export function MapPage() {
               mode='loading'
               permissionDenied={false}
               onRetry={retry}
-              onDismiss={dismissLocation}
+              onDismiss={() => setLocationDismissed(true)}
             />
           );
         }
@@ -302,29 +290,7 @@ export function MapPage() {
               mode='error'
               permissionDenied={permissionDenied}
               onRetry={retry}
-              onDismiss={dismissLocation}
-            />
-          );
-        }
-        // Already denied from previous session — skip pre-permission
-        if (!locationRequested && permissionDenied) {
-          return (
-            <LocationPermissionModal
-              mode='error'
-              permissionDenied={true}
-              onRetry={retry}
-              onDismiss={dismissLocation}
-            />
-          );
-        }
-        // First visit — show pre-permission
-        if (!locationRequested) {
-          return (
-            <LocationPermissionModal
-              mode='pre-permission'
-              permissionDenied={false}
-              onRetry={() => setLocationRequested(true)}
-              onDismiss={dismissLocation}
+              onDismiss={() => setLocationDismissed(true)}
             />
           );
         }
