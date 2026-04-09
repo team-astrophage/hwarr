@@ -51,15 +51,16 @@ func TestAdd_ReconnectionDetection(t *testing.T) {
 		t.Fatalf("first connection ReconnectCount = %d, want 0", info1.ReconnectCount)
 	}
 
-	// Simulate disconnect (remove sid1) then reconnect with same user_id
-	m.Remove("sid1")
+	// Reconnect while old session still active (typical real-world pattern)
 	info2 := m.Add("sid2", "user-abc")
 	if info2.ReconnectCount != 1 {
 		t.Errorf("reconnection ReconnectCount = %d, want 1", info2.ReconnectCount)
 	}
 
-	// Third connection
-	m.Remove("sid2")
+	// Clean up old session
+	m.Remove("sid1")
+
+	// Third reconnection while sid2 is still active
 	info3 := m.Add("sid3", "user-abc")
 	if info3.ReconnectCount != 2 {
 		t.Errorf("third connection ReconnectCount = %d, want 2", info3.ReconnectCount)
@@ -137,18 +138,46 @@ func TestGetPreviousSession(t *testing.T) {
 		t.Error("expected nil for unknown user_id")
 	}
 
-	// Add and remove — user_sessions should persist
-	info := m.Add("sid1", "user-abc")
-	info.Rooms["grid:1"] = struct{}{}
-	info.Rooms["grid:2"] = struct{}{}
+	// Add and remove — userSessions should be cleaned up
+	m.Add("sid1", "user-abc")
 	m.Remove("sid1")
 
 	prev := m.GetPreviousSession("user-abc")
-	if prev == nil {
-		t.Fatal("expected previous session after remove")
+	if prev != nil {
+		t.Error("expected nil after remove (no active connection)")
 	}
-	if len(prev.Rooms) != 2 {
-		t.Errorf("previous session rooms = %d, want 2", len(prev.Rooms))
+}
+
+func TestRemove_CleansUserSessions(t *testing.T) {
+	m := newTestManager()
+
+	m.Add("sid1", "user-abc")
+	m.Remove("sid1")
+
+	if prev := m.GetPreviousSession("user-abc"); prev != nil {
+		t.Error("expected userSessions to be cleaned up after remove")
+	}
+}
+
+func TestRemove_PreservesUserSessionOnReconnect(t *testing.T) {
+	m := newTestManager()
+
+	m.Add("sid1", "user-abc")
+	// User reconnects with new SID before old one is removed
+	m.Add("sid2", "user-abc")
+	// Now remove the old SID
+	removed := m.Remove("sid1")
+	if removed == nil {
+		t.Fatal("expected non-nil removed info")
+	}
+
+	// userSessions should still point to sid2
+	prev := m.GetPreviousSession("user-abc")
+	if prev == nil {
+		t.Fatal("expected userSessions to survive when pointing to different SID")
+	}
+	if prev.SID != "sid2" {
+		t.Errorf("expected userSessions.SID = sid2, got %s", prev.SID)
 	}
 }
 
