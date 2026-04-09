@@ -15,7 +15,7 @@
 
 import { io, type Socket } from 'socket.io-client'
 import { create } from 'zustand'
-import { API_URL, SOCKET_URL } from './config'
+import { API_URL, SOCKET_URL, TTL_SECONDS } from './config'
 
 export type ConnectionStatus =
   | 'idle'
@@ -42,6 +42,7 @@ export const useSocketStore = create<SocketState>((set) => ({
 const HEARTBEAT_MS = 10_000
 const MAX_RECONNECT_ATTEMPTS = 8
 const USER_ID_STORAGE_KEY = 'hwarr:anonUserId'
+const TOKEN_ERROR_RE = /token|expired|invalid|authentication/i
 
 /**
  * Fetch an HMAC-signed auth token and server-assigned user_id from the API.
@@ -53,6 +54,52 @@ async function fetchToken(): Promise<{ token: string; user_id: string }> {
   return res.json()
 }
 
+// Token cache: reuse the same token (and userID) across reconnections
+// until it approaches expiry. Preserves userID for server-side session
+// restoration via GetPreviousSession(userID).
+const TOKEN_REFRESH_MARGIN_MS = 60_000
+
+let cachedToken: {
+  token: string
+  user_id: string
+  expiresAt: number
+} | null = null
+
+function isTokenFresh(): boolean {
+  return (
+    cachedToken !== null &&
+    Date.now() < cachedToken.expiresAt - TOKEN_REFRESH_MARGIN_MS
+  )
+}
+
+async function getToken(): Promise<{
+  token: string
+  user_id: string
+} | null> {
+  if (isTokenFresh()) return cachedToken!
+
+  for (let i = 0; i < 2; i++) {
+    try {
+      const { token, user_id } = await fetchToken()
+      cachedToken = {
+        token,
+        user_id,
+        expiresAt: Date.now() + TTL_SECONDS * 1000,
+      }
+      localStorage.setItem(USER_ID_STORAGE_KEY, user_id)
+      return cachedToken
+    } catch (err) {
+      console.error(`[Socket] Token fetch attempt ${i + 1} failed`, err)
+      if (i === 0) await new Promise((r) => setTimeout(r, 1_000))
+    }
+  }
+  return null
+}
+
+export function clearTokenCache(): void {
+  cachedToken = null
+}
+
 export const socket: Socket = io(SOCKET_URL, {
   autoConnect: false,
   transports: ['polling', 'websocket'],
@@ -61,12 +108,10 @@ export const socket: Socket = io(SOCKET_URL, {
   reconnectionDelay: 500,
   reconnectionDelayMax: 5_000,
   auth: async (cb) => {
-    try {
-      const { token, user_id } = await fetchToken()
-      localStorage.setItem(USER_ID_STORAGE_KEY, user_id)
-      cb({ user_id, token })
-    } catch (err) {
-      console.error('[Socket] Failed to fetch auth token', err)
+    const authData = await getToken()
+    if (authData) {
+      cb({ user_id: authData.user_id, token: authData.token })
+    } else {
       cb({})
     }
   },
@@ -119,6 +164,9 @@ export function startSocket(): void {
 
   socket.on('connect_error', (err) => {
     console.warn('[Socket] connect_error', err.message)
+    if (TOKEN_ERROR_RE.test(err.message)) {
+      cachedToken = null
+    }
   })
 
   socket.io.on('reconnect_attempt', (n) => {
