@@ -282,6 +282,70 @@ func TestOptionsRequest(t *testing.T) {
 	}
 }
 
+func TestServerClose_ClosesAllSessions(t *testing.T) {
+	srv := newTestServer()
+
+	// Create 3 sessions via handshake
+	sids := make([]string, 3)
+	for i := range sids {
+		req := httptest.NewRequest("GET", "/engine.io/?transport=polling&EIO=4", nil)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+
+		body, _ := io.ReadAll(w.Result().Body)
+		var od openPacketData
+		json.Unmarshal(body[1:], &od)
+		sids[i] = od.SID
+	}
+
+	// Verify all sessions exist
+	for _, sid := range sids {
+		if srv.GetSession(sid) == nil {
+			t.Fatalf("session %s not found before Close", sid)
+		}
+	}
+
+	srv.Close()
+
+	// All sessions should be closed and removed from the map
+	for _, sid := range sids {
+		if s := srv.GetSession(sid); s != nil {
+			t.Errorf("session %s still in map after Close", sid)
+		}
+	}
+}
+
+func TestServerClose_OnCloseCallbackFires(t *testing.T) {
+	srv := newTestServer()
+
+	closedSIDs := make(map[string]string)
+	srv.OnConnect(func(s *Session) {
+		s.SetOnClose(func(sid string, reason string) {
+			closedSIDs[sid] = reason
+			srv.RemoveSession(sid)
+		})
+	})
+
+	// Create a session
+	req := httptest.NewRequest("GET", "/engine.io/?transport=polling&EIO=4", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	body, _ := io.ReadAll(w.Result().Body)
+	var od openPacketData
+	json.Unmarshal(body[1:], &od)
+
+	srv.Close()
+
+	reason, ok := closedSIDs[od.SID]
+	if !ok {
+		t.Fatal("onClose callback was not invoked")
+	}
+	if reason != "server shutting down" {
+		t.Errorf("close reason = %q, want %q", reason, "server shutting down")
+	}
+}
+
 func TestClosePacket(t *testing.T) {
 	srv := newTestServer()
 

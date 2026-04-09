@@ -1,9 +1,11 @@
 package socketio
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -17,6 +19,12 @@ const (
 	PacketConnectError = 4
 	PacketBinaryEvent  = 5
 	PacketBinaryAck    = 6
+)
+
+// Security limits
+const (
+	MaxAttachments = 100 // maximum binary attachments per packet
+	MaxJSONDepth   = 32  // maximum nesting depth for JSON payloads
 )
 
 // PacketTypeString returns the human-readable name of a packet type.
@@ -58,8 +66,10 @@ var (
 	ErrInvalidType     = errors.New("socketio: invalid packet type")
 	ErrMalformedPacket = errors.New("socketio: malformed packet")
 	ErrInvalidJSON     = errors.New("socketio: invalid JSON data")
-	ErrEventNoArray    = errors.New("socketio: EVENT/ACK data must be a JSON array")
-	ErrEventNoName     = errors.New("socketio: EVENT packet must have event name as first element")
+	ErrEventNoArray       = errors.New("socketio: EVENT/ACK data must be a JSON array")
+	ErrEventNoName        = errors.New("socketio: EVENT packet must have event name as first element")
+	ErrTooManyAttachments = errors.New("socketio: attachment count exceeds maximum")
+	ErrJSONTooDeep        = errors.New("socketio: JSON nesting depth exceeds maximum")
 )
 
 // Decode parses a raw Socket.IO v4 packet string into a Packet struct.
@@ -105,6 +115,9 @@ func Decode(data string) (*Packet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid attachment count", ErrMalformedPacket)
 		}
+		if count < 0 || count > MaxAttachments {
+			return nil, ErrTooManyAttachments
+		}
 		p.Attachments = count
 		p.BinaryPayloads = make([][]byte, 0, count)
 		pos += dashIdx + 1
@@ -138,6 +151,9 @@ func Decode(data string) (*Packet, error) {
 	// 5. Parse data (remaining string, should be valid JSON)
 	if pos < len(data) {
 		raw := json.RawMessage(data[pos:])
+		if err := checkJSONDepth([]byte(raw)); err != nil {
+			return nil, err
+		}
 		if !json.Valid(raw) {
 			return nil, ErrInvalidJSON
 		}
@@ -311,6 +327,30 @@ func (p *Packet) ReconstructedData() (interface{}, error) {
 		return reconstructNode(parsed, p.BinaryPayloads), nil
 	}
 	return parsed, nil
+}
+
+// checkJSONDepth validates that the JSON data does not exceed MaxJSONDepth nesting levels.
+func checkJSONDepth(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	var depth int
+	for {
+		t, err := decoder.Token()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return ErrInvalidJSON
+		}
+		switch t {
+		case json.Delim('['), json.Delim('{'):
+			depth++
+			if depth > MaxJSONDepth {
+				return ErrJSONTooDeep
+			}
+		case json.Delim(']'), json.Delim('}'):
+			depth--
+		}
+	}
 }
 
 // placeholder represents a Socket.IO binary placeholder object.

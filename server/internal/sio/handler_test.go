@@ -280,7 +280,7 @@ func TestHandleConnect_DisconnectRemovesSession(t *testing.T) {
 	}
 }
 
-func TestHandleConnect_DisconnectPreservesUserSession(t *testing.T) {
+func TestHandleConnect_DisconnectCleansUserSession(t *testing.T) {
 	h := newTestHandler()
 	authRaw, userID := issueTestAuth(t)
 
@@ -289,10 +289,10 @@ func TestHandleConnect_DisconnectPreservesUserSession(t *testing.T) {
 	_, _ = h.sio.DispatchPacketFull("sid1", pkt)
 	h.sio.DisconnectAll("sid1", "transport close")
 
-	// user_sessions should still have the entry for reconnection
+	// userSessions should be cleaned up after disconnect (no active connection)
 	prev := h.manager.GetPreviousSession(userID)
-	if prev == nil {
-		t.Error("user session should be preserved after disconnect for reconnection")
+	if prev != nil {
+		t.Error("user session should be cleaned up after disconnect")
 	}
 }
 

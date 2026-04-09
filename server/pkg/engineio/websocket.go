@@ -69,6 +69,7 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wsc := &wsConn{conn: conn}
+	conn.SetReadLimit(srv.config.MaxPayload)
 
 	if sid == "" {
 		// Fresh WebSocket connection — perform handshake over WS
