@@ -1,6 +1,5 @@
 import { useEffect, useCallback } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { useStats } from '../features/landing/api/useStats'
 
 interface MenuPopoverProps {
   open: boolean
@@ -60,15 +59,8 @@ const NAV_ITEMS = [
   },
 ]
 
-function formatNumber(n: number): string {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}만`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}천`
-  return n.toLocaleString()
-}
-
 export function MenuDrawer({ open, onClose, onFeedback }: MenuPopoverProps) {
   const { location } = useRouterState()
-  const { data: stats } = useStats()
 
   // Close on route change
   useEffect(() => {
@@ -130,33 +122,6 @@ export function MenuDrawer({ open, onClose, onFeedback }: MenuPopoverProps) {
             )
           })}
         </nav>
-
-        {/* Mini Stats */}
-        {stats && (
-          <>
-            <div className="mx-3 h-px bg-[var(--color-bg-elevated)]" />
-            <Link to="/" className="block px-3 py-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-[0.625rem] text-[var(--color-text-secondary)]">화재 구역</p>
-                  <p className="text-[0.8125rem] font-bold text-[var(--color-accent)]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {formatNumber(stats.activeGrids)}
-                  </p>
-                </div>
-                <div className="w-px h-6 bg-[var(--color-bg-elevated)]" />
-                <div className="flex-1">
-                  <p className="text-[0.625rem] text-[var(--color-text-secondary)]">오늘 방화</p>
-                  <p className="text-[0.8125rem] font-bold text-[var(--color-warning)]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {formatNumber(stats.dailyFires)}
-                  </p>
-                </div>
-              </div>
-              <p className="mt-1.5 text-[0.625rem] text-[var(--color-accent)] text-center">
-                상황판 보기 →
-              </p>
-            </Link>
-          </>
-        )}
 
         {/* Feedback */}
         <div className="mx-3 h-px bg-[var(--color-bg-elevated)]" />
