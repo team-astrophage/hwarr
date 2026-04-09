@@ -14,7 +14,7 @@ function getContent(mode: ModalMode, permissionDenied: boolean) {
     return {
       icon: '🔥',
       title: '내 위치에 불을 지르세요',
-      description: 'GPS 위치를 사용해 지도에 가상의 불을 피울 수 있어요.\n위치 권한을 허용해주세요.',
+      description: 'GPS 위치로 지도에 가상의 불을 피울 수 있어요.\n위치 권한을 허용해주세요.',
       cta: '위치 허용하기',
     }
   }
@@ -93,7 +93,11 @@ export function LocationPermissionModal({
         {onDismiss && (
           <button
             onClick={onDismiss}
-            className='mt-2 w-full py-2.5 text-[0.8125rem] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-base)]'
+            className={`mt-2 w-full py-2.5 text-[0.8125rem] transition-colors ${
+              cta
+                ? 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-base)]'
+                : 'bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] rounded-[12px] hover:text-[var(--color-text-base)]'
+            }`}
           >
             위치 없이 구경하기
           </button>
