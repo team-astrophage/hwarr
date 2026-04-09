@@ -106,9 +106,22 @@ function MapCenterTracker({
 export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const immediateRef = useRef<(() => void) | null>(null);
-  const { lat, lng, loading, error, permissionDenied, retry } = useGeolocation();
+  const [locationRequested, setLocationRequested] = useState(false);
+  const { lat, lng, loading, idle, error, permissionDenied, retry } = useGeolocation({
+    enabled: locationRequested,
+  });
   const [locationDismissed, setLocationDismissed] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => isDismissedToday());
+
+  // Auto-skip pre-permission for returning users with granted permission or demo mode
+  useEffect(() => {
+    if (!disclaimerAccepted || locationRequested) return;
+    if (window.__MELTTOWN_GPS) { setLocationRequested(true); return; }
+
+    navigator.permissions?.query?.({ name: 'geolocation' as PermissionName })
+      .then((s) => { if (s.state === 'granted') setLocationRequested(true); })
+      .catch(() => {});
+  }, [disclaimerAccepted, locationRequested]);
   const fires = useFireStore((s) => s.fires);
   const gridId = lat && lng ? getGridId(lat, lng) : null;
 
@@ -233,13 +246,54 @@ export function MapPage() {
         </div>
       )}
 
-      {!loading && error && !locationDismissed && (
-        <LocationPermissionModal
-          permissionDenied={permissionDenied}
-          onRetry={retry}
-          onDismiss={() => setLocationDismissed(true)}
-        />
-      )}
+      {/* Location permission flow — only after disclaimer */}
+      {disclaimerAccepted && !locationDismissed && !lat && (() => {
+        // GPS loading
+        if (locationRequested && loading) {
+          return (
+            <LocationPermissionModal
+              mode='loading'
+              permissionDenied={false}
+              onRetry={retry}
+              onDismiss={() => setLocationDismissed(true)}
+            />
+          );
+        }
+        // Error/denied after attempt
+        if (locationRequested && !loading && error) {
+          return (
+            <LocationPermissionModal
+              mode='error'
+              permissionDenied={permissionDenied}
+              onRetry={retry}
+              onDismiss={() => setLocationDismissed(true)}
+            />
+          );
+        }
+        // Already denied from previous session — skip pre-permission
+        if (!locationRequested && permissionDenied) {
+          return (
+            <LocationPermissionModal
+              mode='error'
+              permissionDenied={true}
+              onRetry={retry}
+              onDismiss={() => setLocationDismissed(true)}
+            />
+          );
+        }
+        // First visit — show pre-permission
+        if (!locationRequested) {
+          return (
+            <LocationPermissionModal
+              mode='pre-permission'
+              permissionDenied={false}
+              onRetry={() => setLocationRequested(true)}
+              onDismiss={() => setLocationDismissed(true)}
+            />
+          );
+        }
+        return null;
+      })()}
 
       {/* 채팅 토글 버튼 */}
       {!chatOpen && (
