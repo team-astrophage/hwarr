@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { useSocketStore, type ConnectionStatus } from '../lib/socketManager'
 import { useFireStore } from '../features/fire-map/stores/fireStore'
 import { MenuDrawer } from './MenuDrawer'
+import { FeedbackModal } from '../features/feedback/components/FeedbackModal'
 
 type Indicator = {
   label: string
@@ -32,13 +33,14 @@ export function Header() {
   const indicator = toIndicator(status, isMap)
   const onlineUsers = useFireStore((s) => s.onlineUsers)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   return (
     <>
       <header
         className={`
-          flex items-center justify-between px-3 h-11
-          ${isMap ? 'absolute top-0 left-0 right-0 z-[1000] bg-[var(--color-bg-surface)]/85 backdrop-blur-md' : 'bg-[var(--color-bg-surface)]'}
+          flex items-center justify-between px-5 h-11
+          ${isMap ? 'absolute top-0 left-0 right-0 z-[1000] bg-[var(--color-bg-surface)]/85 backdrop-blur-md' : 'sticky top-0 z-10 bg-[color-mix(in_srgb,var(--color-bg-base)_92%,transparent)] backdrop-blur-md'}
         `}
       >
         {/* Logo */}
@@ -98,7 +100,12 @@ export function Header() {
         </div>
       </header>
 
-      <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <MenuDrawer
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onFeedback={() => { setMenuOpen(false); setFeedbackOpen(true) }}
+      />
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </>
   )
 }

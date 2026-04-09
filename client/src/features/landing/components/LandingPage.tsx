@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Header } from '../../../components/Header'
 import { DisclaimerModal } from '../../../components/DisclaimerModal'
-import { FeedbackButton } from '../../feedback/components/FeedbackButton'
 import { useStats } from '../api/useStats'
 import { RankingFeed } from './RankingFeed'
 import { StatCard } from './StatCard'
@@ -93,18 +92,6 @@ export function LandingPage() {
           >
             실시간 지도에서 불 지르기
           </button>
-          <div className="mt-1 flex justify-center">
-            <FeedbackButton>
-              {(open) => (
-                <button
-                  onClick={open}
-                  className="text-[0.6875rem] text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
-                >
-                  의견 보내기
-                </button>
-              )}
-            </FeedbackButton>
-          </div>
         </div>
       </footer>
       {showDisclaimer && (
