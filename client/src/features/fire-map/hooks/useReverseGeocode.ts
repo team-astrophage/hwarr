@@ -89,7 +89,11 @@ export function useReverseGeocode(lat: number | null, lng: number | null): Rever
           const addr = data.address
           const city = addr?.city || addr?.town || addr?.county || ''
           const district = addr?.borough || addr?.city_district || addr?.suburb || addr?.quarter || ''
-          const road = [addr?.road, addr?.house_number].filter(Boolean).join(' ') || ''
+          // house_number에 건물명·층·호수가 포함되는 경우가 있음 (e.g. "6, 보타닉타워 B109호")
+          // 앞쪽 도로 번호(숫자·하이픈)만 추출하고 나머지는 버린다
+          const rawHouseNum = addr?.house_number ?? ''
+          const houseNum = rawHouseNum.match(/^[\d-]+/)?.[0] ?? ''
+          const road = [addr?.road, houseNum].filter(Boolean).join(' ') || ''
           const allParts = [city, district, road].filter(Boolean)
 
           const result: ReverseGeocodeState = {
