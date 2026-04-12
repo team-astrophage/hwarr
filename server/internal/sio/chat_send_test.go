@@ -10,33 +10,23 @@ import (
 
 // mockRedisChatWriter implements RedisChatWriter for testing.
 type mockRedisChatWriter struct {
-	pushed  []string // values passed to LPush
-	trimmed bool     // whether LTrim was called
-	expired bool     // whether Expire was called
-	err     error    // error to return from all operations
+	persistedKey   string // key passed to PersistChat
+	persistedValue string // value passed to PersistChat
+	maxMessages    int64  // maxMessages passed to PersistChat
+	ttlSeconds     int    // ttlSeconds passed to PersistChat
+	called         bool   // whether PersistChat was called
+	err            error  // error to return
 }
 
-func (m *mockRedisChatWriter) LPush(_ context.Context, key string, value string) error {
+func (m *mockRedisChatWriter) PersistChat(_ context.Context, key string, value string, maxMessages int64, ttlSeconds int) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.pushed = append(m.pushed, value)
-	return nil
-}
-
-func (m *mockRedisChatWriter) LTrim(_ context.Context, key string, start, stop int64) error {
-	if m.err != nil {
-		return m.err
-	}
-	m.trimmed = true
-	return nil
-}
-
-func (m *mockRedisChatWriter) Expire(_ context.Context, key string, seconds int) error {
-	if m.err != nil {
-		return m.err
-	}
-	m.expired = true
+	m.called = true
+	m.persistedKey = key
+	m.persistedValue = value
+	m.maxMessages = maxMessages
+	m.ttlSeconds = ttlSeconds
 	return nil
 }
 
@@ -54,20 +44,23 @@ func TestPersistChatMessage(t *testing.T) {
 
 	persistChatMessage(redis, msg, logger)
 
-	if len(redis.pushed) != 1 {
-		t.Fatalf("expected 1 LPUSH call, got %d", len(redis.pushed))
+	if !redis.called {
+		t.Fatal("expected PersistChat to be called")
 	}
-	if !redis.trimmed {
-		t.Error("expected LTRIM to be called")
+	if redis.persistedKey != ChatRedisKey {
+		t.Errorf("expected key=%q, got %q", ChatRedisKey, redis.persistedKey)
 	}
-	if !redis.expired {
-		t.Error("expected EXPIRE to be called")
+	if redis.maxMessages != int64(ChatMaxMessages) {
+		t.Errorf("expected maxMessages=%d, got %d", ChatMaxMessages, redis.maxMessages)
+	}
+	if redis.ttlSeconds != ChatTTLSec {
+		t.Errorf("expected ttlSeconds=%d, got %d", ChatTTLSec, redis.ttlSeconds)
 	}
 
-	// Verify the pushed JSON contains expected fields
+	// Verify the persisted JSON contains expected fields
 	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(redis.pushed[0]), &parsed); err != nil {
-		t.Fatalf("failed to parse pushed JSON: %v", err)
+	if err := json.Unmarshal([]byte(redis.persistedValue), &parsed); err != nil {
+		t.Fatalf("failed to parse persisted JSON: %v", err)
 	}
 	if parsed["id"] != "msg-abc123def456" {
 		t.Errorf("expected id=msg-abc123def456, got %v", parsed["id"])
@@ -188,7 +181,7 @@ func TestPersistChatMessage_RedisError(t *testing.T) {
 	// Should not panic on Redis errors
 	persistChatMessage(redis, msg, logger)
 
-	if len(redis.pushed) != 0 {
-		t.Error("expected no successful pushes on error")
+	if redis.called {
+		t.Error("expected PersistChat not to record success on error")
 	}
 }

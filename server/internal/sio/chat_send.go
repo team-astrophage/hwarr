@@ -15,12 +15,9 @@ import (
 
 // RedisChatWriter defines the Redis operations needed for persisting chat messages.
 type RedisChatWriter interface {
-	// LPush prepends a value to a list.
-	LPush(ctx context.Context, key string, value string) error
-	// LTrim trims a list to the specified range.
-	LTrim(ctx context.Context, key string, start, stop int64) error
-	// Expire sets a TTL on a key.
-	Expire(ctx context.Context, key string, seconds int) error
+	// PersistChat atomically prepends value to the list at key,
+	// trims to maxMessages, and sets TTL — all in a single Redis pipeline.
+	PersistChat(ctx context.Context, key string, value string, maxMessages int64, ttlSeconds int) error
 }
 
 // chatSendData is the client payload for chat:send.
@@ -146,7 +143,7 @@ func RegisterChatSendHandler(
 }
 
 // persistChatMessage stores a chat message in Redis.
-// Uses LPUSH + LTRIM + EXPIRE pipeline pattern matching the Python implementation.
+// Uses a single Redis pipeline (LPUSH + LTRIM + EXPIRE) for atomicity.
 func persistChatMessage(redis RedisChatWriter, msg map[string]interface{}, logger *log.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -157,20 +154,8 @@ func persistChatMessage(redis RedisChatWriter, msg map[string]interface{}, logge
 		return
 	}
 
-	// LPUSH (newest first)
-	if err := redis.LPush(ctx, ChatRedisKey, string(serialized)); err != nil {
-		logger.Printf("Failed to LPUSH chat message to Redis: %v", err)
-		return
-	}
-
-	// LTRIM to cap at ChatMaxMessages
-	if err := redis.LTrim(ctx, ChatRedisKey, 0, int64(ChatMaxMessages-1)); err != nil {
-		logger.Printf("Failed to LTRIM chat messages: %v", err)
-	}
-
-	// EXPIRE to reset TTL
-	if err := redis.Expire(ctx, ChatRedisKey, ChatTTLSec); err != nil {
-		logger.Printf("Failed to set EXPIRE on chat messages: %v", err)
+	if err := redis.PersistChat(ctx, ChatRedisKey, string(serialized), int64(ChatMaxMessages), ChatTTLSec); err != nil {
+		logger.Printf("Failed to persist chat message to Redis: %v", err)
 	}
 }
 

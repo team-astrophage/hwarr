@@ -78,25 +78,24 @@ func (c *Client) AsFeedbackRateLimiter() *FeedbackRateLimitAdapter {
 	return &FeedbackRateLimitAdapter{c: c}
 }
 
-// --- Adapter for chat (Expire takes int seconds) ---
+// --- Adapter for chat ---
 
-// ChatAdapter bridges Client to sio.RedisChatWriter.
+// ChatAdapter bridges Client to sio.RedisChatWriter and sio.RedisChatReader.
 type ChatAdapter struct {
 	c *Client
 }
 
-func (a *ChatAdapter) LPush(ctx context.Context, key string, value string) error {
-	return a.c.LPush(ctx, key, value)
+// PersistChat atomically executes LPUSH + LTRIM + EXPIRE in a single Redis pipeline.
+func (a *ChatAdapter) PersistChat(ctx context.Context, key string, value string, maxMessages int64, ttlSeconds int) error {
+	pipe := a.c.rdb.Pipeline()
+	pipe.LPush(ctx, key, value)
+	pipe.LTrim(ctx, key, 0, maxMessages-1)
+	pipe.Expire(ctx, key, time.Duration(ttlSeconds)*time.Second)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
-func (a *ChatAdapter) LTrim(ctx context.Context, key string, start, stop int64) error {
-	return a.c.LTrim(ctx, key, start, stop)
-}
-
-func (a *ChatAdapter) Expire(ctx context.Context, key string, seconds int) error {
-	return a.c.Expire(ctx, key, secondsToDuration(seconds))
-}
-
+// LRange returns the specified range of elements in a list (used by RedisChatReader).
 func (a *ChatAdapter) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	return a.c.LRange(ctx, key, start, stop)
 }
