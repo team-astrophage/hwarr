@@ -53,7 +53,7 @@ func simulateGetFires(t *testing.T, redis RedisGetFiresReader) []map[string]inte
 	firesList := make([]map[string]interface{}, 0)
 	for _, gridID := range gridIDs {
 		key := fmt.Sprintf("fire:%s", gridID)
-		count, err := redis.ZCount(ctx, key, fmt.Sprintf("%f", float64(0)), "+inf")
+		count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", 0), "+inf")
 		if err != nil {
 			continue
 		}

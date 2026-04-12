@@ -73,7 +73,7 @@ func RegisterSubscribeViewportHandler(
 		joinViewportRooms(sioServer, manager, sid, gridIDs, logger)
 
 		// Collect current fire state for visible grids with active fires
-		now := float64(time.Now().Unix())
+		now := time.Now().Unix()
 		ctx := context.Background()
 		gridStates := make([]map[string]interface{}, 0)
 
@@ -132,9 +132,9 @@ func joinViewportRooms(
 
 // getActiveFireCount queries Redis for the number of active (non-expired) fires in a grid.
 // Uses ZCOUNT fire:{gridId} with score range [now, +inf].
-func getActiveFireCount(ctx context.Context, redis RedisFireCounter, gridID string, now float64) (int, error) {
+func getActiveFireCount(ctx context.Context, redis RedisFireCounter, gridID string, now int64) (int, error) {
 	key := fmt.Sprintf("fire:%s", gridID)
-	count, err := redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+	count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 	if err != nil {
 		return 0, err
 	}

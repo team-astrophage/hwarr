@@ -52,7 +52,7 @@ func (h *GridHandler) Handle(c *gin.Context) {
 	}
 
 	now := time.Now().Unix()
-	activeCount, err := h.getActiveCount(c.Request.Context(), gridID, float64(now))
+	activeCount, err := h.getActiveCount(c.Request.Context(), gridID, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to query fire state"})
 		return
@@ -70,9 +70,9 @@ func (h *GridHandler) Handle(c *gin.Context) {
 
 // getActiveCount counts active (non-expired) fires in a grid cell.
 // Uses ZCOUNT fire:{gridId} with score range [now, +inf].
-func (h *GridHandler) getActiveCount(ctx context.Context, gridID string, now float64) (int64, error) {
+func (h *GridHandler) getActiveCount(ctx context.Context, gridID string, now int64) (int64, error) {
 	key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
-	return h.redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+	return h.redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 }
 
 // viewportResponse matches the Python ViewportResponse model.
@@ -108,7 +108,7 @@ func (h *GridHandler) HandleViewport(c *gin.Context) {
 	}
 
 	gridIDs := grid.GetGridsInViewport(neLat, neLng, swLat, swLng)
-	now := float64(time.Now().Unix())
+	now := time.Now().Unix()
 	ctx := c.Request.Context()
 
 	var gridStates []model.GridState

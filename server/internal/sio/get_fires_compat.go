@@ -41,7 +41,7 @@ func RegisterGetFiresCompatHandler(
 
 	sioServer.On("get_fires", func(sid string, args ...json.RawMessage) ([]interface{}, error) {
 		ctx := context.Background()
-		now := float64(time.Now().Unix())
+		now := time.Now().Unix()
 
 		// Get all active grid IDs from Redis
 		gridIDs, err := redis.SMembers(ctx, "active_grids")
@@ -58,7 +58,7 @@ func RegisterGetFiresCompatHandler(
 		firesList := make([]map[string]interface{}, 0)
 		for _, gridID := range gridIDs {
 			key := fmt.Sprintf("fire:%s", gridID)
-			count, err := redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+			count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 			if err != nil {
 				logger.Printf("get_fires ZCount error for grid %s: %v", gridID, err)
 				continue

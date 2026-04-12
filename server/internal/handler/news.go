@@ -63,7 +63,7 @@ type gridEntry struct {
 //	Response: [{"id": "...", "icon": "🔥", ...}, ...]
 func (h *NewsHandler) Handle(c *gin.Context) {
 	ctx := c.Request.Context()
-	now := float64(time.Now().Unix())
+	now := time.Now().Unix()
 
 	// 1. Get all active grid IDs
 	gridIDs, err := h.redis.SMembers(ctx, "active_grids")
@@ -88,7 +88,7 @@ func (h *NewsHandler) Handle(c *gin.Context) {
 		igniteTS, err := h.getLatestIgniteTS(ctx, gridID)
 		if err != nil {
 			// Non-fatal: use current time as fallback
-			igniteTS = now
+			igniteTS = float64(now)
 		}
 
 		grids = append(grids, gridEntry{
@@ -115,7 +115,7 @@ func (h *NewsHandler) Handle(c *gin.Context) {
 	// 5. Build news items
 	items := make([]model.NewsItem, 0, len(grids))
 	for _, g := range grids {
-		timeAgo := model.FormatTimeAgo(now - g.igniteTS)
+		timeAgo := model.FormatTimeAgo(float64(now) - g.igniteTS)
 		location := grid.GetLocationName(g.gridID)
 		cfg := model.StageConfigs[g.stage]
 		stageLabel := cfg.LabelKo
@@ -135,9 +135,9 @@ func (h *NewsHandler) Handle(c *gin.Context) {
 }
 
 // getActiveCount counts active (non-expired) fires in a grid cell.
-func (h *NewsHandler) getActiveCount(ctx context.Context, gridID string, now float64) (int64, error) {
+func (h *NewsHandler) getActiveCount(ctx context.Context, gridID string, now int64) (int64, error) {
 	key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
-	return h.redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+	return h.redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 }
 
 // getLatestIgniteTS estimates the most recent ignite timestamp for a grid.

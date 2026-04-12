@@ -42,7 +42,7 @@ func RegisterFireStateHandler(
 
 	sioServer.On("fire:state", func(sid string, args ...json.RawMessage) ([]interface{}, error) {
 		ctx := context.Background()
-		now := float64(time.Now().Unix())
+		now := time.Now().Unix()
 
 		// Parse optional grid_ids from the first argument
 		var data fireStateData
@@ -70,7 +70,7 @@ func RegisterFireStateHandler(
 		gridStates := make([]map[string]interface{}, 0)
 		for _, gridID := range gridIDs {
 			key := fmt.Sprintf("fire:%s", gridID)
-			count, err := redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+			count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 			if err != nil {
 				logger.Printf("fire:state ZCount error for grid %s: %v", gridID, err)
 				continue

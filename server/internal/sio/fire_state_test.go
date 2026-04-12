@@ -179,7 +179,7 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 
 	// Simulate handler logic directly (same as RegisterFireStateHandler)
 	ctx := context.Background()
-	now := float64(0) // use 0 so all fires with score > 0 are "active"
+	now := int64(0) // use 0 so all fires with score > 0 are "active"
 
 	var gridIDs []string
 
@@ -208,7 +208,7 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 	gridStates := make([]interface{}, 0)
 	for _, gridID := range gridIDs {
 		key := fmt.Sprintf("fire:%s", gridID)
-		count, err := redis.ZCount(ctx, key, fmt.Sprintf("%f", now), "+inf")
+		count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 		if err != nil {
 			continue
 		}

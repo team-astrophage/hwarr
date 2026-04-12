@@ -70,7 +70,7 @@ func TestZAdd_And_ZCount(t *testing.T) {
 	}
 
 	// ZCount should return only active fires (score >= now)
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", int64(now))
 	activeCount, err := client.ZCount(ctx, key, nowStr, "+inf")
 	if err != nil {
 		t.Fatalf("ZCount failed: %v", err)
@@ -117,7 +117,7 @@ func TestZRemRangeByScore_Cleanup(t *testing.T) {
 	}
 
 	// Remove expired: ZREMRANGEBYSCORE key -inf <now>
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", int64(now))
 	removed, err := client.ZRemRangeByScore(ctx, key, "-inf", nowStr)
 	if err != nil {
 		t.Fatalf("ZRemRangeByScore failed: %v", err)
@@ -195,7 +195,7 @@ func TestEmptyGrid_Cleanup(t *testing.T) {
 	}
 
 	// Cleanup expired fires
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", int64(now))
 	removed, err := client.ZRemRangeByScore(ctx, fireKey, "-inf", nowStr)
 	if err != nil {
 		t.Fatalf("ZRemRangeByScore failed: %v", err)
@@ -272,7 +272,7 @@ func TestFireRegistration_FullFlow(t *testing.T) {
 	}
 
 	// Verify: count active fires
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", int64(now))
 	activeCount, err := client.ZCount(ctx, fireKey, nowStr, "+inf")
 	if err != nil {
 		t.Fatalf("ZCount failed: %v", err)
@@ -393,7 +393,7 @@ func TestClient_ScoreFormat_CompatibleWithPython(t *testing.T) {
 	}
 
 	// Query with string-formatted float (same as Python's str(time.time()))
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", int64(now))
 	count, err := client.ZCount(ctx, key, nowStr, "+inf")
 	if err != nil {
 		t.Fatalf("ZCount failed: %v", err)

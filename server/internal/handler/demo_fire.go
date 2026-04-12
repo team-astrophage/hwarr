@@ -206,7 +206,7 @@ func (h *DemoFireHandler) Handle(c *gin.Context) {
 
 // registerFire registers a fire event in Redis, spreading to neighbors if needed.
 func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID string, expireAt float64) (*FireRegistration, error) {
-	now := fmt.Sprintf("%f", float64(time.Now().Unix()))
+	now := fmt.Sprintf("%d", time.Now().Unix())
 	currentGrid := gridID
 	var spreadPath [][2]string
 

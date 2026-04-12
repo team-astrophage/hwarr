@@ -184,8 +184,7 @@ func (e *FireProgressionEngine) progressionLoop(ctx context.Context) {
 // scanAndUpdateStages scans all active grids and broadcasts any stage transitions.
 // This is the core logic matching Python's _scan_and_update_stages().
 func (e *FireProgressionEngine) scanAndUpdateStages(ctx context.Context) error {
-	now := float64(time.Now().UnixMilli()) / 1000.0
-	nowStr := fmt.Sprintf("%f", now)
+	nowStr := fmt.Sprintf("%d", time.Now().Unix())
 
 	gridIDs, err := e.getActiveGridIDs(ctx)
 	if err != nil {
