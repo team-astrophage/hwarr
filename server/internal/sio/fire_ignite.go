@@ -264,7 +264,7 @@ func registerFireEvent(
 	resolver *geodata.AdminRegionResolver,
 	logger *log.Logger,
 ) (*fireRegistration, error) {
-	now := fmt.Sprintf("%f", float64(time.Now().Unix()))
+	now := fmt.Sprintf("%d", time.Now().Unix())
 	currentGrid := gridID
 	var spreadPath [][2]string
 
