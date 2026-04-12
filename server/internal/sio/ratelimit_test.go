@@ -30,13 +30,19 @@ func TestAllow_ExceedsLimit(t *testing.T) {
 	}
 }
 
-func TestAllow_UnregisteredEvent_AlwaysAllowed(t *testing.T) {
+func TestAllow_UnregisteredEvent_DefaultLimit(t *testing.T) {
 	rl := NewRateLimiter(nil)
 
-	for i := 0; i < 100; i++ {
+	// Default burst is 5, so the first 5 calls should succeed.
+	for i := 0; i < 5; i++ {
 		if !rl.Allow("s1", "some:unknown:event") {
-			t.Fatalf("unregistered events should always be allowed, failed on call %d", i+1)
+			t.Fatalf("expected Allow for unregistered event on call %d", i+1)
 		}
+	}
+
+	// 6th call should be rejected (burst exhausted, no time for refill).
+	if rl.Allow("s1", "some:unknown:event") {
+		t.Fatal("expected rejection for unregistered event after burst exhausted")
 	}
 }
 
@@ -107,6 +113,66 @@ func TestAllow_TokenRefillAfterWait(t *testing.T) {
 
 	if !rl.Allow("s1", "subscribe:viewport") {
 		t.Fatal("expected Allow to succeed after token refill")
+	}
+}
+
+func TestAllow_ViolationDecay(t *testing.T) {
+	disconnected := false
+	rl := NewRateLimiter(func(sid string) {
+		disconnected = true
+	})
+
+	// Exhaust burst for chat:send (burst=2).
+	for i := 0; i < 2; i++ {
+		rl.Allow("s1", "chat:send")
+	}
+
+	// Generate 9 violations (just under maxViolations=10).
+	for i := 0; i < 9; i++ {
+		rl.Allow("s1", "chat:send")
+	}
+
+	rl.mu.RLock()
+	v := rl.violations["s1"]
+	rl.mu.RUnlock()
+	if v != 9 {
+		t.Fatalf("expected 9 violations, got %d", v)
+	}
+
+	// Simulate 30+ seconds elapsed by backdating lastViolation.
+	rl.mu.Lock()
+	rl.lastViolation["s1"] = time.Now().Add(-31 * time.Second)
+	rl.mu.Unlock()
+
+	// Next violation should trigger decay: reset to 0, then increment to 1.
+	rl.Allow("s1", "chat:send")
+
+	rl.mu.RLock()
+	v = rl.violations["s1"]
+	rl.mu.RUnlock()
+	if v != 1 {
+		t.Fatalf("expected violations to decay to 1 after 30s, got %d", v)
+	}
+
+	if disconnected {
+		t.Fatal("should not have disconnected after decay")
+	}
+}
+
+func TestAllow_Heartbeat(t *testing.T) {
+	rl := NewRateLimiter(nil)
+
+	// heartbeat has burst=2, so first 2 should succeed.
+	if !rl.Allow("s1", "heartbeat") {
+		t.Fatal("expected first heartbeat to be allowed")
+	}
+	if !rl.Allow("s1", "heartbeat") {
+		t.Fatal("expected second heartbeat to be allowed")
+	}
+
+	// 3rd should be rejected (burst exhausted).
+	if rl.Allow("s1", "heartbeat") {
+		t.Fatal("expected third heartbeat to be rejected")
 	}
 }
 
