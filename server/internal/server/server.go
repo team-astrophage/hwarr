@@ -174,6 +174,13 @@ func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Serve
 
 // registerSocketEvents wires all Socket.IO event handlers.
 func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher, rl *sio.RateLimiter) {
+	// Token expiry middleware — rejects events from expired sessions and
+	// disconnects them. Registered before the rate limiter so expired
+	// sessions don't consume rate-limit buckets.
+	sioServer.Use(sio.NewTokenExpiryMiddleware(manager, func(sid string) {
+		sioServer.DisconnectAll(sid, "token expired")
+	}, logger))
+
 	// Rate limiting middleware — must be registered before event handlers.
 	// The RateLimiter itself is created in Run() and its cleanup is handled
 	// by the disconnect handler registered in NewHandler to avoid overwriting.

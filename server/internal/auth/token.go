@@ -44,11 +44,12 @@ func (ts *TokenService) Issue() (token string, userID string, err error) {
 	return token, userID, nil
 }
 
-// Validate checks the token signature and expiration, returning the user ID.
-func (ts *TokenService) Validate(token string) (string, error) {
+// validateInternal parses, verifies signature, checks expiry, and returns
+// the user ID together with the raw expiration unix timestamp.
+func (ts *TokenService) validateInternal(token string) (string, int64, error) {
 	parts := strings.SplitN(token, ":", 3)
 	if len(parts) != 3 {
-		return "", fmt.Errorf("invalid token format")
+		return "", 0, fmt.Errorf("invalid token format")
 	}
 
 	userID, expStr, sig := parts[0], parts[1], parts[2]
@@ -59,19 +60,35 @@ func (ts *TokenService) Validate(token string) (string, error) {
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
-		return "", fmt.Errorf("invalid signature")
+		return "", 0, fmt.Errorf("invalid signature")
 	}
 
 	expInt, err := strconv.ParseInt(expStr, 10, 64)
 	if err != nil {
-		return "", fmt.Errorf("invalid expiration: %w", err)
+		return "", 0, fmt.Errorf("invalid expiration: %w", err)
 	}
 
 	if time.Now().Unix() > expInt {
-		return "", fmt.Errorf("token expired")
+		return "", 0, fmt.Errorf("token expired")
 	}
 
-	return userID, nil
+	return userID, expInt, nil
+}
+
+// Validate checks the token signature and expiration, returning the user ID.
+func (ts *TokenService) Validate(token string) (string, error) {
+	userID, _, err := ts.validateInternal(token)
+	return userID, err
+}
+
+// ValidateWithExpiry checks the token signature and expiration, returning
+// both the user ID and the token's expiry time.
+func (ts *TokenService) ValidateWithExpiry(token string) (string, time.Time, error) {
+	userID, expUnix, err := ts.validateInternal(token)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return userID, time.Unix(expUnix, 0), nil
 }
 
 // generateUUID produces a UUID v4 using crypto/rand.
