@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/config"
 )
 
 // mockRedisFireWriter implements RedisFireWriter for testing.
@@ -38,18 +38,6 @@ func (m *mockRedisFireWriter) ZCount(_ context.Context, key, _, _ string) (int64
 }
 
 func (m *mockRedisFireWriter) SAdd(_ context.Context, _, _ string) error {
-	return m.err
-}
-
-func (m *mockRedisFireWriter) Incr(_ context.Context, _ string) error {
-	return m.err
-}
-
-func (m *mockRedisFireWriter) ZIncrBy(_ context.Context, _ string, _ float64, _ string) error {
-	return m.err
-}
-
-func (m *mockRedisFireWriter) Expire(_ context.Context, _ string, _ time.Duration) error {
 	return m.err
 }
 
@@ -225,7 +213,7 @@ func TestDemoFire_SpreadBroadcastOnThreshold(t *testing.T) {
 	// Instead, we set a wildcard high count on all fire: keys via ZCount override
 	spreadMock := &mockRedisFireWriterWithSpread{
 		inner:     mock,
-		threshold: FireSpreadThreshold,
+		threshold: config.FireSpreadThreshold,
 	}
 	bc := &mockBroadcaster{}
 	h := NewDemoFireHandler(spreadMock, bc, nil)
@@ -278,18 +266,6 @@ func (m *mockRedisFireWriterWithSpread) ZCount(_ context.Context, key, _, _ stri
 
 func (m *mockRedisFireWriterWithSpread) SAdd(ctx context.Context, key, member string) error {
 	return m.inner.SAdd(ctx, key, member)
-}
-
-func (m *mockRedisFireWriterWithSpread) Incr(ctx context.Context, key string) error {
-	return m.inner.Incr(ctx, key)
-}
-
-func (m *mockRedisFireWriterWithSpread) ZIncrBy(ctx context.Context, key string, increment float64, member string) error {
-	return m.inner.ZIncrBy(ctx, key, increment, member)
-}
-
-func (m *mockRedisFireWriterWithSpread) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	return m.inner.Expire(ctx, key, expiration)
 }
 
 func TestDemoFire_ResponseFields(t *testing.T) {

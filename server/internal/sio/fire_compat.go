@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/homepy/hwarr/server/internal/config"
 	"github.com/homepy/hwarr/server/internal/geodata"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
@@ -70,7 +71,7 @@ func RegisterFireCompatHandler(
 
 		// Generate unique event ID
 		eventID := fmt.Sprintf("fire-%s", randomHexSIO(12))
-		expireAt := float64(time.Now().Unix()) + FireTTLSec
+		expireAt := float64(time.Now().Unix()) + config.FireTTLSec
 
 		// Register fire in Redis (may spread to neighbor if threshold exceeded)
 		ctx := context.Background()

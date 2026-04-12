@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/engine"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
 )
-
-// FireKeyPrefix is the Redis key prefix for fire sorted sets.
-const FireKeyPrefix = "fire:"
 
 // RedisGridReader abstracts the Redis operations needed by GridHandler.
 type RedisGridReader interface {
@@ -71,7 +69,7 @@ func (h *GridHandler) Handle(c *gin.Context) {
 // getActiveCount counts active (non-expired) fires in a grid cell.
 // Uses ZCOUNT fire:{gridId} with score range [now, +inf].
 func (h *GridHandler) getActiveCount(ctx context.Context, gridID string, now int64) (int64, error) {
-	key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
+	key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, gridID)
 	return h.redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 }
 

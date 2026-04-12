@@ -8,20 +8,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/config"
+	"github.com/homepy/hwarr/server/internal/engine"
 	"github.com/homepy/hwarr/server/internal/geodata"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
-	"github.com/homepy/hwarr/server/internal/ranking"
 )
 
-// FireTTLSec is the default fire TTL in seconds (12 hours).
-const FireTTLSec = 43200
-
-// FireSpreadThreshold is the active fire count above which fires spread to neighbors.
-const FireSpreadThreshold = 500
-
-// FireMaxCascadeDepth limits how many spread hops a single fire can cascade.
-const FireMaxCascadeDepth = 8
 
 // FireRegistration is the result of registering a fire event.
 type FireRegistration struct {
@@ -29,9 +22,6 @@ type FireRegistration struct {
 	ActiveCount int
 	SpreadPath  [][2]string // [(from, to), ...] — empty if fire landed on requested grid
 }
-
-// StatsDailyFiresTTL is the TTL for daily fire counters (48h for KST date boundary safety).
-const StatsDailyFiresTTL = 48 * time.Hour
 
 // RedisFireWriter abstracts the Redis operations needed by DemoFireHandler.
 type RedisFireWriter interface {
@@ -41,12 +31,6 @@ type RedisFireWriter interface {
 	ZCount(ctx context.Context, key, min, max string) (int64, error)
 	// SAdd adds a member to a set.
 	SAdd(ctx context.Context, key string, member string) error
-	// Incr increments a key by 1.
-	Incr(ctx context.Context, key string) error
-	// Expire sets a timeout on key.
-	Expire(ctx context.Context, key string, expiration time.Duration) error
-	// IncrByFloat increments a sorted set member's score.
-	ZIncrBy(ctx context.Context, key string, increment float64, member string) error
 }
 
 // Broadcaster abstracts Socket.IO broadcasting.
@@ -114,7 +98,7 @@ func (h *DemoFireHandler) Handle(c *gin.Context) {
 
 	// Generate fire event
 	eventID := fmt.Sprintf("fire-demo-%s", randomHex(12))
-	expireAt := float64(time.Now().Unix()) + FireTTLSec
+	expireAt := float64(time.Now().Unix()) + config.FireTTLSec
 
 	// Register in Redis (may spread to neighbor if threshold exceeded)
 	ctx := c.Request.Context()
@@ -211,13 +195,13 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 	var spreadPath [][2]string
 
 	// Walk the cascade: spread to neighbor if current grid is at/above threshold
-	for i := 0; i < FireMaxCascadeDepth; i++ {
-		key := fmt.Sprintf("%s%s", FireKeyPrefix, currentGrid)
+	for i := 0; i < config.FireMaxCascadeDepth; i++ {
+		key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, currentGrid)
 		count, err := h.redis.ZCount(ctx, key, now, "+inf")
 		if err != nil {
 			return nil, err
 		}
-		if count < FireSpreadThreshold {
+		if count < config.FireSpreadThreshold {
 			break // capacity here — land at currentGrid
 		}
 		// Spread to a random neighbor
@@ -230,7 +214,7 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 		currentGrid = nextGrid
 	}
 
-	landingKey := fmt.Sprintf("%s%s", FireKeyPrefix, currentGrid)
+	landingKey := fmt.Sprintf("%s%s", engine.FireKeyPrefix, currentGrid)
 
 	// Add fire event to the landing grid's sorted set
 	if err := h.redis.ZAdd(ctx, landingKey, expireAt, eventID); err != nil {
@@ -242,25 +226,8 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 		return nil, err
 	}
 
-	// Increment total fire counter
-	if err := h.redis.Incr(ctx, "stats:total_fires"); err != nil {
-		return nil, err
-	}
-
-	// Increment today's fire counter (KST = UTC+9)
-	kst := time.FixedZone("KST", 9*60*60)
-	todayStr := time.Now().In(kst).Format("2006-01-02")
-	todayKey := fmt.Sprintf("stats:daily_fires:%s", todayStr)
-	if err := h.redis.Incr(ctx, todayKey); err != nil {
-		return nil, err
-	}
-	// 48h TTL for KST date boundary safety (matches Python STATS_DAILY_FIRES_TTL_SEC)
-	_ = h.redis.Expire(ctx, todayKey, StatsDailyFiresTTL)
-
-	// Increment daily ranking for the location region
-	rankingKey := fmt.Sprintf("stats:daily_ranking:%s", todayStr)
-	member := ranking.ResolveMember(currentGrid, h.resolver)
-	_ = h.redis.ZIncrBy(ctx, rankingKey, 1, member)
+	// NOTE: demo fires intentionally skip stats (total_fires, daily_fires, daily_ranking)
+	// to avoid polluting production rankings. See GitHub issue #89.
 
 	// Get final active count
 	activeCount, err := h.redis.ZCount(ctx, landingKey, now, "+inf")
