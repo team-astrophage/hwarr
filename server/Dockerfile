@@ -20,19 +20,24 @@ ARG GEOJSON_URL=https://raw.githubusercontent.com/vuski/admdongkor/master/ver202
 RUN mkdir -p data && curl -fsSL -o data/admin_dong.geojson "$GEOJSON_URL"
 
 # --- Runtime stage ---
-FROM alpine:3.20
+FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata curl && \
+    adduser -D -u 1001 appuser
 
 WORKDIR /app
 
 COPY --from=builder /hwarr-server .
-COPY --from=builder /app/ ./
+COPY --from=builder /app/data/ ./data/
 
 ENV HOST=0.0.0.0
 ENV PORT=8000
 ENV GIN_MODE=release
 
+USER appuser
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["./hwarr-server"]
