@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/config"
 )
 
 // mockRedisFireWriter implements RedisFireWriter for testing.
@@ -212,7 +213,7 @@ func TestDemoFire_SpreadBroadcastOnThreshold(t *testing.T) {
 	// Instead, we set a wildcard high count on all fire: keys via ZCount override
 	spreadMock := &mockRedisFireWriterWithSpread{
 		inner:     mock,
-		threshold: FireSpreadThreshold,
+		threshold: config.FireSpreadThreshold,
 	}
 	bc := &mockBroadcaster{}
 	h := NewDemoFireHandler(spreadMock, bc, nil)

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/config"
+	"github.com/homepy/hwarr/server/internal/engine"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
 )
@@ -17,15 +17,6 @@ import (
 // MaxNewsItems is the maximum number of news entries returned.
 const MaxNewsItems = 5
 
-// newsTTLSec is the default TTL for fire entries (used to back-calculate ignite time).
-var newsTTLSec = func() float64 {
-	if v := os.Getenv("NEWS_TTL_SEC"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return float64(n)
-		}
-	}
-	return 86400 // 1 day default
-}()
 
 // RedisNewsReader abstracts the Redis operations needed by NewsHandler.
 type RedisNewsReader interface {
@@ -136,14 +127,14 @@ func (h *NewsHandler) Handle(c *gin.Context) {
 
 // getActiveCount counts active (non-expired) fires in a grid cell.
 func (h *NewsHandler) getActiveCount(ctx context.Context, gridID string, now int64) (int64, error) {
-	key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
+	key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, gridID)
 	return h.redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 }
 
 // getLatestIgniteTS estimates the most recent ignite timestamp for a grid.
 // It fetches the highest-scored member and subtracts NEWS_TTL_SEC.
 func (h *NewsHandler) getLatestIgniteTS(ctx context.Context, gridID string) (float64, error) {
-	key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
+	key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, gridID)
 	members, err := h.redis.ZRevRangeWithScores(ctx, key, 0, 0)
 	if err != nil {
 		return 0, err
@@ -151,7 +142,7 @@ func (h *NewsHandler) getLatestIgniteTS(ctx context.Context, gridID string) (flo
 	if len(members) == 0 {
 		return 0, fmt.Errorf("no members in sorted set for grid %s", gridID)
 	}
-	return members[0].Score - newsTTLSec, nil
+	return members[0].Score - float64(config.FireTTLSec), nil
 }
 
 // Register adds the news endpoint to the given Gin router group.

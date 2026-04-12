@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/engine"
 )
 
 // Redis key constants for stats.
@@ -67,7 +68,7 @@ func (h *StatsHandler) Handle(c *gin.Context) {
 	activeGrids := 0
 	totalFires := 0
 	for _, gridID := range gridIDs {
-		key := fmt.Sprintf("%s%s", FireKeyPrefix, gridID)
+		key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, gridID)
 		count, err := h.redis.ZCount(ctx, key, now, "+inf")
 		if err != nil {
 			continue

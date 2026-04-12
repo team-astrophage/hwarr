@@ -8,19 +8,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/homepy/hwarr/server/internal/config"
+	"github.com/homepy/hwarr/server/internal/engine"
 	"github.com/homepy/hwarr/server/internal/geodata"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
 )
 
-// FireTTLSec is the default fire TTL in seconds (12 hours).
-const FireTTLSec = 43200
-
-// FireSpreadThreshold is the active fire count above which fires spread to neighbors.
-const FireSpreadThreshold = 500
-
-// FireMaxCascadeDepth limits how many spread hops a single fire can cascade.
-const FireMaxCascadeDepth = 8
 
 // FireRegistration is the result of registering a fire event.
 type FireRegistration struct {
@@ -104,7 +98,7 @@ func (h *DemoFireHandler) Handle(c *gin.Context) {
 
 	// Generate fire event
 	eventID := fmt.Sprintf("fire-demo-%s", randomHex(12))
-	expireAt := float64(time.Now().Unix()) + FireTTLSec
+	expireAt := float64(time.Now().Unix()) + config.FireTTLSec
 
 	// Register in Redis (may spread to neighbor if threshold exceeded)
 	ctx := c.Request.Context()
@@ -201,13 +195,13 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 	var spreadPath [][2]string
 
 	// Walk the cascade: spread to neighbor if current grid is at/above threshold
-	for i := 0; i < FireMaxCascadeDepth; i++ {
-		key := fmt.Sprintf("%s%s", FireKeyPrefix, currentGrid)
+	for i := 0; i < config.FireMaxCascadeDepth; i++ {
+		key := fmt.Sprintf("%s%s", engine.FireKeyPrefix, currentGrid)
 		count, err := h.redis.ZCount(ctx, key, now, "+inf")
 		if err != nil {
 			return nil, err
 		}
-		if count < FireSpreadThreshold {
+		if count < config.FireSpreadThreshold {
 			break // capacity here — land at currentGrid
 		}
 		// Spread to a random neighbor
@@ -220,7 +214,7 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 		currentGrid = nextGrid
 	}
 
-	landingKey := fmt.Sprintf("%s%s", FireKeyPrefix, currentGrid)
+	landingKey := fmt.Sprintf("%s%s", engine.FireKeyPrefix, currentGrid)
 
 	// Add fire event to the landing grid's sorted set
 	if err := h.redis.ZAdd(ctx, landingKey, expireAt, eventID); err != nil {

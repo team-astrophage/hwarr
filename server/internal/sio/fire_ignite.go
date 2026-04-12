@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/homepy/hwarr/server/internal/config"
 	"github.com/homepy/hwarr/server/internal/geodata"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
@@ -15,17 +16,8 @@ import (
 	socketio "github.com/homeworldio/socketio-go"
 )
 
-// FireTTLSec is the default fire event TTL in seconds (12 hours).
-const FireTTLSec = 43200
-
 // StatsDailyFiresTTL is the TTL for daily fire counters (48h for KST date boundary safety).
 const StatsDailyFiresTTL = 48 * time.Hour
-
-// fireSpreadThreshold is the active fire count above which fires spread to neighbors.
-const fireSpreadThreshold = 500
-
-// fireMaxCascadeDepth limits how many spread hops a single fire can cascade.
-const fireMaxCascadeDepth = 8
 
 // RedisFireWriter abstracts the Redis operations needed to register fire events.
 type RedisFireWriter interface {
@@ -150,7 +142,7 @@ func RegisterFireIgniteHandler(
 
 		// Generate unique event ID
 		eventID := fmt.Sprintf("fire-%s", randomHexSIO(12))
-		expireAt := float64(time.Now().Unix()) + FireTTLSec
+		expireAt := float64(time.Now().Unix()) + config.FireTTLSec
 
 		// Register fire in Redis (may spread to neighbor if threshold exceeded)
 		ctx := context.Background()
@@ -269,13 +261,13 @@ func registerFireEvent(
 	var spreadPath [][2]string
 
 	// Walk the cascade: spread to neighbor if current grid is at/above threshold
-	for i := 0; i < fireMaxCascadeDepth; i++ {
+	for i := 0; i < config.FireMaxCascadeDepth; i++ {
 		key := fmt.Sprintf("fire:%s", currentGrid)
 		count, err := redis.ZCount(ctx, key, now, "+inf")
 		if err != nil {
 			return nil, fmt.Errorf("ZCount for %s: %w", key, err)
 		}
-		if count < fireSpreadThreshold {
+		if count < config.FireSpreadThreshold {
 			break // capacity available — land here
 		}
 		// Spread to a random neighbor
