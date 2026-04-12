@@ -80,7 +80,7 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 	if authData.Token == "" {
 		return fmt.Errorf("authentication required")
 	}
-	userID, err := h.tokenService.Validate(authData.Token)
+	userID, tokenExpiry, err := h.tokenService.ValidateWithExpiry(authData.Token)
 	if err != nil {
 		return fmt.Errorf("invalid token: %w", err)
 	}
@@ -95,6 +95,7 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 
 	// 4. Register connection in manager (sid→session map)
 	info := h.manager.Add(sid, userID)
+	info.TokenExpiry = tokenExpiry
 
 	// 4. Restore room subscriptions on reconnect
 	if len(previousRooms) > 0 {

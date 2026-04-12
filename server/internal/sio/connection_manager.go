@@ -26,6 +26,7 @@ type ConnectionInfo struct {
 	Rooms          map[string]struct{} // set of room names (grid IDs)
 	UserID         string              // optional stable ID for reconnection
 	ReconnectCount int
+	TokenExpiry    time.Time // token expiration; checked per-event by middleware
 }
 
 // newConnectionInfo creates a ConnectionInfo with sensible defaults.

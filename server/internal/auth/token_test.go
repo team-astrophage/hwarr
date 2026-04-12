@@ -85,6 +85,49 @@ func TestValidateInvalidFormat(t *testing.T) {
 	}
 }
 
+func TestValidateWithExpiry_ReturnsExpiry(t *testing.T) {
+	ts := NewTokenService("test-secret", 30)
+
+	token, userID, err := ts.Issue()
+	if err != nil {
+		t.Fatalf("Issue() error: %v", err)
+	}
+
+	gotID, expiry, err := ts.ValidateWithExpiry(token)
+	if err != nil {
+		t.Fatalf("ValidateWithExpiry() error: %v", err)
+	}
+	if gotID != userID {
+		t.Errorf("ValidateWithExpiry() userID = %q, want %q", gotID, userID)
+	}
+
+	expected := time.Now().Add(30 * time.Minute)
+	diff := expiry.Sub(expected)
+	if diff < -2*time.Second || diff > 2*time.Second {
+		t.Errorf("ValidateWithExpiry() expiry = %v, want ~%v (diff %v)", expiry, expected, diff)
+	}
+}
+
+func TestValidateWithExpiry_ExpiredToken(t *testing.T) {
+	ts := &TokenService{
+		secret: []byte("test-secret"),
+		ttl:    -1 * time.Second,
+	}
+
+	token, _, err := ts.Issue()
+	if err != nil {
+		t.Fatalf("Issue() error: %v", err)
+	}
+
+	_, _, err = ts.ValidateWithExpiry(token)
+	if err == nil {
+		t.Fatal("ValidateWithExpiry() should fail for expired token")
+	}
+	if !strings.Contains(err.Error(), "token expired") {
+		t.Errorf("expected 'token expired' error, got: %v", err)
+	}
+}
+
 func TestDifferentSecretRejectsToken(t *testing.T) {
 	ts1 := NewTokenService("secret-one", 30)
 	ts2 := NewTokenService("secret-two", 30)
