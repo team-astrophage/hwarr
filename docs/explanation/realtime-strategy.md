@@ -89,31 +89,38 @@ Transport 레벨의 `ping_timeout`(5초)은 TCP 연결이 완전히 끊긴 경�
 
 ## 3. 재접속 복원
 
-### 익명 user_id
+### 토큰 기반 익명 인증
 
 화르르는 로그인 없는 익명 서비스이다. 그러나 재접속 시 이전 상태(구독 중이던 viewport room 등)를 복원하려면 Socket.IO의 일회성 `sid`와 별개로 **안정적인 식별자**가 필요하다.
 
-클라이언트는 최초 접속 시 `crypto.randomUUID()`로 UUID를 생성하여 `localStorage`에 저장한다(`hwarr:anonUserId` key). 이후 모든 Socket.IO 연결에서 `auth.user_id`로 이 값을 전송한다.
+클라이언트는 소켓 연결 전에 서버의 `/api/token` 엔드포인트에서 HMAC 서명된 토큰과 `user_id`를 발급받는다. 이후 모든 Socket.IO 연결에서 `auth`에 `user_id`와 `token`을 함께 전송한다.
 
 ```typescript
 // socketManager.ts
-auth: (cb) => cb({ user_id: getOrCreateAnonUserId() }),
+auth: async (cb) => {
+  const authData = await getToken()
+  if (authData) {
+    cb({ user_id: authData.user_id, token: authData.token })
+  } else {
+    cb({})
+  }
+},
 ```
 
-`localStorage` 접근이 실패하면(private 모드 등) 세션 한정 ID(`anon-{timestamp}`)로 fallback한다. 이 경우 재접속 복원은 동일 세션 내에서만 동작한다.
+토큰은 메모리에 캐싱되며, TTL(30분) 만료 60초 전까지 재사용한다. `user_id`는 `localStorage`(`hwarr:anonUserId` key)에도 저장되어 디버깅과 추적에 활용된다. 토큰 발급이 2회 연속 실패하면 빈 auth로 연결을 시도하며, 이 경우 서버가 연결을 거부한다.
 
-### 서버 측 복원 흐름
+### 서버 측 인증 및 복원 흐름
 
 ```
-1. connect(sid, auth={ user_id: "abc-123" })
-2. manager._user_sessions["abc-123"] 에서 이전 ConnectionInfo 조회
-3. 이전 세션의 rooms 목록 복사
-4. manager.add(sid, user_id="abc-123") → 새 ConnectionInfo 생성, reconnect_count 증가
-5. manager.restore_rooms(sid, previous_rooms) → 이전 room에 다시 join
+1. connect(sid, auth={ user_id: "abc-123", token: "abc-123:exp:sig" })
+2. tokenService.Validate(token) → HMAC 서명 검증 + 만료 확인 → userID 추출
+3. manager.GetPreviousSession(userID) → 이전 ConnectionInfo 조회
+4. manager.Add(sid, userID) → 새 ConnectionInfo 생성, reconnect_count 증가
+5. 이전 세션이 있으면 manager.SetRooms(sid, previousRooms) + sio.EnterRoom()
 6. "connected" ack 전송 (restored_rooms 수 포함)
 ```
 
-`_user_sessions` dict는 `user_id → ConnectionInfo` 매핑을 유지한다. `remove(sid)` 시에도 `_user_sessions`에서 삭제하지 않으므로, 연결이 끊긴 후 재접속해도 이전 room 정보가 보존된다.
+`userSessions` map은 `user_id → ConnectionInfo` 매핑을 유지한다. `Remove(sid)` 시 해당 user_id의 현재 SID가 일치하면 `userSessions`에서도 삭제된다. 따라서 재접속 시 room 복원이 보장되려면, 이전 연결이 reaper에 의해 정리되기 전에 재접속이 이루어져야 한다. 실제로는 Socket.IO의 자동 재접속이 수 초 내에 시도되므로, 대부분의 경우 reaper(15초 주기, 30초 timeout) 이전에 복원된다.
 
 ---
 
@@ -126,6 +133,12 @@ auth: (cb) => cb({ user_id: getOrCreateAnonUserId() }),
 1. **구독 생명주기가 다르다.** viewport room은 지도를 pan/zoom할 때마다 교체된다(`join_rooms`가 이전 room을 전부 leave). 만약 채팅이 격자 room에 포함되어 있었다면, 지도를 움직일 때마다 채팅 연결이 끊겼다가 다시 연결되는 문제가 생긴다. `chat:global`은 `join_rooms`의 교체 대상에 포함되지 않는 별도의 room이므로 viewport 변경과 무관하게 유지된다.
 
 2. **참여 범위가 다르다.** 불 이벤트는 지역적(해당 격자를 보는 사용자만 수신)이지만, 채팅은 전역적(모든 참여자가 모든 메시지를 수신)이다.
+
+### 채팅 전용 Identity
+
+채팅은 소켓 연결의 `auth.user_id`(서버 발급)와 별도로, 클라이언트에서 생성한 **채팅 전용 identity**를 사용한다. `identity.ts`에서 `crypto.randomUUID()`로 생성한 `userId`, 랜덤 닉네임(동물 이모지), 아바타 색상 등을 `localStorage`(`hwarr:chat:identity` key)에 저장한다.
+
+메시지 전송 시 이 채팅 identity의 `user_id`, `nickname`, `avatar` 등을 payload에 포함하여 emit한다. 소켓 인증의 `user_id`와 채팅의 `user_id`는 별개의 값이다. 소켓 인증은 연결 관리와 room 복원에, 채팅 identity는 메시지 표시와 사용자 구분에 각각 사용된다.
 
 ### 클라이언트 측 생명주기
 
