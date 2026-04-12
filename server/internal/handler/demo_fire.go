@@ -11,7 +11,6 @@ import (
 	"github.com/homepy/hwarr/server/internal/geodata"
 	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
-	"github.com/homepy/hwarr/server/internal/ranking"
 )
 
 // FireTTLSec is the default fire TTL in seconds (12 hours).
@@ -30,9 +29,6 @@ type FireRegistration struct {
 	SpreadPath  [][2]string // [(from, to), ...] — empty if fire landed on requested grid
 }
 
-// StatsDailyFiresTTL is the TTL for daily fire counters (48h for KST date boundary safety).
-const StatsDailyFiresTTL = 48 * time.Hour
-
 // RedisFireWriter abstracts the Redis operations needed by DemoFireHandler.
 type RedisFireWriter interface {
 	// ZAdd adds a member with score to a sorted set.
@@ -41,12 +37,6 @@ type RedisFireWriter interface {
 	ZCount(ctx context.Context, key, min, max string) (int64, error)
 	// SAdd adds a member to a set.
 	SAdd(ctx context.Context, key string, member string) error
-	// Incr increments a key by 1.
-	Incr(ctx context.Context, key string) error
-	// Expire sets a timeout on key.
-	Expire(ctx context.Context, key string, expiration time.Duration) error
-	// IncrByFloat increments a sorted set member's score.
-	ZIncrBy(ctx context.Context, key string, increment float64, member string) error
 }
 
 // Broadcaster abstracts Socket.IO broadcasting.
@@ -242,25 +232,8 @@ func (h *DemoFireHandler) registerFire(ctx context.Context, gridID, eventID stri
 		return nil, err
 	}
 
-	// Increment total fire counter
-	if err := h.redis.Incr(ctx, "stats:total_fires"); err != nil {
-		return nil, err
-	}
-
-	// Increment today's fire counter (KST = UTC+9)
-	kst := time.FixedZone("KST", 9*60*60)
-	todayStr := time.Now().In(kst).Format("2006-01-02")
-	todayKey := fmt.Sprintf("stats:daily_fires:%s", todayStr)
-	if err := h.redis.Incr(ctx, todayKey); err != nil {
-		return nil, err
-	}
-	// 48h TTL for KST date boundary safety (matches Python STATS_DAILY_FIRES_TTL_SEC)
-	_ = h.redis.Expire(ctx, todayKey, StatsDailyFiresTTL)
-
-	// Increment daily ranking for the location region
-	rankingKey := fmt.Sprintf("stats:daily_ranking:%s", todayStr)
-	member := ranking.ResolveMember(currentGrid, h.resolver)
-	_ = h.redis.ZIncrBy(ctx, rankingKey, 1, member)
+	// NOTE: demo fires intentionally skip stats (total_fires, daily_fires, daily_ranking)
+	// to avoid polluting production rankings. See GitHub issue #89.
 
 	// Get final active count
 	activeCount, err := h.redis.ZCount(ctx, landingKey, now, "+inf")
