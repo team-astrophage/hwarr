@@ -13,21 +13,31 @@ import { useAnimationStore } from './animationStore'
 
 export interface FireCell {
   gridId: string
+  lat: number
+  lng: number
   activeCount: number
   stage: number // 0~5
 }
 
+export interface GridMeta {
+  latSize: number
+  lngSize: number
+}
+
 interface FireState {
   fires: Map<string, FireCell>
+  gridMeta: GridMeta | null
   onlineUsers: number
 
   updateFire: (cell: FireCell) => void
   syncFires: (cells: FireCell[]) => void
+  setGridMeta: (meta: GridMeta) => void
   setOnlineUsers: (count: number) => void
 }
 
 export const useFireStore = create<FireState>((set) => ({
   fires: new Map(),
+  gridMeta: null,
   onlineUsers: 0,
 
   updateFire: (cell) =>
@@ -56,5 +66,6 @@ export const useFireStore = create<FireState>((set) => ({
       return { fires: next }
     }),
 
+  setGridMeta: (meta) => set({ gridMeta: meta }),
   setOnlineUsers: (count) => set({ onlineUsers: count }),
 }))

@@ -11,7 +11,6 @@ export const API_URL = import.meta.env.VITE_API_URL ?? 'https://hwarr.com';
 export const SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ?? 'https://hwarr.com';
 
-// 불 시스템 상수 — 서버(grid.py)와 반드시 동일해야 함
-export const LAT_UNIT = 0.0009; // ~100m (위도)
-export const LNG_UNIT = 0.0011; // ~100m (경도, 한국 기준 ~37°N)
+// 불 이벤트 TTL. grid 상수(LAT_UNIT/LNG_UNIT)는 서버가 subscribe:viewport 응답의
+// gridMeta 로 내려주므로 클라이언트는 보관하지 않는다.
 export const TTL_SECONDS = 1800; // 30분

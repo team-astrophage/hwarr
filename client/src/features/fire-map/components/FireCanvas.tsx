@@ -11,7 +11,6 @@ import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore, type FireCell } from '../stores/fireStore'
 import { useAnimationStore } from '../stores/animationStore'
-import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 import {
   createSpriteSheet,
   lerpAlpha,
@@ -278,6 +277,9 @@ export function FireCanvas() {
   const fires = useFireStore((s) => s.fires)
   const firesRef = useRef(fires)
   firesRef.current = fires
+  const gridMeta = useFireStore((s) => s.gridMeta)
+  const gridMetaRef = useRef(gridMeta)
+  gridMetaRef.current = gridMeta
 
   const matches = useAnimationStore((s) => s.matches)
   const matchesRef = useRef(matches)
@@ -389,16 +391,22 @@ export function FireCanvas() {
       // ── Precompute grid render data for 2-pass rendering ──
       const grids: GridRenderData[] = []
 
+      const meta = gridMetaRef.current
+      const latSize = meta?.latSize ?? 0.0009
+      const lngSize = meta?.lngSize ?? 0.0011
+      const halfLat = latSize / 2
+      const halfLng = lngSize / 2
+
       for (const [gridId, cell] of currentFires) {
         const cfg = STAGES[cell.stage] ?? STAGES[1]
         if (!cfg) continue
 
-        const [latStr, lngStr] = gridId.split(':')
-        const gLat = Number(latStr) * LAT_UNIT
-        const gLng = Number(lngStr) * LNG_UNIT
+        // cell.lat/lng is the grid center — derive corners via gridMeta.
+        const gLat = cell.lat - halfLat
+        const gLng = cell.lng - halfLng
 
-        const tl = map.latLngToContainerPoint(L.latLng(gLat + LAT_UNIT, gLng))
-        const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + LNG_UNIT))
+        const tl = map.latLngToContainerPoint(L.latLng(gLat + latSize, gLng))
+        const br = map.latLngToContainerPoint(L.latLng(gLat, gLng + lngSize))
 
         const zoomScale = zoom >= 18 ? 1 : Math.max(1, 1 + (18 - zoom) * 0.5)
         const rawW = Math.abs(br.x - tl.x)
@@ -651,10 +659,13 @@ export function FireCanvas() {
         const elapsed = now - m.startTime
         const progress = Math.min(elapsed / MATCH_DURATION, 1)
 
-        const [mLatStr, mLngStr] = m.gridId.split(':')
-        const mLat = Number(mLatStr) * LAT_UNIT + LAT_UNIT / 2
-        const mLng = Number(mLngStr) * LNG_UNIT + LNG_UNIT / 2
-        const targetPt = map.latLngToContainerPoint(L.latLng(mLat, mLng))
+        // cell 에서 중심 lat/lng 를 직접 조회. 도착 전 cell 이 없으면 스킵.
+        const targetCell = firesRef.current.get(m.gridId)
+        if (!targetCell) {
+          if (progress >= 1) removeMatchRef.current(m.id)
+          continue
+        }
+        const targetPt = map.latLngToContainerPoint(L.latLng(targetCell.lat, targetCell.lng))
 
         const startX = sw / 2
         const startY = sh - 80
@@ -752,10 +763,12 @@ export function FireCanvas() {
         const elapsed = now - exp.startTime
         const progress = Math.min(elapsed / EXPLOSION_DURATION, 1)
 
-        const [eLat, eLng] = exp.gridId.split(':')
-        const eCenterLat = Number(eLat) * LAT_UNIT + LAT_UNIT / 2
-        const eCenterLng = Number(eLng) * LNG_UNIT + LNG_UNIT / 2
-        const ePt = map.latLngToContainerPoint(L.latLng(eCenterLat, eCenterLng))
+        const expCell = firesRef.current.get(exp.gridId)
+        if (!expCell) {
+          if (progress >= 1) removeExplosionRef.current(exp.id)
+          continue
+        }
+        const ePt = map.latLngToContainerPoint(L.latLng(expCell.lat, expCell.lng))
         const epx = ePt.x | 0
         const epy = ePt.y | 0
 
@@ -838,15 +851,8 @@ export function FireCanvas() {
         const elapsed = now - traj.startTime
         const progress = Math.min(elapsed / TRAJECTORY_DURATION, 1)
 
-        const [fromLatStr, fromLngStr] = traj.fromGridId.split(':')
-        const [toLatStr, toLngStr] = traj.toGridId.split(':')
-        const fromLat = Number(fromLatStr) * LAT_UNIT + LAT_UNIT / 2
-        const fromLng = Number(fromLngStr) * LNG_UNIT + LNG_UNIT / 2
-        const toLat = Number(toLatStr) * LAT_UNIT + LAT_UNIT / 2
-        const toLng = Number(toLngStr) * LNG_UNIT + LNG_UNIT / 2
-
-        const srcPt = map.latLngToContainerPoint(L.latLng(fromLat, fromLng))
-        const dstPt = map.latLngToContainerPoint(L.latLng(toLat, toLng))
+        const srcPt = map.latLngToContainerPoint(L.latLng(traj.fromLat, traj.fromLng))
+        const dstPt = map.latLngToContainerPoint(L.latLng(traj.toLat, traj.toLng))
 
         const dx = dstPt.x - srcPt.x
         const dy = dstPt.y - srcPt.y

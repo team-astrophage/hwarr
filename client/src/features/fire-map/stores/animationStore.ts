@@ -29,6 +29,11 @@ interface SpreadTrajectory {
   fromGridId: string
   /** 타겟 격자 ID (불이 착륙한 곳) */
   toGridId: string
+  /** 격자 중심 위도/경도 (서버가 내려준 값) */
+  fromLat: number
+  fromLng: number
+  toLat: number
+  toLng: number
 }
 
 /** 랜덤 폭발 간격 최소 (탭 횟수) */
@@ -54,7 +59,14 @@ interface AnimationState {
   removeMatch: (id: number) => void
   triggerExplosion: (gridId: string) => void
   removeExplosion: (id: number) => void
-  addTrajectory: (fromGridId: string, toGridId: string) => void
+  addTrajectory: (
+    fromGridId: string,
+    toGridId: string,
+    fromLat: number,
+    fromLng: number,
+    toLat: number,
+    toLng: number,
+  ) => void
   removeTrajectory: (id: number) => void
 }
 
@@ -143,7 +155,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       explosions: state.explosions.filter((e) => e.id !== id),
     })),
 
-  addTrajectory: (fromGridId, toGridId) =>
+  addTrajectory: (fromGridId, toGridId, fromLat, fromLng, toLat, toLng) =>
     set((state) => ({
       trajectories: [
         ...state.trajectories,
@@ -152,6 +164,10 @@ export const useAnimationStore = create<AnimationState>((set) => ({
           startTime: performance.now(),
           fromGridId,
           toGridId,
+          fromLat,
+          fromLng,
+          toLat,
+          toLng,
         },
       ],
     })),
