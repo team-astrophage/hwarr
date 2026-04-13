@@ -20,11 +20,12 @@ type RedisFireCounter interface {
 }
 
 // viewportData is the payload the client sends for subscribe:viewport.
+// Accepts both snake_case and camelCase during migration; JSON decoder picks whichever is present.
 type viewportData struct {
-	NELat float64 `json:"ne_lat"`
-	NELng float64 `json:"ne_lng"`
-	SWLat float64 `json:"sw_lat"`
-	SWLng float64 `json:"sw_lng"`
+	NELat float64 `json:"neLat"`
+	NELng float64 `json:"neLng"`
+	SWLat float64 `json:"swLat"`
+	SWLng float64 `json:"swLng"`
 }
 
 // RegisterSubscribeViewportHandler registers the "subscribe:viewport" Socket.IO event.
@@ -35,7 +36,7 @@ type viewportData struct {
 //  2. Leaves old viewport rooms and joins new grid rooms
 //  3. Returns current fire state for visible grids with active fires
 //
-// Response: { "status": "ok", "subscribed_grids": N, "active_fires": [...] }
+// Response: { "status": "ok", "gridMeta": {...}, "subscribedGrids": N, "activeFires": [...] }
 //
 // Mirrors Python server/sio/events.py handle_subscribe_viewport.
 func RegisterSubscribeViewportHandler(
@@ -75,7 +76,7 @@ func RegisterSubscribeViewportHandler(
 		// Collect current fire state for visible grids with active fires
 		now := time.Now().Unix()
 		ctx := context.Background()
-		gridStates := make([]map[string]interface{}, 0)
+		gridStates := make([]model.GridState, 0)
 
 		for _, gridID := range gridIDs {
 			activeCount, err := getActiveFireCount(ctx, redis, gridID, now)
@@ -84,8 +85,13 @@ func RegisterSubscribeViewportHandler(
 				continue
 			}
 			if activeCount > 0 {
-				state := model.BuildGridState(gridID, int(activeCount), nil, nil)
-				gridStates = append(gridStates, gridStateToMap(state))
+				centerLat, centerLng, cerr := grid.GridIDToCenter(gridID)
+				if cerr != nil {
+					logger.Printf("subscribe:viewport GridIDToCenter error for %s: %v", gridID, cerr)
+					continue
+				}
+				state := model.BuildGridState(gridID, int(activeCount), centerLat, centerLng)
+				gridStates = append(gridStates, state)
 			}
 		}
 
@@ -93,9 +99,13 @@ func RegisterSubscribeViewportHandler(
 			sid, len(gridIDs), len(gridStates))
 
 		return []interface{}{map[string]interface{}{
-			"status":           "ok",
-			"subscribed_grids": len(gridIDs),
-			"active_fires":     gridStates,
+			"status": "ok",
+			"gridMeta": map[string]interface{}{
+				"latSize": grid.LatUnit,
+				"lngSize": grid.LngUnit,
+			},
+			"subscribedGrids": len(gridIDs),
+			"activeFires":     gridStates,
 		}}, nil
 	})
 }
@@ -141,25 +151,3 @@ func getActiveFireCount(ctx context.Context, redis RedisFireCounter, gridID stri
 	return int(count), nil
 }
 
-// gridStateToMap converts a model.GridState to a map for JSON serialization.
-// Matches the Python state.model_dump() output format.
-func gridStateToMap(state model.GridState) map[string]interface{} {
-	m := map[string]interface{}{
-		"grid_id":      state.GridID,
-		"active_count": state.ActiveCount,
-		"stage":        state.Stage,
-		"stage_info": map[string]interface{}{
-			"stage":                state.StageInfo.Stage,
-			"label_ko":             state.StageInfo.LabelKo,
-			"label_en":             state.StageInfo.LabelEn,
-			"triggers_firefighter": state.StageInfo.TriggersFirefighter,
-		},
-	}
-	if state.Lat != nil {
-		m["lat"] = *state.Lat
-	}
-	if state.Lng != nil {
-		m["lng"] = *state.Lng
-	}
-	return m
-}

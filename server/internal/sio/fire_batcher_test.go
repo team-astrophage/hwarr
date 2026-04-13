@@ -40,6 +40,7 @@ func newBatcherTestServer(t *testing.T) (*socketio.Server, *[]broadcastRecord, *
 
 func TestFireBatcher_Add_And_Flush(t *testing.T) {
 	sioServer, sent, mu := newBatcherTestServer(t)
+	_ = sioServer.EnterRoom("/", "client-1", "grid-A")
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 	batcher.Add(FireUpdate{
@@ -72,6 +73,7 @@ func TestFireBatcher_Add_And_Flush(t *testing.T) {
 
 func TestFireBatcher_Coalesce_SameGrid(t *testing.T) {
 	sioServer, sent, mu := newBatcherTestServer(t)
+	_ = sioServer.EnterRoom("/", "client-1", "grid-A")
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 
@@ -93,6 +95,8 @@ func TestFireBatcher_Coalesce_SameGrid(t *testing.T) {
 
 func TestFireBatcher_MultipleGrids(t *testing.T) {
 	sioServer, sent, mu := newBatcherTestServer(t)
+	_ = sioServer.EnterRoom("/", "client-1", "grid-A")
+	_ = sioServer.EnterRoom("/", "client-1", "grid-B")
 
 	batcher := NewFireBatcher(sioServer, 50*time.Millisecond, nil)
 	batcher.Add(FireUpdate{GridID: "grid-A", ActiveCount: 1, Stage: 1})
@@ -147,6 +151,7 @@ func TestFireBatcher_StopPreventsFlush(t *testing.T) {
 
 func TestFireBatcher_TickerFlush(t *testing.T) {
 	sioServer, _, mu := newBatcherTestServer(t)
+	_ = sioServer.EnterRoom("/", "client-1", "grid-A")
 
 	var count int
 	sioServer.SendTo = func(sid string, data string) error {

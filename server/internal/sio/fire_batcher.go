@@ -15,9 +15,8 @@ type FireUpdate struct {
 	Stage       int
 	EventID     string
 	Timestamp   float64
-	// Extra fields for camelCase payload (compat)
-	Lat *float64
-	Lng *float64
+	Lat         float64
+	Lng         float64
 }
 
 // FireBatcher accumulates fire updates and flushes them to room-scoped
@@ -92,17 +91,13 @@ func (b *FireBatcher) flush() {
 	for _, u := range batch {
 		payload := map[string]interface{}{
 			"gridId":      u.GridID,
+			"lat":         u.Lat,
+			"lng":         u.Lng,
 			"activeCount": u.ActiveCount,
 			"stage":       u.Stage,
 		}
-		if u.Lat != nil {
-			payload["lat"] = *u.Lat
-		}
-		if u.Lng != nil {
-			payload["lng"] = *u.Lng
-		}
-		if _, err := b.sioServer.BroadcastToNamespace("/", "fire:update", payload); err != nil {
-			b.logger.Printf("fire:update batch global broadcast failed: %v", err)
+		if _, err := b.sioServer.BroadcastToRoom("/", u.GridID, "fire:update", payload); err != nil {
+			b.logger.Printf("fire:update batch room broadcast failed for %s: %v", u.GridID, err)
 		}
 	}
 }

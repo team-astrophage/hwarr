@@ -30,22 +30,20 @@ func NewGridHandler(redis RedisGridReader) *GridHandler {
 	return &GridHandler{redis: redis}
 }
 
-// gridStateResponse matches the Python GridStateResponse model.
-type gridStateResponse struct {
-	GridID      string              `json:"grid_id"`
-	ActiveCount int                 `json:"active_count"`
-	Stage       int                 `json:"stage"`
-	StageInfo   model.FireStageInfo `json:"stage_info"`
-}
-
 // Handle returns the current fire state for a specific grid cell.
 //
 //	GET /api/grid/:grid_id
-//	Response: {"grid_id": "...", "active_count": N, "stage": N, "stage_info": {...}}
+//	Response: model.GridState (camelCase with gridId, lat, lng, activeCount, stage, stageInfo)
 func (h *GridHandler) Handle(c *gin.Context) {
 	gridID := c.Param("grid_id")
 	if gridID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "grid_id is required"})
+		return
+	}
+
+	centerLat, centerLng, err := grid.GridIDToCenter(gridID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid grid_id format"})
 		return
 	}
 
@@ -56,14 +54,8 @@ func (h *GridHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	state := model.BuildGridState(gridID, int(activeCount), nil, nil)
-
-	c.JSON(http.StatusOK, gridStateResponse{
-		GridID:      gridID,
-		ActiveCount: int(activeCount),
-		Stage:       state.Stage,
-		StageInfo:   state.StageInfo,
-	})
+	state := model.BuildGridState(gridID, int(activeCount), centerLat, centerLng)
+	c.JSON(http.StatusOK, state)
 }
 
 // getActiveCount counts active (non-expired) fires in a grid cell.
@@ -73,35 +65,35 @@ func (h *GridHandler) getActiveCount(ctx context.Context, gridID string, now int
 	return h.redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
 }
 
-// viewportResponse matches the Python ViewportResponse model.
+// viewportResponse matches the viewport API response shape.
 type viewportResponse struct {
 	Grids            []model.GridState `json:"grids"`
-	TotalActiveGrids int               `json:"total_active_grids"`
+	TotalActiveGrids int               `json:"totalActiveGrids"`
 }
 
 // HandleViewport returns fire states for all grid cells within a map viewport.
 //
-//	GET /api/grid/viewport?ne_lat=...&ne_lng=...&sw_lat=...&sw_lng=...
-//	Response: {"grids": [...], "total_active_grids": N}
+//	GET /api/grid/viewport?neLat=...&neLng=...&swLat=...&swLng=...
+//	Response: {"grids": [...], "totalActiveGrids": N}
 func (h *GridHandler) HandleViewport(c *gin.Context) {
-	neLat, err := strconv.ParseFloat(c.Query("ne_lat"), 64)
+	neLat, err := strconv.ParseFloat(c.Query("neLat"), 64)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "ne_lat is required and must be a number"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "neLat is required and must be a number"})
 		return
 	}
-	neLng, err := strconv.ParseFloat(c.Query("ne_lng"), 64)
+	neLng, err := strconv.ParseFloat(c.Query("neLng"), 64)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "ne_lng is required and must be a number"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "neLng is required and must be a number"})
 		return
 	}
-	swLat, err := strconv.ParseFloat(c.Query("sw_lat"), 64)
+	swLat, err := strconv.ParseFloat(c.Query("swLat"), 64)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "sw_lat is required and must be a number"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "swLat is required and must be a number"})
 		return
 	}
-	swLng, err := strconv.ParseFloat(c.Query("sw_lng"), 64)
+	swLng, err := strconv.ParseFloat(c.Query("swLng"), 64)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "sw_lng is required and must be a number"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "swLng is required and must be a number"})
 		return
 	}
 
@@ -117,8 +109,11 @@ func (h *GridHandler) HandleViewport(c *gin.Context) {
 			return
 		}
 		if activeCount > 0 {
-			centerLat, centerLng, _ := grid.GridIDToCenter(gridID)
-			state := model.BuildGridState(gridID, int(activeCount), &centerLat, &centerLng)
+			centerLat, centerLng, cerr := grid.GridIDToCenter(gridID)
+			if cerr != nil {
+				continue
+			}
+			state := model.BuildGridState(gridID, int(activeCount), centerLat, centerLng)
 			gridStates = append(gridStates, state)
 		}
 	}

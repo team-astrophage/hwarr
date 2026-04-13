@@ -3,8 +3,8 @@ import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import L from 'leaflet';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { useFireSocket } from '../hooks/useFireSocket';
+import { useViewportSubscription } from '../hooks/useViewportSubscription';
 import { useFire } from '../hooks/useFire';
-import { getGridId, getGridCenter } from '../utils/grid';
 import { useFireStore } from '../stores/fireStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
@@ -119,9 +119,10 @@ export function MapPage() {
     setLocationRequested(true);
   }, [disclaimerAccepted, locationRequested]);
   const fires = useFireStore((s) => s.fires);
-  const gridId = lat && lng ? getGridId(lat, lng) : null;
+  const [currentGridId, setCurrentGridId] = useState<string | null>(null);
 
   useFireSocket();
+  useViewportSubscription(mapRef);
   const { fire } = useFire();
 
   const throwMatch = useAnimationStore((s) => s.throwMatch);
@@ -144,9 +145,21 @@ export function MapPage() {
   const { parts } = useReverseGeocode(geocodeLat, geocodeLng);
 
   // tap → 내 위치가 아니면 flyTo 후 성냥, 내 위치면 바로 성냥
+  // gridId 는 서버 ack 에서 받아 애니메이션을 실행한다 (클라이언트 grid 계산 제거).
   const fireListenerRef = useRef<(() => void) | null>(null);
+  const emitFire = useCallback(
+    (fLat: number, fLng: number) => {
+      fire(fLat, fLng, (ack) => {
+        if (ack?.status === 'ok' && ack.gridId) {
+          setCurrentGridId(ack.gridId);
+          throwMatch(ack.gridId);
+        }
+      });
+    },
+    [fire, throwMatch],
+  );
   const handleFire = useCallback(() => {
-    if (!lat || !lng || !gridId) return;
+    if (!lat || !lng) return;
 
     if (!isAtMyLocation && mapRef.current) {
       // 이전 리스너 제거 (연타 시 누적 방지)
@@ -156,27 +169,26 @@ export function MapPage() {
       const onArrival = () => {
         fireListenerRef.current = null;
         immediateRef.current?.();
-        throwMatch(gridId);
-        fire(lat, lng);
+        emitFire(lat, lng);
       };
       fireListenerRef.current = onArrival;
       const currentZoom = mapRef.current.getZoom();
       mapRef.current.flyTo([lat, lng], currentZoom, { duration: 1 });
       mapRef.current.once('moveend', onArrival);
     } else {
-      throwMatch(gridId);
-      fire(lat, lng);
+      emitFire(lat, lng);
     }
-  }, [lat, lng, gridId, isAtMyLocation, throwMatch, fire]);
+  }, [lat, lng, isAtMyLocation, emitFire]);
 
   // 랜덤 화재 지역 구경하기 (내 위치 제외)
   const visitListenerRef = useRef<(() => void) | null>(null);
   const handleVisit = useCallback(() => {
     if (fires.size === 0 || !mapRef.current) return;
-    const keys = Array.from(fires.keys()).filter((k) => k !== gridId);
-    if (keys.length === 0) return;
-    const randomKey = keys[Math.floor(Math.random() * keys.length)];
-    const [centerLat, centerLng] = getGridCenter(randomKey);
+    const entries = Array.from(fires.values()).filter(
+      (c) => c.gridId !== currentGridId,
+    );
+    if (entries.length === 0) return;
+    const randomCell = entries[Math.floor(Math.random() * entries.length)];
     // 이전 리스너 제거 (연타 시 누적 방지)
     if (visitListenerRef.current) {
       mapRef.current.off('moveend', visitListenerRef.current);
@@ -186,9 +198,9 @@ export function MapPage() {
       immediateRef.current?.();
     };
     visitListenerRef.current = onArrival;
-    mapRef.current.flyTo([centerLat, centerLng], 16, { duration: 1.5 });
+    mapRef.current.flyTo([randomCell.lat, randomCell.lng], 16, { duration: 1.5 });
     mapRef.current.once('moveend', onArrival);
-  }, [fires, gridId]);
+  }, [fires, currentGridId]);
 
   // 언마운트 시 미완료 flyTo 리스너 정리
   useEffect(() => {
@@ -321,7 +333,7 @@ export function MapPage() {
       <ChatPanel visible={chatOpen} onClose={() => setChatOpen(false)} />
 
       <BottomPanel
-        gridId={gridId}
+        gridId={currentGridId}
         onFire={handleFire}
         onVisit={handleVisit}
         disabled={!lat || !lng}

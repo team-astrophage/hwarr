@@ -10,7 +10,6 @@ import { useMemo, useState, useEffect } from 'react'
 import { Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useFireStore } from '../stores/fireStore'
-import { LAT_UNIT, LNG_UNIT } from '../../../lib/config'
 
 const FIRETRUCK_STAGE_THRESHOLD = 4
 const FIRETRUCK_MIN_ZOOM = 18
@@ -39,6 +38,7 @@ function createFiretruckIcon() {
 export function FiretruckOverlay() {
   const map = useMap()
   const fires = useFireStore((s) => s.fires)
+  const gridMeta = useFireStore((s) => s.gridMeta)
   const [zoom, setZoom] = useState(map.getZoom())
 
   useEffect(() => {
@@ -51,17 +51,18 @@ export function FiretruckOverlay() {
 
   const firetruckPositions = useMemo(() => {
     const positions: { gridId: string; lat: number; lng: number }[] = []
+    const halfLat = (gridMeta?.latSize ?? 0.0009) / 2
+    const halfLng = (gridMeta?.lngSize ?? 0.0011) / 2
     for (const [gridId, cell] of fires) {
       if (cell.stage >= FIRETRUCK_STAGE_THRESHOLD) {
-        const [latStr, lngStr] = gridId.split(':')
-        // 격자 오른쪽 하단 모서리에 배치
-        const lat = Number(latStr) * LAT_UNIT
-        const lng = Number(lngStr) * LNG_UNIT + LNG_UNIT
+        // 격자 오른쪽 하단 모서리에 배치 (center - halfLat, center + halfLng)
+        const lat = cell.lat - halfLat
+        const lng = cell.lng + halfLng
         positions.push({ gridId, lat, lng })
       }
     }
     return positions
-  }, [fires])
+  }, [fires, gridMeta])
 
   if (firetruckPositions.length === 0 || zoom < FIRETRUCK_MIN_ZOOM) return null
 

@@ -14,14 +14,35 @@
 import { useCallback } from 'react'
 import { socket } from '../../../lib/socket'
 
+interface FireIgniteAck {
+  status?: 'ok' | string
+  gridId?: string
+  requestedGridId?: string
+  eventId?: string
+  lat?: number
+  lng?: number
+  activeCount?: number
+  stage?: number
+  error?: string
+}
+
 export function useFire() {
-  const fire = useCallback((lat: number, lng: number) => {
-    if (!socket.connected) {
-      console.warn('[Socket] fire dropped (disconnected)', { lat, lng })
-      return
-    }
-    socket.emit('fire:ignite', { lat, lng })
-  }, [])
+  const fire = useCallback(
+    (
+      lat: number,
+      lng: number,
+      onAck?: (ack: FireIgniteAck) => void,
+    ) => {
+      if (!socket.connected) {
+        console.warn('[Socket] fire dropped (disconnected)', { lat, lng })
+        return
+      }
+      socket.emit('fire:ignite', { lat, lng }, (ack: FireIgniteAck) => {
+        onAck?.(ack)
+      })
+    },
+    [],
+  )
 
   return { fire }
 }

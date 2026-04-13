@@ -90,23 +90,23 @@ func GetStage(activeCount int) FireStage {
 // FireStageInfo is the stage info returned in API responses.
 type FireStageInfo struct {
 	Stage               int    `json:"stage"`
-	LabelKo             string `json:"label_ko"`
-	LabelEn             string `json:"label_en"`
-	TriggersFirefighter bool   `json:"triggers_firefighter"`
+	LabelKo             string `json:"labelKo"`
+	LabelEn             string `json:"labelEn"`
+	TriggersFirefighter bool   `json:"triggersFirefighter"`
 }
 
 // GridState represents the state of a single grid cell.
 type GridState struct {
-	GridID      string        `json:"grid_id"`
-	Lat         *float64      `json:"lat,omitempty"`
-	Lng         *float64      `json:"lng,omitempty"`
-	ActiveCount int           `json:"active_count"`
+	GridID      string        `json:"gridId"`
+	Lat         float64       `json:"lat"`
+	Lng         float64       `json:"lng"`
+	ActiveCount int           `json:"activeCount"`
 	Stage       int           `json:"stage"`
-	StageInfo   FireStageInfo `json:"stage_info"`
+	StageInfo   FireStageInfo `json:"stageInfo"`
 }
 
-// BuildGridState creates a GridState from grid ID and active count.
-func BuildGridState(gridID string, activeCount int, lat, lng *float64) GridState {
+// BuildGridState creates a GridState from grid ID, active count, and center coordinates.
+func BuildGridState(gridID string, activeCount int, lat, lng float64) GridState {
 	stage := GetStage(activeCount)
 	cfg := StageConfigs[stage]
 	return GridState{

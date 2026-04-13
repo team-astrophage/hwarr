@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
 	socketio "github.com/homeworldio/socketio-go"
 )
@@ -22,13 +23,13 @@ type RedisFireStateReader interface {
 
 // fireStateData is the optional payload the client sends for fire:state.
 type fireStateData struct {
-	GridIDs []string `json:"grid_ids"`
+	GridIDs []string `json:"gridIds"`
 }
 
 // RegisterFireStateHandler registers the "fire:state" Socket.IO event.
 //
-// Client sends: { "grid_ids": ["gridA", "gridB"] }  (optional — all active if omitted)
-// Server returns: { "status": "ok", "grids": [...], "total_active_grids": N }
+// Client sends: { "gridIds": ["gridA", "gridB"] }  (optional — all active if omitted)
+// Server returns: { "status": "ok", "grids": [...], "totalActiveGrids": N }
 //
 // Mirrors Python server/sio/events.py handle_fire_state.
 func RegisterFireStateHandler(
@@ -58,16 +59,16 @@ func RegisterFireStateHandler(
 			if err != nil {
 				logger.Printf("fire:state SMembers error: %v", err)
 				return []interface{}{map[string]interface{}{
-					"status":             "ok",
-					"grids":              []interface{}{},
-					"total_active_grids": 0,
+					"status":           "ok",
+					"grids":            []interface{}{},
+					"totalActiveGrids": 0,
 				}}, nil
 			}
 			gridIDs = members
 		}
 
 		// Collect state for each grid with active fires
-		gridStates := make([]map[string]interface{}, 0)
+		gridStates := make([]model.GridState, 0)
 		for _, gridID := range gridIDs {
 			key := fmt.Sprintf("fire:%s", gridID)
 			count, err := redis.ZCount(ctx, key, fmt.Sprintf("%d", now), "+inf")
@@ -76,17 +77,22 @@ func RegisterFireStateHandler(
 				continue
 			}
 			if count > 0 {
-				state := model.BuildGridState(gridID, int(count), nil, nil)
-				gridStates = append(gridStates, gridStateToMap(state))
+				centerLat, centerLng, cerr := grid.GridIDToCenter(gridID)
+				if cerr != nil {
+					logger.Printf("fire:state GridIDToCenter error for %s: %v", gridID, cerr)
+					continue
+				}
+				state := model.BuildGridState(gridID, int(count), centerLat, centerLng)
+				gridStates = append(gridStates, state)
 			}
 		}
 
 		logger.Printf("fire:state sid=%s requested=%d active=%d", sid, len(gridIDs), len(gridStates))
 
 		return []interface{}{map[string]interface{}{
-			"status":             "ok",
-			"grids":              gridStates,
-			"total_active_grids": len(gridStates),
+			"status":           "ok",
+			"grids":            gridStates,
+			"totalActiveGrids": len(gridStates),
 		}}, nil
 	})
 }

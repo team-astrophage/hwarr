@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/homepy/hwarr/server/internal/grid"
 	"github.com/homepy/hwarr/server/internal/model"
 )
 
@@ -261,47 +262,40 @@ func (e *FireProgressionEngine) broadcastStageChange(
 ) {
 	ts := float64(time.Now().UnixMilli()) / 1000.0
 
-	state := model.BuildGridState(gridID, activeCount, nil, nil)
-	payload := map[string]interface{}{
-		"grid_id":      state.GridID,
-		"active_count": state.ActiveCount,
-		"stage":        state.Stage,
-		"stage_info": map[string]interface{}{
-			"stage":                state.StageInfo.Stage,
-			"label_ko":             state.StageInfo.LabelKo,
-			"label_en":             state.StageInfo.LabelEn,
-			"triggers_firefighter": state.StageInfo.TriggersFirefighter,
-		},
-		"timestamp": ts,
-		// camelCase aliases for mock server compat
-		"gridId":      gridID,
-		"activeCount": activeCount,
+	centerLat, centerLng, cerr := grid.GridIDToCenter(gridID)
+	if cerr != nil {
+		e.logger.Printf("broadcastStageChange GridIDToCenter error for %s: %v", gridID, cerr)
 	}
 
-	// 1) Room-scoped update — reaches viewport subscribers
+	state := model.BuildGridState(gridID, activeCount, centerLat, centerLng)
+	payload := map[string]interface{}{
+		"gridId":      state.GridID,
+		"lat":         state.Lat,
+		"lng":         state.Lng,
+		"activeCount": state.ActiveCount,
+		"stage":       state.Stage,
+		"stageInfo":   state.StageInfo,
+		"timestamp":   ts,
+	}
+
+	// Room-scoped update — reaches viewport subscribers only.
 	if _, err := e.broadcaster.BroadcastToRoom("/", gridID, "fire:update", payload); err != nil {
 		e.logger.Printf("Failed to broadcast fire:update to room %s: %v", gridID, err)
 	}
 
-	// 2) Global update — reaches map overview clients
-	if _, err := e.broadcaster.BroadcastToNamespace("/", "fire:update", payload); err != nil {
-		e.logger.Printf("Failed to broadcast fire:update globally: %v", err)
-	}
-
-	// 3) Dedicated stage transition event with prev/new for animations
+	// Dedicated stage transition event with prev/new for animations (room-scoped).
 	transitionPayload := map[string]interface{}{
-		"grid_id":      gridID,
-		"active_count": activeCount,
-		"prev_stage":   int(prevStage),
-		"new_stage":    int(newStage),
-		"stage_info":   payload["stage_info"],
-		"timestamp":    ts,
+		"gridId":      gridID,
+		"lat":         state.Lat,
+		"lng":         state.Lng,
+		"activeCount": activeCount,
+		"prevStage":   int(prevStage),
+		"newStage":    int(newStage),
+		"stageInfo":   state.StageInfo,
+		"timestamp":   ts,
 	}
 	if _, err := e.broadcaster.BroadcastToRoom("/", gridID, "fire:stage_transition", transitionPayload); err != nil {
 		e.logger.Printf("Failed to broadcast fire:stage_transition to room %s: %v", gridID, err)
-	}
-	if _, err := e.broadcaster.BroadcastToNamespace("/", "fire:stage_transition", transitionPayload); err != nil {
-		e.logger.Printf("Failed to broadcast fire:stage_transition globally: %v", err)
 	}
 
 	prevName := stageName(prevStage)
@@ -324,24 +318,25 @@ func (e *FireProgressionEngine) broadcastFirefighterSpawn(gridID string, activeC
 		removePerSweep = 1
 	}
 
+	centerLat, centerLng, _ := grid.GridIDToCenter(gridID)
+
 	payload := map[string]interface{}{
-		"npc_id":           npcID,
-		"grid_id":          gridID,
-		"status":           "dispatched",
-		"dispatched_at":    float64(time.Now().UnixMilli()) / 1000.0,
-		"fires_removed":    0,
-		"remove_per_sweep": removePerSweep,
-		"target_stage":     int(stage),
+		"npcId":          npcID,
+		"gridId":         gridID,
+		"lat":            centerLat,
+		"lng":            centerLng,
+		"status":         "dispatched",
+		"dispatchedAt":   float64(time.Now().UnixMilli()) / 1000.0,
+		"firesRemoved":   0,
+		"removePerSweep": removePerSweep,
+		"targetStage":    int(stage),
 	}
 
 	if _, err := e.broadcaster.BroadcastToRoom("/", gridID, "firefighter:spawn", payload); err != nil {
 		e.logger.Printf("Failed to broadcast firefighter:spawn to room %s: %v", gridID, err)
 	}
-	if _, err := e.broadcaster.BroadcastToNamespace("/", "firefighter:spawn", payload); err != nil {
-		e.logger.Printf("Failed to broadcast firefighter:spawn globally: %v", err)
-	}
 
-	e.logger.Printf("Firefighter spawn broadcast: npc_id=%s grid=%s stage=%d", npcID, gridID, int(stage))
+	e.logger.Printf("Firefighter spawn broadcast: npcId=%s grid=%s stage=%d", npcID, gridID, int(stage))
 }
 
 // BroadcastStageChange is the public version of broadcastStageChange, used by

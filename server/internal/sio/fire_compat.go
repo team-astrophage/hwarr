@@ -95,17 +95,15 @@ func RegisterFireCompatHandler(
 		}
 
 		// Build grid state with stage info
-		latP := &lat
-		lngP := &lng
-		state := model.BuildGridState(gridID, activeCount, latP, lngP)
+		state := model.BuildGridState(gridID, activeCount, lat, lng)
 
 		// Enqueue batched room-scoped update (replaces global broadcast)
 		batcher.Add(FireUpdate{
 			GridID:      gridID,
 			ActiveCount: activeCount,
 			Stage:       state.Stage,
-			Lat:         &lat,
-			Lng:         &lng,
+			Lat:         lat,
+			Lng:         lng,
 		})
 
 		logger.Printf("fire (compat) sid=%s requested=%s landed=%s count=%d stage=%d spread=%d",
