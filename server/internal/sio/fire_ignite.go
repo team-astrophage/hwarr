@@ -156,63 +156,78 @@ func RegisterFireIgniteHandler(
 
 		gridID := reg.GridID
 		activeCount := reg.ActiveCount
-		spreadPath := make([]map[string]string, len(reg.SpreadPath))
+
+		// Compute center lat/lng for the landing grid (source of truth).
+		centerLat, centerLng, cerr := grid.GridIDToCenter(gridID)
+		if cerr != nil {
+			logger.Printf("fire:ignite GridIDToCenter error for %s: %v", gridID, cerr)
+			centerLat = *lat
+			centerLng = *lng
+		}
+
+		// Build spread path with lat/lng per segment.
+		spreadPath := make([]map[string]interface{}, len(reg.SpreadPath))
 		for i, sp := range reg.SpreadPath {
-			spreadPath[i] = map[string]string{
-				"from": sp[0],
-				"to":   sp[1],
+			fromLat, fromLng, _ := grid.GridIDToCenter(sp[0])
+			toLat, toLng, _ := grid.GridIDToCenter(sp[1])
+			spreadPath[i] = map[string]interface{}{
+				"from":    sp[0],
+				"to":      sp[1],
+				"fromLat": fromLat,
+				"fromLng": fromLng,
+				"toLat":   toLat,
+				"toLng":   toLng,
 			}
 		}
 
 		// Build grid state with stage info
-		state := model.BuildGridState(gridID, activeCount, lat, lng)
+		state := model.BuildGridState(gridID, activeCount, centerLat, centerLng)
 
-		// Broadcast fire:ignite to grid room (viewport subscribers)
+		// Broadcast fire:ignite room-scoped (viewport subscribers only)
 		now := float64(time.Now().UnixMilli()) / 1000.0
 		ignitePayload := map[string]interface{}{
-			"grid_id":      gridID,
-			"event_id":     eventID,
-			"lat":          *lat,
-			"lng":          *lng,
-			"active_count": activeCount,
-			"stage":        state.Stage,
-			"stage_info":   gridStateInfoToMap(state.StageInfo),
-			"ignited_by":   sid,
-			"timestamp":    now,
-		}
-
-		if _, err := sioServer.BroadcastToNamespace("/", "fire:ignite", ignitePayload); err != nil {
-			logger.Printf("fire:ignite global broadcast failed: %v", err)
-		}
-
-		// Global broadcast so clients without viewport subscription also receive the update
-		updatePayload := map[string]interface{}{
 			"gridId":      gridID,
+			"eventId":     eventID,
+			"lat":         centerLat,
+			"lng":         centerLng,
 			"activeCount": activeCount,
 			"stage":       state.Stage,
-		}
-		if _, err := sioServer.BroadcastToNamespace("/", "fire:update", updatePayload); err != nil {
-			logger.Printf("fire:ignite global broadcast failed: %v", err)
+			"stageInfo":   state.StageInfo,
+			"ignitedBy":   sid,
+			"timestamp":   now,
 		}
 
-		// Enqueue batched room-scoped update
+		if _, err := sioServer.BroadcastToRoom("/", gridID, "fire:ignite", ignitePayload); err != nil {
+			logger.Printf("fire:ignite room broadcast failed for %s: %v", gridID, err)
+		}
+
+		// Enqueue batched room-scoped update (fire:update)
 		batcher.Add(FireUpdate{
 			GridID:      gridID,
 			ActiveCount: activeCount,
 			Stage:       state.Stage,
 			EventID:     eventID,
 			Timestamp:   now,
+			Lat:         centerLat,
+			Lng:         centerLng,
 		})
 
-		// Broadcast fire:spread animation to all clients
+		// Broadcast fire:spread animation to all affected grid rooms (de-duped).
 		if len(spreadPath) > 0 {
 			spreadPayload := map[string]interface{}{
 				"path":      spreadPath,
-				"event_id":  eventID,
+				"eventId":   eventID,
 				"timestamp": now,
 			}
-			if _, err := sioServer.BroadcastToNamespace("/", "fire:spread", spreadPayload); err != nil {
-				logger.Printf("fire:spread global broadcast failed: %v", err)
+			affectedGrids := make(map[string]struct{})
+			for _, sp := range reg.SpreadPath {
+				affectedGrids[sp[0]] = struct{}{}
+				affectedGrids[sp[1]] = struct{}{}
+			}
+			for room := range affectedGrids {
+				if _, err := sioServer.BroadcastToRoom("/", room, "fire:spread", spreadPayload); err != nil {
+					logger.Printf("fire:spread room broadcast failed for %s: %v", room, err)
+				}
 			}
 		}
 
@@ -221,23 +236,23 @@ func RegisterFireIgniteHandler(
 
 		// Build ack response to the igniting client
 		result := map[string]interface{}{
-			"status":            "ok",
-			"grid_id":           gridID,
-			"requested_grid_id": requestedGridID,
-			"event_id":          eventID,
-			"active_count":      activeCount,
-			"stage":             state.Stage,
-			"stage_info":        gridStateInfoToMap(state.StageInfo),
-			"spread_path":       spreadPath,
+			"status":          "ok",
+			"gridId":          gridID,
+			"requestedGridId": requestedGridID,
+			"eventId":         eventID,
+			"lat":             centerLat,
+			"lng":             centerLng,
+			"activeCount":     activeCount,
+			"stage":           state.Stage,
+			"stageInfo":       state.StageInfo,
+			"spreadPath":      spreadPath,
 		}
 
 		// Enrich response with demo-specific fields
 		if demo {
 			result["demo"] = true
-			result["lat"] = *lat
-			result["lng"] = *lng
 			if demoLocationName != "" {
-				result["demo_location"] = demoLocationName
+				result["demoLocation"] = demoLocationName
 			}
 		}
 
@@ -323,17 +338,6 @@ func registerFireEvent(
 		ActiveCount: int(activeCount),
 		SpreadPath:  spreadPath,
 	}, nil
-}
-
-// gridStateInfoToMap converts a FireStageInfo to a map for JSON serialization.
-// Matches Python stage_info.model_dump() output format.
-func gridStateInfoToMap(info model.FireStageInfo) map[string]interface{} {
-	return map[string]interface{}{
-		"stage":                info.Stage,
-		"label_ko":             info.LabelKo,
-		"label_en":             info.LabelEn,
-		"triggers_firefighter": info.TriggersFirefighter,
-	}
 }
 
 // randomHexSIO generates a random hex string of the given length.

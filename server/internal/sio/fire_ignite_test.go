@@ -7,8 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/homepy/hwarr/server/internal/model"
 )
 
 // mockRedisFireWriter is a test double for RedisFireWriter.
@@ -233,25 +231,6 @@ func TestRandomHexSIO(t *testing.T) {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
 			t.Errorf("invalid hex char: %c", c)
 		}
-	}
-}
-
-func TestGridStateInfoToMap(t *testing.T) {
-	info := model.FireStageInfo{
-		Stage:               3,
-		LabelKo:             "화재",
-		LabelEn:             "fire",
-		TriggersFirefighter: false,
-	}
-	m := gridStateInfoToMap(info)
-	if m["stage"] != 3 {
-		t.Errorf("stage mismatch: got %v", m["stage"])
-	}
-	if m["label_ko"] != "화재" {
-		t.Errorf("label_ko mismatch: got %v", m["label_ko"])
-	}
-	if m["triggers_firefighter"] != false {
-		t.Errorf("triggers_firefighter should be false")
 	}
 }
 

@@ -56,12 +56,12 @@ func TestFireStateHandler_AllActiveGrids(t *testing.T) {
 		t.Fatalf("expected 2 grids, got %d", len(grids))
 	}
 
-	totalActive, ok := result["total_active_grids"].(float64)
+	totalActive, ok := result["totalActiveGrids"].(float64)
 	if !ok {
-		t.Fatalf("expected total_active_grids to be a number, got %T", result["total_active_grids"])
+		t.Fatalf("expected totalActiveGrids to be a number, got %T", result["totalActiveGrids"])
 	}
 	if int(totalActive) != 2 {
-		t.Fatalf("expected total_active_grids=2, got %v", totalActive)
+		t.Fatalf("expected totalActiveGrids=2, got %v", totalActive)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestFireStateHandler_SpecificGrids(t *testing.T) {
 
 	// Request only specific grids
 	data := map[string]interface{}{
-		"grid_ids": []string{"37.5660:126.9780", "37.5680:126.9800"},
+		"gridIds": []string{"37.5660:126.9780", "37.5680:126.9800"},
 	}
 	result := callFireState(t, redis, data)
 
@@ -87,7 +87,7 @@ func TestFireStateHandler_SpecificGrids(t *testing.T) {
 	gridIDs := make(map[string]bool)
 	for _, g := range grids {
 		gm := g.(map[string]interface{})
-		gridIDs[gm["grid_id"].(string)] = true
+		gridIDs[gm["gridId"].(string)] = true
 	}
 	if !gridIDs["37.5660:126.9780"] || !gridIDs["37.5680:126.9800"] {
 		t.Fatalf("unexpected grid IDs: %v", gridIDs)
@@ -108,9 +108,9 @@ func TestFireStateHandler_EmptyWhenNoFires(t *testing.T) {
 		t.Fatalf("expected 0 grids, got %d", len(grids))
 	}
 
-	totalActive := result["total_active_grids"].(float64)
+	totalActive := result["totalActiveGrids"].(float64)
 	if int(totalActive) != 0 {
-		t.Fatalf("expected total_active_grids=0, got %v", totalActive)
+		t.Fatalf("expected totalActiveGrids=0, got %v", totalActive)
 	}
 }
 
@@ -128,8 +128,8 @@ func TestFireStateHandler_FiltersExpiredGrids(t *testing.T) {
 	}
 
 	gm := grids[0].(map[string]interface{})
-	if gm["grid_id"] != "37.5660:126.9780" {
-		t.Fatalf("expected grid_id=37.5660:126.9780, got %v", gm["grid_id"])
+	if gm["gridId"] != "37.5660:126.9780" {
+		t.Fatalf("expected grid_id=37.5660:126.9780, got %v", gm["gridId"])
 	}
 }
 
@@ -146,12 +146,12 @@ func TestFireStateHandler_StageInfo(t *testing.T) {
 	}
 
 	gm := grids[0].(map[string]interface{})
-	stageInfo := gm["stage_info"].(map[string]interface{})
+	stageInfo := gm["stageInfo"].(map[string]interface{})
 	if int(stageInfo["stage"].(float64)) != 3 {
 		t.Fatalf("expected stage=3 (화재), got %v", stageInfo["stage"])
 	}
-	if stageInfo["label_ko"] != "화재" {
-		t.Fatalf("expected label_ko=화재, got %v", stageInfo["label_ko"])
+	if stageInfo["labelKo"] != "화재" {
+		t.Fatalf("expected label_ko=화재, got %v", stageInfo["labelKo"])
 	}
 }
 
@@ -185,7 +185,7 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 
 	if data != nil {
 		dataMap := data.(map[string]interface{})
-		if ids, ok := dataMap["grid_ids"]; ok {
+		if ids, ok := dataMap["gridIds"]; ok {
 			for _, id := range ids.([]string) {
 				gridIDs = append(gridIDs, id)
 			}
@@ -199,7 +199,7 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 			return map[string]interface{}{
 				"status":             "ok",
 				"grids":              []interface{}{},
-				"total_active_grids": 0,
+				"totalActiveGrids": 0,
 			}
 		}
 		gridIDs = members
@@ -217,10 +217,10 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 			stage := getStageForTest(int(count))
 			stageInfo := getStageInfoForTest(stage)
 			gridStates = append(gridStates, map[string]interface{}{
-				"grid_id":      gridID,
-				"active_count": float64(count),
+				"gridId":      gridID,
+				"activeCount": float64(count),
 				"stage":        float64(stage),
-				"stage_info":   stageInfo,
+				"stageInfo":   stageInfo,
 			})
 		}
 	}
@@ -229,7 +229,7 @@ func callFireState(t *testing.T, redis RedisFireStateReader, data interface{}) m
 	result := map[string]interface{}{
 		"status":             "ok",
 		"grids":              gridStates,
-		"total_active_grids": float64(len(gridStates)),
+		"totalActiveGrids": float64(len(gridStates)),
 	}
 	b, _ := json.Marshal(result)
 	var out map[string]interface{}
@@ -264,9 +264,9 @@ func getStageInfoForTest(stage int) map[string]interface{} {
 	l := labels[stage]
 	triggersFF := stage >= 4
 	return map[string]interface{}{
-		"stage":                float64(stage),
-		"label_ko":             l[0],
-		"label_en":             l[1],
-		"triggers_firefighter": triggersFF,
+		"stage":               float64(stage),
+		"labelKo":             l[0],
+		"labelEn":             l[1],
+		"triggersFirefighter": triggersFF,
 	}
 }

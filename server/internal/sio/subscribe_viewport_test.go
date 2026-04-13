@@ -51,55 +51,40 @@ func TestGetActiveFireCount(t *testing.T) {
 	}
 }
 
-func TestGridStateToMap(t *testing.T) {
-	// Test with no coordinates (active_count=5 → stage 1, 불씨/ember)
-	state := model.BuildGridState("41667:115454", 5, nil, nil)
-	m := gridStateToMap(state)
+func TestBuildGridState(t *testing.T) {
+	// Test with coordinates (activeCount=5 → stage 1, 불씨/ember)
+	state := model.BuildGridState("41667:115454", 5, 37.5, 127.0)
 
-	if m["grid_id"] != "41667:115454" {
-		t.Errorf("grid_id = %v, want 41667:115454", m["grid_id"])
+	if state.GridID != "41667:115454" {
+		t.Errorf("GridID = %v, want 41667:115454", state.GridID)
 	}
-	if m["active_count"] != 5 {
-		t.Errorf("active_count = %v, want 5", m["active_count"])
+	if state.ActiveCount != 5 {
+		t.Errorf("ActiveCount = %v, want 5", state.ActiveCount)
 	}
-	if m["stage"] != 1 {
-		t.Errorf("stage = %v, want 1", m["stage"])
+	if state.Stage != 1 {
+		t.Errorf("Stage = %v, want 1", state.Stage)
 	}
-	if _, ok := m["lat"]; ok {
-		t.Error("lat should not be present when nil")
+	if state.Lat != 37.5 {
+		t.Errorf("Lat = %v, want 37.5", state.Lat)
 	}
-	if _, ok := m["lng"]; ok {
-		t.Error("lng should not be present when nil")
+	if state.Lng != 127.0 {
+		t.Errorf("Lng = %v, want 127.0", state.Lng)
 	}
-
-	stageInfo, ok := m["stage_info"].(map[string]interface{})
-	if !ok {
-		t.Fatal("stage_info should be a map")
+	if state.StageInfo.LabelKo != "불씨" {
+		t.Errorf("StageInfo.LabelKo = %v, want 불씨", state.StageInfo.LabelKo)
 	}
-	if stageInfo["label_ko"] != "불씨" {
-		t.Errorf("stage_info.label_ko = %v, want 불씨", stageInfo["label_ko"])
-	}
-	if stageInfo["label_en"] != "ember" {
-		t.Errorf("stage_info.label_en = %v, want ember", stageInfo["label_en"])
+	if state.StageInfo.LabelEn != "ember" {
+		t.Errorf("StageInfo.LabelEn = %v, want ember", state.StageInfo.LabelEn)
 	}
 
-	// Test with coordinates
-	lat, lng := 37.5, 127.0
-	state2 := model.BuildGridState("41667:115454", 50, &lat, &lng)
-	m2 := gridStateToMap(state2)
-	if m2["lat"] != 37.5 {
-		t.Errorf("lat = %v, want 37.5", m2["lat"])
-	}
-	if m2["lng"] != 127.0 {
-		t.Errorf("lng = %v, want 127.0", m2["lng"])
-	}
 	// 50 clicks → stage 3 (화재/fire)
-	if m2["stage"] != 3 {
-		t.Errorf("stage = %v, want 3", m2["stage"])
+	state2 := model.BuildGridState("41667:115454", 50, 37.5, 127.0)
+	if state2.Stage != 3 {
+		t.Errorf("Stage = %v, want 3", state2.Stage)
 	}
 }
 
-func TestGridStateToMapStages(t *testing.T) {
+func TestBuildGridStateStages(t *testing.T) {
 	tests := []struct {
 		count int
 		stage int
@@ -115,14 +100,12 @@ func TestGridStateToMapStages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("count_%d", tt.count), func(t *testing.T) {
-			state := model.BuildGridState("test:grid", tt.count, nil, nil)
-			m := gridStateToMap(state)
-			if m["stage"] != tt.stage {
-				t.Errorf("stage = %v, want %d", m["stage"], tt.stage)
+			state := model.BuildGridState("test:grid", tt.count, 0, 0)
+			if state.Stage != tt.stage {
+				t.Errorf("Stage = %v, want %d", state.Stage, tt.stage)
 			}
-			si := m["stage_info"].(map[string]interface{})
-			if si["label_ko"] != tt.label {
-				t.Errorf("label_ko = %v, want %s", si["label_ko"], tt.label)
+			if state.StageInfo.LabelKo != tt.label {
+				t.Errorf("LabelKo = %v, want %s", state.StageInfo.LabelKo, tt.label)
 			}
 		})
 	}

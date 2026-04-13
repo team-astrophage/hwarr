@@ -231,21 +231,18 @@ func TestScanAndUpdateStages_StageTransition_NoneToEmber(t *testing.T) {
 		t.Errorf("expected stage Bulsssi(1), got %d", stage)
 	}
 
-	// Should have broadcasts: fire:update (room + namespace) + fire:stage_transition (room + namespace)
+	// Room-scoped only: fire:update (room) + fire:stage_transition (room)
 	calls := b.getCalls()
-	if len(calls) != 4 {
-		t.Fatalf("expected 4 broadcast calls, got %d", len(calls))
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 broadcast calls, got %d", len(calls))
 	}
 
-	// Verify event names
 	expectedEvents := []struct {
 		method string
 		event  string
 	}{
 		{"room", "fire:update"},
-		{"namespace", "fire:update"},
 		{"room", "fire:stage_transition"},
-		{"namespace", "fire:stage_transition"},
 	}
 	for i, exp := range expectedEvents {
 		if calls[i].Method != exp.method || calls[i].Event != exp.event {
@@ -256,14 +253,8 @@ func TestScanAndUpdateStages_StageTransition_NoneToEmber(t *testing.T) {
 
 	// Verify fire:update payload has required fields
 	payload := calls[0].Args[0].(map[string]interface{})
-	if payload["grid_id"] != gridID {
-		t.Errorf("expected grid_id=%s, got %v", gridID, payload["grid_id"])
-	}
 	if payload["gridId"] != gridID {
-		t.Errorf("expected gridId=%s (camelCase), got %v", gridID, payload["gridId"])
-	}
-	if payload["active_count"] != 5 {
-		t.Errorf("expected active_count=5, got %v", payload["active_count"])
+		t.Errorf("expected gridId=%s, got %v", gridID, payload["gridId"])
 	}
 	if payload["activeCount"] != 5 {
 		t.Errorf("expected activeCount=5, got %v", payload["activeCount"])
@@ -274,23 +265,26 @@ func TestScanAndUpdateStages_StageTransition_NoneToEmber(t *testing.T) {
 	if _, ok := payload["timestamp"]; !ok {
 		t.Error("expected timestamp in payload")
 	}
+	if _, ok := payload["lat"]; !ok {
+		t.Error("expected lat in payload")
+	}
 
-	// Verify stage_info in payload
-	stageInfo, ok := payload["stage_info"].(map[string]interface{})
+	// Verify stageInfo in payload (serialized via model.GridState → FireStageInfo struct)
+	stageInfo, ok := payload["stageInfo"].(model.FireStageInfo)
 	if !ok {
-		t.Fatal("expected stage_info map in payload")
+		t.Fatalf("expected stageInfo FireStageInfo in payload, got %T", payload["stageInfo"])
 	}
-	if stageInfo["label_ko"] != "불씨" {
-		t.Errorf("expected label_ko=불씨, got %v", stageInfo["label_ko"])
+	if stageInfo.LabelKo != "불씨" {
+		t.Errorf("expected labelKo=불씨, got %v", stageInfo.LabelKo)
 	}
 
-	// Verify stage_transition payload
-	transPayload := calls[2].Args[0].(map[string]interface{})
-	if transPayload["prev_stage"] != int(model.StageNone) {
-		t.Errorf("expected prev_stage=0, got %v", transPayload["prev_stage"])
+	// Verify stage_transition payload (room call is at index 1 now)
+	transPayload := calls[1].Args[0].(map[string]interface{})
+	if transPayload["prevStage"] != int(model.StageNone) {
+		t.Errorf("expected prevStage=0, got %v", transPayload["prevStage"])
 	}
-	if transPayload["new_stage"] != int(model.StageBulsssi) {
-		t.Errorf("expected new_stage=1, got %v", transPayload["new_stage"])
+	if transPayload["newStage"] != int(model.StageBulsssi) {
+		t.Errorf("expected newStage=1, got %v", transPayload["newStage"])
 	}
 }
 
@@ -346,17 +340,17 @@ func TestScanAndUpdateStages_StageEscalation(t *testing.T) {
 	}
 
 	calls := b.getCalls()
-	if len(calls) != 4 {
-		t.Fatalf("expected 4 broadcasts for stage transition, got %d", len(calls))
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 broadcasts for stage transition (room-only), got %d", len(calls))
 	}
 
-	// Verify transition payload
-	transPayload := calls[2].Args[0].(map[string]interface{})
-	if transPayload["prev_stage"] != int(model.StageBulsssi) {
-		t.Errorf("expected prev_stage=1, got %v", transPayload["prev_stage"])
+	// Verify transition payload (index 1: room fire:stage_transition)
+	transPayload := calls[1].Args[0].(map[string]interface{})
+	if transPayload["prevStage"] != int(model.StageBulsssi) {
+		t.Errorf("expected prevStage=1, got %v", transPayload["prevStage"])
 	}
-	if transPayload["new_stage"] != int(model.StageModakbul) {
-		t.Errorf("expected new_stage=2, got %v", transPayload["new_stage"])
+	if transPayload["newStage"] != int(model.StageModakbul) {
+		t.Errorf("expected newStage=2, got %v", transPayload["newStage"])
 	}
 }
 
@@ -382,41 +376,37 @@ func TestScanAndUpdateStages_Stage4TriggersFirefighter(t *testing.T) {
 	}
 
 	calls := b.getCalls()
-	// 4 (stage change) + 2 (firefighter spawn: room + namespace)
-	if len(calls) != 6 {
-		t.Fatalf("expected 6 broadcasts (4 stage + 2 firefighter), got %d", len(calls))
+	// 2 (stage change: fire:update + fire:stage_transition) + 1 (firefighter:spawn room)
+	if len(calls) != 3 {
+		t.Fatalf("expected 3 broadcasts (2 stage + 1 firefighter), got %d", len(calls))
 	}
 
-	// Verify firefighter:spawn events
-	ffRoom := calls[4]
-	ffNs := calls[5]
+	// Verify firefighter:spawn event
+	ffRoom := calls[2]
 	if ffRoom.Event != "firefighter:spawn" || ffRoom.Method != "room" {
 		t.Errorf("expected firefighter:spawn room broadcast, got %s/%s", ffRoom.Method, ffRoom.Event)
-	}
-	if ffNs.Event != "firefighter:spawn" || ffNs.Method != "namespace" {
-		t.Errorf("expected firefighter:spawn namespace broadcast, got %s/%s", ffNs.Method, ffNs.Event)
 	}
 
 	// Verify firefighter payload
 	ffPayload := ffRoom.Args[0].(map[string]interface{})
-	if ffPayload["grid_id"] != gridID {
-		t.Errorf("expected grid_id=%s, got %v", gridID, ffPayload["grid_id"])
+	if ffPayload["gridId"] != gridID {
+		t.Errorf("expected gridId=%s, got %v", gridID, ffPayload["gridId"])
 	}
 	if ffPayload["status"] != "dispatched" {
 		t.Errorf("expected status=dispatched, got %v", ffPayload["status"])
 	}
-	if ffPayload["target_stage"] != 4 {
-		t.Errorf("expected target_stage=4, got %v", ffPayload["target_stage"])
+	if ffPayload["targetStage"] != 4 {
+		t.Errorf("expected targetStage=4, got %v", ffPayload["targetStage"])
 	}
-	if ffPayload["fires_removed"] != 0 {
-		t.Errorf("expected fires_removed=0, got %v", ffPayload["fires_removed"])
+	if ffPayload["firesRemoved"] != 0 {
+		t.Errorf("expected firesRemoved=0, got %v", ffPayload["firesRemoved"])
 	}
-	if ffPayload["remove_per_sweep"] != 2 {
-		t.Errorf("expected remove_per_sweep=2, got %v", ffPayload["remove_per_sweep"])
+	if ffPayload["removePerSweep"] != 2 {
+		t.Errorf("expected removePerSweep=2, got %v", ffPayload["removePerSweep"])
 	}
-	npcID, ok := ffPayload["npc_id"].(string)
+	npcID, ok := ffPayload["npcId"].(string)
 	if !ok || len(npcID) < 3 || npcID[:3] != "ff-" {
-		t.Errorf("expected npc_id starting with ff-, got %v", ffPayload["npc_id"])
+		t.Errorf("expected npcId starting with ff-, got %v", ffPayload["npcId"])
 	}
 }
 
@@ -449,10 +439,10 @@ func TestScanAndUpdateStages_GridBecomesNone_Cleanup(t *testing.T) {
 		t.Errorf("expected StageNone after all fires expired, got %d", stage)
 	}
 
-	// Should have broadcast transition to NONE
+	// Should have broadcast transition to NONE (2 room broadcasts)
 	calls := b.getCalls()
-	if len(calls) < 4 {
-		t.Fatalf("expected at least 4 broadcasts for stage transition to NONE, got %d", len(calls))
+	if len(calls) < 2 {
+		t.Fatalf("expected at least 2 broadcasts for stage transition to NONE, got %d", len(calls))
 	}
 
 	// Grid should have been removed from active_grids
@@ -492,10 +482,10 @@ func TestScanAndUpdateStages_MultipleGrids(t *testing.T) {
 		t.Errorf("grid2: expected StageHwajae, got %d", e.GetGridStage(grid2))
 	}
 
-	// Both grids transitioned, so at least 8 broadcast calls (4 per grid)
+	// Both grids transitioned, so at least 4 broadcast calls (2 per grid: fire:update + fire:stage_transition)
 	calls := b.getCalls()
-	if len(calls) < 8 {
-		t.Errorf("expected at least 8 broadcasts for 2 grids, got %d", len(calls))
+	if len(calls) < 4 {
+		t.Errorf("expected at least 4 broadcasts for 2 grids, got %d", len(calls))
 	}
 }
 
@@ -531,28 +521,25 @@ func TestBroadcastStageChange_PayloadFormat(t *testing.T) {
 	e.broadcastStageChange("10:20", 45, model.StageHwajae, model.StageModakbul)
 
 	calls := b.getCalls()
-	if len(calls) != 4 {
-		t.Fatalf("expected 4 calls, got %d", len(calls))
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 calls (room-only), got %d", len(calls))
 	}
 
-	// All calls should target "/" namespace
 	for i, c := range calls {
 		if c.Namespace != "/" {
 			t.Errorf("call[%d] namespace: expected /, got %s", i, c.Namespace)
 		}
-	}
-
-	// Room calls should target the grid room
-	if calls[0].Room != "10:20" {
-		t.Errorf("fire:update room should be grid ID, got %s", calls[0].Room)
-	}
-	if calls[2].Room != "10:20" {
-		t.Errorf("fire:stage_transition room should be grid ID, got %s", calls[2].Room)
+		if c.Method != "room" {
+			t.Errorf("call[%d] method: expected room, got %s", i, c.Method)
+		}
+		if c.Room != "10:20" {
+			t.Errorf("call[%d] room: expected 10:20, got %s", i, c.Room)
+		}
 	}
 
 	// Verify payload completeness
 	payload := calls[0].Args[0].(map[string]interface{})
-	requiredKeys := []string{"grid_id", "gridId", "active_count", "activeCount", "stage", "stage_info", "timestamp"}
+	requiredKeys := []string{"gridId", "lat", "lng", "activeCount", "stage", "stageInfo", "timestamp"}
 	for _, key := range requiredKeys {
 		if _, ok := payload[key]; !ok {
 			t.Errorf("missing required key %q in fire:update payload", key)
@@ -560,8 +547,8 @@ func TestBroadcastStageChange_PayloadFormat(t *testing.T) {
 	}
 
 	// Transition payload
-	tp := calls[2].Args[0].(map[string]interface{})
-	transKeys := []string{"grid_id", "active_count", "prev_stage", "new_stage", "stage_info", "timestamp"}
+	tp := calls[1].Args[0].(map[string]interface{})
+	transKeys := []string{"gridId", "activeCount", "prevStage", "newStage", "stageInfo", "timestamp"}
 	for _, key := range transKeys {
 		if _, ok := tp[key]; !ok {
 			t.Errorf("missing required key %q in fire:stage_transition payload", key)
@@ -589,8 +576,8 @@ func TestFireProgressionEngine_IntegrationLoop(t *testing.T) {
 	e.Stop()
 
 	calls := b.getCalls()
-	if len(calls) < 4 {
-		t.Errorf("expected at least 4 broadcasts from live engine loop, got %d", len(calls))
+	if len(calls) < 2 {
+		t.Errorf("expected at least 2 broadcasts from live engine loop, got %d", len(calls))
 	}
 
 	// After stop, no more broadcasts should occur
@@ -630,16 +617,16 @@ func TestStage5_FirefighterSpawn(t *testing.T) {
 			ffCalls = append(ffCalls, c)
 		}
 	}
-	if len(ffCalls) != 2 {
-		t.Fatalf("expected 2 firefighter:spawn broadcasts, got %d", len(ffCalls))
+	if len(ffCalls) != 1 {
+		t.Fatalf("expected 1 firefighter:spawn broadcast (room-only), got %d", len(ffCalls))
 	}
 
 	ffPayload := ffCalls[0].Args[0].(map[string]interface{})
-	if ffPayload["remove_per_sweep"] != 3 {
-		t.Errorf("stage 5 should have remove_per_sweep=3, got %v", ffPayload["remove_per_sweep"])
+	if ffPayload["removePerSweep"] != 3 {
+		t.Errorf("stage 5 should have removePerSweep=3, got %v", ffPayload["removePerSweep"])
 	}
-	if ffPayload["target_stage"] != 5 {
-		t.Errorf("expected target_stage=5, got %v", ffPayload["target_stage"])
+	if ffPayload["targetStage"] != 5 {
+		t.Errorf("expected targetStage=5, got %v", ffPayload["targetStage"])
 	}
 }
 
@@ -652,9 +639,9 @@ func TestPublicBroadcastStageChange(t *testing.T) {
 	e.BroadcastStageChange("10:20", 150, model.StageDaehwajae, model.StageHwajae)
 
 	calls := b.getCalls()
-	// 4 (stage change) + 2 (firefighter for stage 4+)
-	if len(calls) != 6 {
-		t.Errorf("expected 6 broadcasts from BroadcastStageChange at stage 4, got %d", len(calls))
+	// 2 (stage change: fire:update + fire:stage_transition) + 1 (firefighter for stage 4+)
+	if len(calls) != 3 {
+		t.Errorf("expected 3 broadcasts from BroadcastStageChange at stage 4, got %d", len(calls))
 	}
 }
 

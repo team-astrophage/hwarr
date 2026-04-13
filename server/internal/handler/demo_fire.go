@@ -121,52 +121,60 @@ func (h *DemoFireHandler) Handle(c *gin.Context) {
 	activeCount := reg.ActiveCount
 
 	// Build state
-	state := model.BuildGridState(gridID, activeCount, &lat, &lng)
+	state := model.BuildGridState(gridID, activeCount, lat, lng)
 
 	// Broadcast to clients
 	now := float64(time.Now().UnixMilli()) / 1000.0
 	ignitePayload := map[string]interface{}{
-		"grid_id":       gridID,
-		"event_id":      eventID,
-		"lat":           lat,
-		"lng":           lng,
-		"active_count":  activeCount,
-		"stage":         state.Stage,
-		"stage_info":    state.StageInfo,
-		"ignited_by":    "demo_mode",
-		"demo":          true,
-		"location_name": loc.Name,
-		"timestamp":     now,
+		"gridId":       gridID,
+		"eventId":      eventID,
+		"lat":          lat,
+		"lng":          lng,
+		"activeCount":  activeCount,
+		"stage":        state.Stage,
+		"stageInfo":    state.StageInfo,
+		"ignitedBy":    "demo_mode",
+		"demo":         true,
+		"locationName": loc.Name,
+		"timestamp":    now,
 	}
 
-	globalPayload := map[string]interface{}{
-		"grid_id":      gridID,
-		"active_count": activeCount,
-		"stage":        state.Stage,
-		"stage_info":   state.StageInfo,
-		"demo":         true,
-		"timestamp":    now,
+	updatePayload := map[string]interface{}{
+		"gridId":      gridID,
+		"lat":         lat,
+		"lng":         lng,
+		"activeCount": activeCount,
+		"stage":       state.Stage,
+		"stageInfo":   state.StageInfo,
+		"demo":        true,
+		"timestamp":   now,
 	}
 
 	if h.broadcaster != nil {
 		_ = h.broadcaster.BroadcastToRoom("fire:ignite", ignitePayload, gridID)
-		_ = h.broadcaster.BroadcastToRoom("fire:update", globalPayload, gridID)
+		_ = h.broadcaster.BroadcastToRoom("fire:update", updatePayload, gridID)
 
 		// Broadcast fire:spread animation to affected grid rooms only
 		if len(reg.SpreadPath) > 0 {
-			spreadPathMaps := make([]map[string]string, len(reg.SpreadPath))
+			spreadPathMaps := make([]map[string]interface{}, len(reg.SpreadPath))
 			affectedGrids := make(map[string]struct{})
 			for i, sp := range reg.SpreadPath {
-				spreadPathMaps[i] = map[string]string{
-					"from": sp[0],
-					"to":   sp[1],
+				fromLat, fromLng, _ := grid.GridIDToCenter(sp[0])
+				toLat, toLng, _ := grid.GridIDToCenter(sp[1])
+				spreadPathMaps[i] = map[string]interface{}{
+					"from":    sp[0],
+					"to":      sp[1],
+					"fromLat": fromLat,
+					"fromLng": fromLng,
+					"toLat":   toLat,
+					"toLng":   toLng,
 				}
 				affectedGrids[sp[0]] = struct{}{}
 				affectedGrids[sp[1]] = struct{}{}
 			}
 			spreadPayload := map[string]interface{}{
 				"path":      spreadPathMaps,
-				"event_id":  eventID,
+				"eventId":   eventID,
 				"timestamp": now,
 			}
 			for room := range affectedGrids {

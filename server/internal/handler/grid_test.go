@@ -50,19 +50,19 @@ func TestGetGridState_NoFires(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp["grid_id"] != "10:20" {
-		t.Errorf("expected grid_id=10:20, got %v", resp["grid_id"])
+	if resp["gridId"] != "10:20" {
+		t.Errorf("expected grid_id=10:20, got %v", resp["gridId"])
 	}
-	if resp["active_count"].(float64) != 0 {
-		t.Errorf("expected active_count=0, got %v", resp["active_count"])
+	if resp["activeCount"].(float64) != 0 {
+		t.Errorf("expected active_count=0, got %v", resp["activeCount"])
 	}
 	if resp["stage"].(float64) != 0 {
 		t.Errorf("expected stage=0, got %v", resp["stage"])
 	}
 
-	stageInfo := resp["stage_info"].(map[string]interface{})
-	if stageInfo["label_en"] != "none" {
-		t.Errorf("expected label_en=none, got %v", stageInfo["label_en"])
+	stageInfo := resp["stageInfo"].(map[string]interface{})
+	if stageInfo["labelEn"] != "none" {
+		t.Errorf("expected label_en=none, got %v", stageInfo["labelEn"])
 	}
 }
 
@@ -103,15 +103,15 @@ func TestGetGridState_WithFires(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if resp["active_count"].(float64) != float64(tt.count) {
-				t.Errorf("expected active_count=%d, got %v", tt.count, resp["active_count"])
+			if resp["activeCount"].(float64) != float64(tt.count) {
+				t.Errorf("expected active_count=%d, got %v", tt.count, resp["activeCount"])
 			}
 			if resp["stage"].(float64) != tt.wantStage {
 				t.Errorf("expected stage=%v, got %v", tt.wantStage, resp["stage"])
 			}
-			stageInfo := resp["stage_info"].(map[string]interface{})
-			if stageInfo["label_en"] != tt.wantLabelEn {
-				t.Errorf("expected label_en=%s, got %v", tt.wantLabelEn, stageInfo["label_en"])
+			stageInfo := resp["stageInfo"].(map[string]interface{})
+			if stageInfo["labelEn"] != tt.wantLabelEn {
+				t.Errorf("expected label_en=%s, got %v", tt.wantLabelEn, stageInfo["labelEn"])
 			}
 		})
 	}
@@ -135,7 +135,7 @@ func TestGetViewportFires_NoFires(t *testing.T) {
 	router := setupGridRouter(mock)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/grid/viewport?ne_lat=37.6&ne_lng=127.1&sw_lat=37.5&sw_lng=126.9", nil)
+	req, _ := http.NewRequest("GET", "/api/grid/viewport?neLat=37.6&neLng=127.1&swLat=37.5&swLng=126.9", nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -151,8 +151,8 @@ func TestGetViewportFires_NoFires(t *testing.T) {
 	if len(grids) != 0 {
 		t.Errorf("expected 0 active grids, got %d", len(grids))
 	}
-	if resp["total_active_grids"].(float64) != 0 {
-		t.Errorf("expected total_active_grids=0, got %v", resp["total_active_grids"])
+	if resp["totalActiveGrids"].(float64) != 0 {
+		t.Errorf("expected total_active_grids=0, got %v", resp["totalActiveGrids"])
 	}
 }
 
@@ -170,7 +170,7 @@ func TestGetViewportFires_WithFires(t *testing.T) {
 	// 115363 * 0.0011 = 126.8993
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET",
-		"/api/grid/viewport?sw_lat=37.4994&sw_lng=126.8993&ne_lat=37.5010&ne_lng=126.9005", nil)
+		"/api/grid/viewport?swLat=37.4994&swLng=126.8993&neLat=37.5010&neLng=126.9005", nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -182,7 +182,7 @@ func TestGetViewportFires_WithFires(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	totalActive := int(resp["total_active_grids"].(float64))
+	totalActive := int(resp["totalActiveGrids"].(float64))
 	grids := resp["grids"].([]interface{})
 
 	if totalActive != len(grids) {
@@ -192,7 +192,7 @@ func TestGetViewportFires_WithFires(t *testing.T) {
 	// All returned grids should have active_count > 0
 	for _, g := range grids {
 		gm := g.(map[string]interface{})
-		if gm["active_count"].(float64) <= 0 {
+		if gm["activeCount"].(float64) <= 0 {
 			t.Errorf("returned grid with active_count <= 0: %v", gm)
 		}
 		// Should have lat/lng
@@ -203,7 +203,7 @@ func TestGetViewportFires_WithFires(t *testing.T) {
 			t.Error("missing lng in viewport grid response")
 		}
 		// Should have stage_info
-		if _, ok := gm["stage_info"]; !ok {
+		if _, ok := gm["stageInfo"]; !ok {
 			t.Error("missing stage_info in viewport grid response")
 		}
 	}
@@ -217,11 +217,11 @@ func TestGetViewportFires_MissingParams(t *testing.T) {
 		name string
 		url  string
 	}{
-		{"missing ne_lat", "/api/grid/viewport?ne_lng=127&sw_lat=37&sw_lng=126"},
-		{"missing ne_lng", "/api/grid/viewport?ne_lat=38&sw_lat=37&sw_lng=126"},
-		{"missing sw_lat", "/api/grid/viewport?ne_lat=38&ne_lng=127&sw_lng=126"},
-		{"missing sw_lng", "/api/grid/viewport?ne_lat=38&ne_lng=127&sw_lat=37"},
-		{"invalid ne_lat", "/api/grid/viewport?ne_lat=abc&ne_lng=127&sw_lat=37&sw_lng=126"},
+		{"missing neLat", "/api/grid/viewport?neLng=127&swLat=37&swLng=126"},
+		{"missing neLng", "/api/grid/viewport?neLat=38&swLat=37&swLng=126"},
+		{"missing swLat", "/api/grid/viewport?neLat=38&neLng=127&swLng=126"},
+		{"missing swLng", "/api/grid/viewport?neLat=38&neLng=127&swLat=37"},
+		{"invalid neLat", "/api/grid/viewport?neLat=abc&neLng=127&swLat=37&swLng=126"},
 	}
 
 	for _, tt := range tests {
@@ -243,7 +243,7 @@ func TestGetViewportFires_RedisError(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET",
-		"/api/grid/viewport?ne_lat=37.501&ne_lng=126.901&sw_lat=37.500&sw_lng=126.900", nil)
+		"/api/grid/viewport?neLat=37.501&neLng=126.901&swLat=37.500&swLng=126.900", nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
@@ -262,7 +262,7 @@ func TestGetViewportFires_ResponseFormat(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET",
-		"/api/grid/viewport?sw_lat=37.4994&sw_lng=126.8993&ne_lat=37.4996&ne_lng=126.8995", nil)
+		"/api/grid/viewport?swLat=37.4994&swLng=126.8993&neLat=37.4996&neLng=126.8995", nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -275,14 +275,14 @@ func TestGetViewportFires_ResponseFormat(t *testing.T) {
 	}
 
 	if resp.TotalActiveGrids != len(resp.Grids) {
-		t.Errorf("total_active_grids mismatch: %d vs %d", resp.TotalActiveGrids, len(resp.Grids))
+		t.Errorf("totalActiveGrids mismatch: %d vs %d", resp.TotalActiveGrids, len(resp.Grids))
 	}
 
 	for _, g := range resp.Grids {
 		if g.GridID == "" {
 			t.Error("grid_id should not be empty")
 		}
-		if g.Lat == nil || g.Lng == nil {
+		if g.Lat == 0 && g.Lng == 0 {
 			t.Error("viewport grids should have lat/lng")
 		}
 		if g.StageInfo.LabelKo == "" || g.StageInfo.LabelEn == "" {
