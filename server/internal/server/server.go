@@ -68,6 +68,9 @@ func Run(cfg *config.Config) error {
 	// Background engines
 	progressionEngine, cleanupEngine := startBackgroundEngines(redisClient, sioServer, logger)
 
+	statsEngine := engine.NewStatsEngine(redisClient, sioServer, 5*time.Second, logger)
+	statsEngine.Start()
+
 	// Stale connection reaper
 	reaper := sio.NewReaper(manager, func(ns, sid string) error {
 		sioServer.DisconnectAll(sid, "stale connection")
@@ -98,6 +101,7 @@ func Run(cfg *config.Config) error {
 		reaper.Stop()
 		progressionEngine.Stop()
 		cleanupEngine.Stop()
+		statsEngine.Stop()
 		eioServer.Close()
 		_ = redisClient.Close()
 
