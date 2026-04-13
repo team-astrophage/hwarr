@@ -28,17 +28,20 @@ interface FireState {
   fires: Map<string, FireCell>
   gridMeta: GridMeta | null
   onlineUsers: number
+  globalActiveCount: number
 
   updateFire: (cell: FireCell) => void
   syncFires: (cells: FireCell[]) => void
   setGridMeta: (meta: GridMeta) => void
   setOnlineUsers: (count: number) => void
+  setGlobalActiveCount: (count: number) => void
 }
 
 export const useFireStore = create<FireState>((set) => ({
   fires: new Map(),
   gridMeta: null,
   onlineUsers: 0,
+  globalActiveCount: 0,
 
   updateFire: (cell) =>
     set((state) => {
@@ -68,4 +71,5 @@ export const useFireStore = create<FireState>((set) => ({
 
   setGridMeta: (meta) => set({ gridMeta: meta }),
   setOnlineUsers: (count) => set({ onlineUsers: count }),
+  setGlobalActiveCount: (count) => set({ globalActiveCount: count }),
 }))

@@ -5,9 +5,9 @@ import { useGeolocation } from '../hooks/useGeolocation';
 import { useFireSocket } from '../hooks/useFireSocket';
 import { useViewportSubscription } from '../hooks/useViewportSubscription';
 import { useFire } from '../hooks/useFire';
-import { useFireStore } from '../stores/fireStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { socket } from '../../../lib/socket';
 import { useMapCenter } from '../hooks/useMapCenter';
 import { MapControls } from './MapControls';
 import { BottomPanel } from './BottomPanel';
@@ -118,7 +118,6 @@ export function MapPage() {
     if (!disclaimerAccepted || locationRequested) return;
     setLocationRequested(true);
   }, [disclaimerAccepted, locationRequested]);
-  const fires = useFireStore((s) => s.fires);
   const [currentGridId, setCurrentGridId] = useState<string | null>(null);
 
   useFireSocket();
@@ -181,26 +180,32 @@ export function MapPage() {
   }, [lat, lng, isAtMyLocation, emitFire]);
 
   // 랜덤 화재 지역 구경하기 (내 위치 제외)
+  // 전국 전체 화재 중에서 선택하기 위해 탭 시점에 fire:state RPC로 최신 목록을 조회한다.
   const visitListenerRef = useRef<(() => void) | null>(null);
   const handleVisit = useCallback(() => {
-    if (fires.size === 0 || !mapRef.current) return;
-    const entries = Array.from(fires.values()).filter(
-      (c) => c.gridId !== currentGridId,
+    const map = mapRef.current;
+    if (!map) return;
+    socket.emit(
+      'fire:state',
+      {},
+      (res: { status?: string; grids?: Array<{ gridId: string; lat: number; lng: number }> }) => {
+        if (!res || res.status !== 'ok' || !res.grids) return;
+        const entries = res.grids.filter((c) => c.gridId !== currentGridId);
+        if (entries.length === 0) return;
+        const randomCell = entries[Math.floor(Math.random() * entries.length)];
+        if (visitListenerRef.current) {
+          map.off('moveend', visitListenerRef.current);
+        }
+        const onArrival = () => {
+          visitListenerRef.current = null;
+          immediateRef.current?.();
+        };
+        visitListenerRef.current = onArrival;
+        map.flyTo([randomCell.lat, randomCell.lng], 16, { duration: 1.5 });
+        map.once('moveend', onArrival);
+      },
     );
-    if (entries.length === 0) return;
-    const randomCell = entries[Math.floor(Math.random() * entries.length)];
-    // 이전 리스너 제거 (연타 시 누적 방지)
-    if (visitListenerRef.current) {
-      mapRef.current.off('moveend', visitListenerRef.current);
-    }
-    const onArrival = () => {
-      visitListenerRef.current = null;
-      immediateRef.current?.();
-    };
-    visitListenerRef.current = onArrival;
-    mapRef.current.flyTo([randomCell.lat, randomCell.lng], 16, { duration: 1.5 });
-    mapRef.current.once('moveend', onArrival);
-  }, [fires, currentGridId]);
+  }, [currentGridId]);
 
   // 언마운트 시 미완료 flyTo 리스너 정리
   useEffect(() => {

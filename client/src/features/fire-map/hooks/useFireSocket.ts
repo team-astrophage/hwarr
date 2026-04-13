@@ -10,6 +10,7 @@
  * - fire:ignite  — 새 발화 알림 (room-scoped)
  * - fire:spread  — 인접 격자로의 확산 궤적
  * - users:count  — 실시간 접속자 수
+ * - stats:fires  — 전국 활성 화재 총 개수 (namespace broadcast, 5s 주기)
  */
 
 import { useEffect } from 'react'
@@ -36,11 +37,13 @@ interface FireSpreadPayload {
 export function useFireSocket() {
   const updateFire = useFireStore((s) => s.updateFire)
   const setOnlineUsers = useFireStore((s) => s.setOnlineUsers)
+  const setGlobalActiveCount = useFireStore((s) => s.setGlobalActiveCount)
 
   useEffect(() => {
     const onFireUpdate = (data: FireCell) => updateFire(data)
     const onFireIgnite = (data: FireCell) => updateFire(data)
     const onUsersCount = (data: { count: number }) => setOnlineUsers(data.count)
+    const onStatsFires = (data: { total: number }) => setGlobalActiveCount(data.total)
     const onFireSpread = (data: FireSpreadPayload) => {
       const addTrajectory = useAnimationStore.getState().addTrajectory
       for (const segment of data.path) {
@@ -58,13 +61,15 @@ export function useFireSocket() {
     socket.on('fire:update', onFireUpdate)
     socket.on('fire:ignite', onFireIgnite)
     socket.on('users:count', onUsersCount)
+    socket.on('stats:fires', onStatsFires)
     socket.on('fire:spread', onFireSpread)
 
     return () => {
       socket.off('fire:update', onFireUpdate)
       socket.off('fire:ignite', onFireIgnite)
       socket.off('users:count', onUsersCount)
+      socket.off('stats:fires', onStatsFires)
       socket.off('fire:spread', onFireSpread)
     }
-  }, [updateFire, setOnlineUsers])
+  }, [updateFire, setOnlineUsers, setGlobalActiveCount])
 }
