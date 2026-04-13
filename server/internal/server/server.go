@@ -193,7 +193,6 @@ func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionMan
 
 	// Compat events (mock server)
 	sio.RegisterFireCompatHandler(sioServer, manager, redisClient, resolver, logger, batcher)
-	sio.RegisterGetFiresCompatHandler(sioServer, redisClient, logger)
 
 	// Chat events
 	chatWriter := redisClient.AsChatWriter()
