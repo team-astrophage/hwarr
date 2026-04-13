@@ -21,6 +21,32 @@ func (m *mockRedisFireCounter) ZCount(_ context.Context, key, _, _ string) (int6
 	return 0, nil
 }
 
+func TestEstimateViewportGridCount_NationwideBounds(t *testing.T) {
+	// Korea-scale bounding box should dwarf MaxViewportGrids.
+	est := estimateViewportGridCount(38.6, 132.0, 33.0, 124.0)
+	if est <= MaxViewportGrids {
+		t.Fatalf("expected nation-wide estimate to exceed cap %d, got %d", MaxViewportGrids, est)
+	}
+}
+
+func TestEstimateViewportGridCount_SmallBounds(t *testing.T) {
+	// A roughly 1km × 1km box should stay well under the cap (~10x10 grids).
+	est := estimateViewportGridCount(37.567, 126.980, 37.558, 126.970)
+	if est <= 0 || est > MaxViewportGrids {
+		t.Fatalf("expected small estimate in (0, %d], got %d", MaxViewportGrids, est)
+	}
+}
+
+func TestFilterActiveGridsInBounds(t *testing.T) {
+	// Grids 41727:115427 → (37.5543, 126.9708) and 41900:115500 → (37.7100, 127.0511).
+	active := []string{"41727:115427", "41900:115500", "not-a-grid", "bad:entry:extra"}
+	// Tight box around ~37.554/126.970 only captures the first grid.
+	out := filterActiveGridsInBounds(active, 37.56, 126.98, 37.55, 126.96)
+	if len(out) != 1 || out[0] != "41727:115427" {
+		t.Fatalf("expected [41727:115427], got %v", out)
+	}
+}
+
 func TestGetActiveFireCount(t *testing.T) {
 	redis := &mockRedisFireCounter{
 		counts: map[string]int64{
