@@ -26,8 +26,8 @@ export function BottomPanel({
   noLocation = false,
 }: BottomPanelProps) {
   const fires = useFireStore((s) => s.fires)
+  const activeGrids = useFireStore((s) => s.globalActiveCount)
 
-  const activeGrids = fires.size
   const currentCell = gridId ? fires.get(gridId) : undefined
   const stage = currentCell?.stage ?? 0
   const stageInfo = STAGE_LABELS[stage] ?? STAGE_LABELS[0]
