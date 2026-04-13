@@ -11,8 +11,8 @@
 |------|------|
 | Grid ID | GPS 좌표를 100m x 100m 격자로 변환한 `"{grid_lat}:{grid_lng}"` 형식 |
 | 불 이벤트 | Sorted Set member. score는 만료 시각(`now + FIRE_TTL_SEC`, 기본 43200초 = 12시간) |
-| 단계(stage) | 활성 불 개수에 따라 0~5단계: 없음(0) / 불씨(1-9) / 모닥불(10-39) / 화재(40-119) / 대화재(120-279) / 전소(280+) |
-| 확산(spread) | 격자당 불 500개 이상이면 인접 8방향 중 랜덤 격자로 cascade (최대 8hop) |
+| 단계(stage) | 활성 불 개수에 따라 0~5단계: 없음(0) / 불씨(1-5) / 모닥불(6-23) / 화재(24-71) / 대화재(72-169) / 전소(170+) |
+| 확산(spread) | 격자당 불 300개 이상이면 인접 8방향 중 랜덤 격자로 cascade (최대 8hop) |
 
 ---
 
@@ -115,7 +115,7 @@ grep "Stage change: grid=41111:115454" server.log
 
 ### 2.2 불 확산 (fire spread)
 
-격자의 불이 500개 이상일 때 인접 격자로 확산되면 아래 로그가 출력된다.
+격자의 불이 300개 이상일 때 인접 격자로 확산되면 아래 로그가 출력된다.
 
 ```
 fire spread: 41111:115454 → 41112:115454 (depth=1, event=fire-a1b2c3d4e5f6)
@@ -220,7 +220,7 @@ FireProgressionEngine stopped
    NOW=$(date +%s)
    redis-cli ZCOUNT fire:<grid_id> $NOW +inf
    ```
-   단계별 threshold: 불씨(1) / 모닥불(10) / 화재(40) / 대화재(120) / 전소(280)
+   단계별 threshold: 불씨(1) / 모닥불(6) / 화재(24) / 대화재(72) / 전소(170)
 
 2. **progression loop가 동작 중인지 확인**
    ```bash
@@ -240,7 +240,7 @@ FireProgressionEngine stopped
 
 ### 3.3 확산이 안 될 때
 
-**증상**: 불이 500개 넘었는데 인접 격자로 퍼지지 않음.
+**증상**: 불이 300개 넘었는데 인접 격자로 퍼지지 않음.
 
 **진단 순서**:
 
@@ -248,7 +248,7 @@ FireProgressionEngine stopped
    ```bash
    NOW=$(date +%s)
    redis-cli ZCOUNT fire:<grid_id> $NOW +inf
-   # 500 미만이면 확산 threshold에 도달하지 않은 것
+   # 300 미만이면 확산 threshold에 도달하지 않은 것
    ```
 
 2. **확산 로그 확인**
@@ -257,11 +257,11 @@ FireProgressionEngine stopped
    ```
 
 3. **확산은 새 불 등록 시에만 발생**한다.
-   기존 불이 500개 있어도, 새로운 `fire:ignite` 요청이 들어와야 `register_fire()`가 호출되면서 확산이 트리거된다.
+   기존 불이 300개 있어도, 새로운 `fire:ignite` 요청이 들어와야 `register_fire()`가 호출되면서 확산이 트리거된다.
    이미 있는 불이 자동으로 퍼지는 것이 아님에 주의.
 
 **흔한 원인**:
-- 실제 활성 개수가 500 미만 (만료된 것 포함해서 착각)
+- 실제 활성 개수가 300 미만 (만료된 것 포함해서 착각)
 - 확산 cascade 최대 깊이(8)에 도달 → 인접 격자가 모두 가득 찬 극단적인 경우
 
 ### 3.4 통계가 안 맞을 때

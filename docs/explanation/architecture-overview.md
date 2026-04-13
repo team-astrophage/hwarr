@@ -181,7 +181,7 @@ Client ──Socket.IO emit──→ CloudFront /socket.io/* ──→ ALB ─�
 
 ### `register_fire()` 내부 동작
 
-1. 해당 grid의 활성 불 수가 500(FIRE_SPREAD_THRESHOLD) 이상이면 8방향 이웃 grid로 번짐 (cascade, 최대 8 depth)
+1. 해당 grid의 활성 불 수가 300(FIRE_SPREAD_THRESHOLD) 이상이면 8방향 이웃 grid로 번짐 (cascade, 최대 8 depth)
 2. 착지 grid의 Redis Sorted Set에 `ZADD(event_id, expire_at)` — score가 만료 시각
 3. 누적/일별 통계 카운터 증가, 행정동 랭킹 갱신
 4. stage 변화 시 `fire:update` + `fire:stage_transition` 즉시 broadcast

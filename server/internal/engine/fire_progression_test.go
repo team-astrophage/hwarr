@@ -328,7 +328,7 @@ func TestScanAndUpdateStages_StageEscalation(t *testing.T) {
 	_ = e.scanAndUpdateStages(context.Background())
 	b.reset()
 
-	// Add more fires to reach stage 2 (10+)
+	// Add more fires to reach stage 2 (6+)
 	for i := 5; i < 15; i++ {
 		r.addToZSet(FireKeyPrefix+gridID, fmt.Sprintf("fire-%d", i), futureScore)
 	}
@@ -363,8 +363,8 @@ func TestScanAndUpdateStages_Stage4TriggersFirefighter(t *testing.T) {
 	r.addToSet(ActiveGridsKey, gridID)
 	futureScore := float64(time.Now().Add(30*time.Minute).UnixMilli()) / 1000.0
 
-	// Add 120 fires to reach stage 4 (DAEHWAJAE)
-	for i := 0; i < 120; i++ {
+	// Add 72 fires to reach stage 4 (DAEHWAJAE)
+	for i := 0; i < 72; i++ {
 		r.addToZSet(FireKeyPrefix+gridID, fmt.Sprintf("fire-%d", i), futureScore)
 	}
 
@@ -597,8 +597,8 @@ func TestStage5_FirefighterSpawn(t *testing.T) {
 	r.addToSet(ActiveGridsKey, gridID)
 	futureScore := float64(time.Now().Add(30*time.Minute).UnixMilli()) / 1000.0
 
-	// 280 fires -> stage 5 (JEONSO)
-	for i := 0; i < 280; i++ {
+	// 170 fires -> stage 5 (JEONSO)
+	for i := 0; i < 170; i++ {
 		r.addToZSet(FireKeyPrefix+gridID, fmt.Sprintf("fire-%d", i), futureScore)
 	}
 
@@ -664,15 +664,15 @@ func TestScanAndUpdateStages_AllStageThresholds(t *testing.T) {
 	}{
 		{0, model.StageNone},
 		{1, model.StageBulsssi},
-		{9, model.StageBulsssi},
-		{10, model.StageModakbul},
-		{39, model.StageModakbul},
-		{40, model.StageHwajae},
-		{119, model.StageHwajae},
-		{120, model.StageDaehwajae},
-		{279, model.StageDaehwajae},
-		{280, model.StageJeonso},
-		{500, model.StageJeonso},
+		{5, model.StageBulsssi},
+		{6, model.StageModakbul},
+		{23, model.StageModakbul},
+		{24, model.StageHwajae},
+		{71, model.StageHwajae},
+		{72, model.StageDaehwajae},
+		{169, model.StageDaehwajae},
+		{170, model.StageJeonso},
+		{300, model.StageJeonso},
 	}
 
 	for _, tt := range tests {

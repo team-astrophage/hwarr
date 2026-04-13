@@ -623,11 +623,11 @@ grid ID → `grid_id_to_center(grid_id)` → `(lat, lng)` 좌표
 | Stage | enum 값 | label_ko | threshold (최소 active count) |
 |---|---|---|---|
 | `NONE` | 0 | `없음` | 0 |
-| `BULSSSI` | 1 | `불씨` | 1 (1-9) |
-| `MODAKBUL` | 2 | `모닥불` | 10 (10-39) |
-| `HWAJAE` | 3 | `화재` | 40 (40-119) |
-| `DAEHWAJAE` | 4 | `대화재` | 120 (120-279) |
-| `JEONSO` | 5 | `전소` | 280+ |
+| `BULSSSI` | 1 | `불씨` | 1 (1-5) |
+| `MODAKBUL` | 2 | `모닥불` | 6 (6-23) |
+| `HWAJAE` | 3 | `화재` | 24 (24-71) |
+| `DAEHWAJAE` | 4 | `대화재` | 72 (72-169) |
+| `JEONSO` | 5 | `전소` | 170+ |
 
 #### 뉴스 아이템 ID 생성 규칙
 

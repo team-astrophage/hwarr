@@ -299,15 +299,15 @@ func TestGetGridState_StageThresholdBoundaries(t *testing.T) {
 	}{
 		{0, 0},   // none
 		{1, 1},   // ember threshold
-		{9, 1},   // still ember
-		{10, 2},  // campfire threshold
-		{39, 2},  // still campfire
-		{40, 3},  // fire threshold
-		{119, 3}, // still fire
-		{120, 4}, // big fire threshold
-		{279, 4}, // still big fire
-		{280, 5}, // total burn threshold
-		{500, 5}, // still total burn
+		{5, 1},   // still ember
+		{6, 2},   // campfire threshold
+		{23, 2},  // still campfire
+		{24, 3},  // fire threshold
+		{71, 3},  // still fire
+		{72, 4},  // big fire threshold
+		{169, 4}, // still big fire
+		{170, 5}, // total burn threshold
+		{300, 5}, // still total burn
 	}
 
 	for _, tt := range tests {

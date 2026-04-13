@@ -136,7 +136,7 @@ func TestFireStateHandler_FiltersExpiredGrids(t *testing.T) {
 func TestFireStateHandler_StageInfo(t *testing.T) {
 	redis := newMockFireStateRedis()
 	redis.members["active_grids"] = []string{"37.5660:126.9780"}
-	redis.zCounts["fire:37.5660:126.9780"] = 50 // stage 3 (화재, threshold 40)
+	redis.zCounts["fire:37.5660:126.9780"] = 50 // stage 3 (화재, threshold 24)
 
 	result := callFireState(t, redis, nil)
 
@@ -242,7 +242,7 @@ func getStageForTest(activeCount int) int {
 		t int
 		s int
 	}{
-		{280, 5}, {120, 4}, {40, 3}, {10, 2}, {1, 1}, {0, 0},
+		{170, 5}, {72, 4}, {24, 3}, {6, 2}, {1, 1}, {0, 0},
 	}
 	for _, th := range thresholds {
 		if activeCount >= th.t {
