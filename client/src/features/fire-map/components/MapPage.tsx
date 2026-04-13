@@ -152,7 +152,7 @@ export function MapPage() {
       fire(fLat, fLng, (ack) => {
         if (ack?.status === 'ok' && ack.gridId) {
           setCurrentGridId(ack.gridId);
-          throwMatch(ack.gridId);
+          throwMatch(ack.gridId, fLat, fLng);
         }
       });
     },

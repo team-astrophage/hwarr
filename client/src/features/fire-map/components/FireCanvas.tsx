@@ -659,13 +659,8 @@ export function FireCanvas() {
         const elapsed = now - m.startTime
         const progress = Math.min(elapsed / MATCH_DURATION, 1)
 
-        // cell 에서 중심 lat/lng 를 직접 조회. 도착 전 cell 이 없으면 스킵.
-        const targetCell = firesRef.current.get(m.gridId)
-        if (!targetCell) {
-          if (progress >= 1) removeMatchRef.current(m.id)
-          continue
-        }
-        const targetPt = map.latLngToContainerPoint(L.latLng(targetCell.lat, targetCell.lng))
+        // 클릭 시점에 고정된 착탄 좌표를 사용 (fireStore 전이 결과와 무관)
+        const targetPt = map.latLngToContainerPoint(L.latLng(m.targetLat, m.targetLng))
 
         const startX = sw / 2
         const startY = sh - 80
