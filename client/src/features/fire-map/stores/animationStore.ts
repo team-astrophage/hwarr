@@ -12,8 +12,12 @@ interface MatchThrow {
   id: number
   /** 시작 시각 (performance.now) */
   startTime: number
-  /** 대상 격자 ID */
+  /** 대상 격자 ID (폭발/중복 추적용) */
   gridId: string
+  /** 포물선 착탄 지점 위도 (클릭 시점 고정) */
+  targetLat: number
+  /** 포물선 착탄 지점 경도 (클릭 시점 고정) */
+  targetLng: number
 }
 
 interface Explosion {
@@ -55,7 +59,7 @@ interface AnimationState {
   /** 불 확산 궤적 애니메이션 목록 */
   trajectories: SpreadTrajectory[]
 
-  throwMatch: (gridId: string) => void
+  throwMatch: (gridId: string, targetLat: number, targetLng: number) => void
   removeMatch: (id: number) => void
   triggerExplosion: (gridId: string) => void
   removeExplosion: (id: number) => void
@@ -87,7 +91,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   nextRandomExplosionAt: pickNextRandomInterval(),
   trajectories: [],
 
-  throwMatch: (gridId) =>
+  throwMatch: (gridId, targetLat, targetLng) =>
     set((state) => {
       const nextMatches = [
         ...state.matches,
@@ -95,6 +99,8 @@ export const useAnimationStore = create<AnimationState>((set) => ({
           id: ++matchIdCounter,
           startTime: performance.now(),
           gridId,
+          targetLat,
+          targetLng,
         },
       ]
 
