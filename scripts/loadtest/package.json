@@ -1,0 +1,14 @@
+{
+  "name": "hwarr-loadtest",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Socket.IO multi-user load simulator for hwarr local docker stack",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node run.js",
+    "smoke": "node run.js --users 5 --duration-sec 15"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}
