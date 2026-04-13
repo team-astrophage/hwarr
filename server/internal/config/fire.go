@@ -7,7 +7,7 @@ const (
 	FireTTLSec = 43200
 
 	// FireSpreadThreshold is the active fire count above which fires spread to neighbors.
-	FireSpreadThreshold = 500
+	FireSpreadThreshold = 300
 
 	// FireMaxCascadeDepth limits how many spread hops a single fire can cascade.
 	FireMaxCascadeDepth = 8

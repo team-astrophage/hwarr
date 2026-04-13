@@ -9,11 +9,11 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 | 단계 | 한국어 이름 | 영어 이름 | 임계값 (threshold) | 클릭 범위 | 소방관 스폰 | `remove_per_sweep` |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 0 | 없음 | none | 0 | 0 | - | 0 |
-| 1 | 불씨 | ember | 1 | 1 -- 9 | - | 0 |
-| 2 | 모닥불 | campfire | 10 | 10 -- 39 | - | 0 |
-| 3 | 화재 | fire | 40 | 40 -- 119 | - | 0 |
-| 4 | 대화재 | big fire | 120 | 120 -- 279 | O | 2 |
-| 5 | 전소 (MAX) | total burn | 280 | 280+ | O | 3 |
+| 1 | 불씨 | ember | 1 | 1 -- 5 | - | 0 |
+| 2 | 모닥불 | campfire | 6 | 6 -- 23 | - | 0 |
+| 3 | 화재 | fire | 24 | 24 -- 71 | - | 0 |
+| 4 | 대화재 | big fire | 72 | 72 -- 169 | O | 2 |
+| 5 | 전소 (MAX) | total burn | 170 | 170+ | O | 3 |
 
 > 소스: `server/internal/model/fire.go` -- `StageConfigs`
 >
@@ -29,7 +29,7 @@ grid cell 내 활성 fire 수(`active_count`)에 따라 6단계로 분류됩니�
 
 ```go
 // server/internal/model/fire.go
-// stageThresholds는 내림차순 정렬: 280, 120, 40, 10, 1, 0
+// stageThresholds는 내림차순 정렬: 170, 72, 24, 6, 1, 0
 func GetStage(activeCount int) FireStage {
     for _, entry := range stageThresholds {
         if activeCount >= entry.Threshold {
@@ -60,7 +60,7 @@ func GetStage(activeCount int) FireStage {
 
 ### 스폰 조건
 
-- **단계 4 (대화재, 120+) 이상**에서만 스폰됩니다.
+- **단계 4 (대화재, 72+) 이상**에서만 스폰됩니다.
 - `triggers_firefighter` 필드가 `True`인 단계: 4(대화재), 5(전소)
 
 ### `remove_per_sweep` 값
@@ -97,7 +97,7 @@ func GetStage(activeCount int) FireStage {
 
 | 상수 | 값 | 설명 |
 |---|---|---|
-| `FIRE_SPREAD_THRESHOLD` | 500 | cell당 active fire 상한. 이 값 이상이면 확산 발생 |
+| `FIRE_SPREAD_THRESHOLD` | 300 | cell당 active fire 상한. 이 값 이상이면 확산 발생 |
 | `FIRE_MAX_CASCADE_DEPTH` | 8 | 최대 연쇄 확산 깊이 (hop 수) |
 
 ### 확산 알고리즘
@@ -105,13 +105,13 @@ func GetStage(activeCount int) FireStage {
 `register_fire()` 내부에서 다음과 같이 동작합니다:
 
 1. 현재 grid의 active fire 수를 확인합니다.
-2. `active_count >= FIRE_SPREAD_THRESHOLD`(500)이면, **8방향 이웃 중 하나를 무작위 선택**(`random.choice(get_neighbors_8(current_grid))`)하여 이동합니다.
+2. `active_count >= FIRE_SPREAD_THRESHOLD`(300)이면, **8방향 이웃 중 하나를 무작위 선택**(`random.choice(get_neighbors_8(current_grid))`)하여 이동합니다.
 3. 이동한 이웃도 포화 상태이면, 다시 그 이웃의 8방향 중 하나로 이동합니다 (cascade).
 4. 이 과정을 최대 `FIRE_MAX_CASCADE_DEPTH`(8) 회까지 반복합니다.
 5. 최대 깊이에 도달하면, 포화 여부와 무관하게 해당 grid에 강제 착지합니다.
 
 ```
-[grid A: 500+] --spread--> [grid B: 500+] --spread--> [grid C: 200] -- 착지!
+[grid A: 300+] --spread--> [grid B: 300+] --spread--> [grid C: 150] -- 착지!
                                                         (cascade depth=2)
 ```
 
@@ -182,7 +182,7 @@ Member: unique event ID
 |---|---|---|
 | `FIRE_KEY_PREFIX` | `"fire:"` | Redis sorted set key prefix |
 | `ACTIVE_GRIDS_KEY` | `"active_grids"` | 활성 grid ID 추적용 Redis Set key |
-| `FIRE_SPREAD_THRESHOLD` | `500` | cell당 fire 상한, 초과 시 이웃으로 확산 |
+| `FIRE_SPREAD_THRESHOLD` | `300` | cell당 fire 상한, 초과 시 이웃으로 확산 |
 | `FIRE_MAX_CASCADE_DEPTH` | `8` | 확산 cascade 최대 깊이 |
 
 `FireProgressionEngine` 기본 interval:

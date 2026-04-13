@@ -131,7 +131,7 @@ func TestGetNews_MultipleFires_SortedByStageAndCount(t *testing.T) {
 		members: map[string][]string{"active_grids": {grid3, grid1, grid2}},
 		counts: map[string]int64{
 			fmt.Sprintf("fire:%s", grid1): 150, // stage 4 (대화재)
-			fmt.Sprintf("fire:%s", grid2): 25,  // stage 2 (모닥불)
+			fmt.Sprintf("fire:%s", grid2): 15,  // stage 2 (모닥불)
 			fmt.Sprintf("fire:%s", grid3): 5,   // stage 1 (불씨)
 		},
 		zrevrange: map[string][]model.ZMember{

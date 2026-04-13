@@ -12,11 +12,11 @@ type FireStage int
 
 const (
 	StageNone      FireStage = 0 // no active fires
-	StageBulsssi   FireStage = 1 // ember/spark (1-9 clicks)
-	StageModakbul  FireStage = 2 // campfire (10-39 clicks)
-	StageHwajae    FireStage = 3 // fire (40-119 clicks)
-	StageDaehwajae FireStage = 4 // big fire (120-279 clicks)
-	StageJeonso    FireStage = 5 // total burn (280+ clicks)
+	StageBulsssi   FireStage = 1 // ember/spark (1-5 clicks)
+	StageModakbul  FireStage = 2 // campfire (6-23 clicks)
+	StageHwajae    FireStage = 3 // fire (24-71 clicks)
+	StageDaehwajae FireStage = 4 // big fire (72-169 clicks)
+	StageJeonso    FireStage = 5 // total burn (170+ clicks)
 )
 
 // StageConfig holds configuration for a single fire stage.
@@ -44,22 +44,22 @@ var StageConfigs = map[FireStage]StageConfig{
 	},
 	StageModakbul: {
 		Stage: StageModakbul, LabelKo: "모닥불", LabelEn: "campfire",
-		Threshold: 10, DurationSec: 86400,
+		Threshold: 6, DurationSec: 86400,
 		TriggersFirefighter: false, FirefighterRemoveCount: 0,
 	},
 	StageHwajae: {
 		Stage: StageHwajae, LabelKo: "화재", LabelEn: "fire",
-		Threshold: 40, DurationSec: 86400,
+		Threshold: 24, DurationSec: 86400,
 		TriggersFirefighter: false, FirefighterRemoveCount: 0,
 	},
 	StageDaehwajae: {
 		Stage: StageDaehwajae, LabelKo: "대화재", LabelEn: "big fire",
-		Threshold: 120, DurationSec: 86400,
+		Threshold: 72, DurationSec: 86400,
 		TriggersFirefighter: true, FirefighterRemoveCount: 2,
 	},
 	StageJeonso: {
 		Stage: StageJeonso, LabelKo: "전소", LabelEn: "total burn",
-		Threshold: 280, DurationSec: 86400,
+		Threshold: 170, DurationSec: 86400,
 		TriggersFirefighter: true, FirefighterRemoveCount: 3,
 	},
 }
@@ -69,10 +69,10 @@ var stageThresholds = []struct {
 	Threshold int
 	Stage     FireStage
 }{
-	{280, StageJeonso},
-	{120, StageDaehwajae},
-	{40, StageHwajae},
-	{10, StageModakbul},
+	{170, StageJeonso},
+	{72, StageDaehwajae},
+	{24, StageHwajae},
+	{6, StageModakbul},
 	{1, StageBulsssi},
 	{0, StageNone},
 }
