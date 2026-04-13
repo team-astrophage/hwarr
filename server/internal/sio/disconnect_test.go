@@ -36,7 +36,7 @@ func setupTestServer(t *testing.T) (*socketio.Server, *ConnectionManager, *[]sen
 		return nil
 	}
 
-	RegisterDisconnectHandler(server, manager, logger, nil)
+	RegisterDisconnectHandler(server, server, manager, logger, nil)
 
 	return server, manager, &events
 }

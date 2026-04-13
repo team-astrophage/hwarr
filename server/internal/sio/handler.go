@@ -15,6 +15,7 @@ import (
 // callbacks into the same session lifecycle as the Python server.
 type Handler struct {
 	sio                  *socketio.Server
+	broadcaster          SocketBroadcaster
 	manager              *ConnectionManager
 	logger               *log.Logger
 	tokenService         *auth.TokenService
@@ -23,12 +24,13 @@ type Handler struct {
 
 // NewHandler creates a Handler and registers event handlers on the Socket.IO server.
 // onDisconnectCleanup is called on disconnect for additional cleanup (e.g., rate limiter removal).
-func NewHandler(sioServer *socketio.Server, logger *log.Logger, tokenService *auth.TokenService, onDisconnectCleanup func(sid string)) *Handler {
+func NewHandler(sioServer *socketio.Server, broadcaster SocketBroadcaster, logger *log.Logger, tokenService *auth.TokenService, onDisconnectCleanup func(sid string)) *Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
 	h := &Handler{
 		sio:                  sioServer,
+		broadcaster:          broadcaster,
 		manager:              NewConnectionManager(logger),
 		logger:               logger,
 		tokenService:         tokenService,
@@ -48,7 +50,7 @@ func (h *Handler) Manager() *ConnectionManager {
 // Disconnect is registered separately via RegisterDisconnectHandler for chat:presence support.
 func (h *Handler) registerHandlers() {
 	h.sio.OnConnect(h.handleConnect)
-	RegisterDisconnectHandler(h.sio, h.manager, h.logger, h.onDisconnectCleanup)
+	RegisterDisconnectHandler(h.sio, h.broadcaster, h.manager, h.logger, h.onDisconnectCleanup)
 	h.sio.On("heartbeat", h.handleHeartbeat)
 }
 
@@ -124,7 +126,7 @@ func (h *Handler) handleConnect(sid string, authRaw json.RawMessage) error {
 	countPayload := map[string]interface{}{
 		"count": h.manager.ActiveCount(),
 	}
-	if _, err := h.sio.BroadcastToNamespace("/", "users:count", countPayload); err != nil {
+	if _, err := h.broadcaster.BroadcastToNamespace("/", "users:count", countPayload); err != nil {
 		h.logger.Printf("Failed to broadcast users:count: %v", err)
 	}
 

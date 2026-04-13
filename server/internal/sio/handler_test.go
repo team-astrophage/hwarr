@@ -39,7 +39,7 @@ func newTestHandlerWithSent(t *testing.T) (*Handler, *[]sentEvent) {
 	}
 
 	logger := log.New(os.Stderr, "[test] ", log.LstdFlags)
-	h := NewHandler(sioServer, logger, testTokenService, nil)
+	h := NewHandler(sioServer, sioServer, logger, testTokenService, nil)
 	return h, &sent
 }
 
@@ -234,7 +234,7 @@ func TestHandleConnect_RegisteredOnServer(t *testing.T) {
 	sioServer.SendTo = func(sid string, data string) error {
 		return nil
 	}
-	_ = NewHandler(sioServer, log.Default(), testTokenService, nil)
+	_ = NewHandler(sioServer, sioServer, log.Default(), testTokenService, nil)
 
 	// Dispatching a CONNECT packet with a valid token
 	token, _, err := testTokenService.Issue()

@@ -42,6 +42,7 @@ type chatSendData struct {
 // Mirrors Python server/sio/chat_events.py handle_chat_send.
 func RegisterChatSendHandler(
 	sioServer *socketio.Server,
+	broadcaster SocketBroadcaster,
 	manager *ConnectionManager,
 	redis RedisChatWriter,
 	logger *log.Logger,
@@ -128,7 +129,7 @@ func RegisterChatSendHandler(
 		}
 
 		// Broadcast chat:message to all clients in the global chat room
-		if _, err := sioServer.BroadcastToRoom("/", ChatRoom, "chat:message", msg); err != nil {
+		if _, err := broadcaster.BroadcastToRoom("/", ChatRoom, "chat:message", msg); err != nil {
 			logger.Printf("Failed to broadcast chat:message: %v", err)
 		}
 
