@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"strconv"
 	"strings"
@@ -16,8 +18,10 @@ type Config struct {
 	RedisTLS            bool
 	AdminGeoJSONPath    string
 	AllowedOrigins      []string
-	TokenSecret         string
-	TokenTTLMin int
+	TokenSecret        string
+	TokenTTLMin        int
+	RedisPubSubChannel string
+	InstanceID         string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -39,17 +43,28 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Host:                envOr("HOST", "0.0.0.0"),
-		Port:                envOr("PORT", "8000"),
-		RedisAddr:           addr,
-		RedisPassword:       password,
-		RedisDB:             db,
-		RedisTLS:            useTLS,
-		AdminGeoJSONPath:    envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
-		AllowedOrigins:      origins,
-		TokenSecret:         envOr("TOKEN_SECRET", "dev-secret-change-in-production"),
-		TokenTTLMin: tokenTTL,
+		Host:               envOr("HOST", "0.0.0.0"),
+		Port:               envOr("PORT", "8000"),
+		RedisAddr:          addr,
+		RedisPassword:      password,
+		RedisDB:            db,
+		RedisTLS:           useTLS,
+		AdminGeoJSONPath:   envOr("ADMIN_GEOJSON_PATH", "data/admin_dong.geojson"),
+		AllowedOrigins:     origins,
+		TokenSecret:        envOr("TOKEN_SECRET", "dev-secret-change-in-production"),
+		TokenTTLMin:        tokenTTL,
+		RedisPubSubChannel: envOr("REDIS_PUBSUB_CHANNEL", "hwarr:broadcast"),
+		InstanceID:         envOr("INSTANCE_ID", randomInstanceID()),
 	}
+}
+
+// randomInstanceID generates a random 8-byte hex string for instance identification.
+func randomInstanceID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "unknown"
+	}
+	return hex.EncodeToString(b)
 }
 
 func envOr(key, fallback string) string {

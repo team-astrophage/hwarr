@@ -4,8 +4,6 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	socketio "github.com/homeworldio/socketio-go"
 )
 
 // FireUpdate represents a single grid update to be batched and broadcast.
@@ -23,25 +21,25 @@ type FireUpdate struct {
 // broadcasts at a fixed interval. Multiple updates for the same grid within
 // one interval are coalesced — only the latest state is sent.
 type FireBatcher struct {
-	mu        sync.Mutex
-	pending   map[string]FireUpdate // gridID -> latest update
-	sioServer *socketio.Server
-	logger    *log.Logger
-	ticker    *time.Ticker
-	interval  time.Duration
-	done      chan struct{}
+	mu          sync.Mutex
+	pending     map[string]FireUpdate // gridID -> latest update
+	broadcaster SocketBroadcaster
+	logger      *log.Logger
+	ticker      *time.Ticker
+	interval    time.Duration
+	done        chan struct{}
 }
 
 // NewFireBatcher creates a FireBatcher that flushes every interval.
-func NewFireBatcher(sioServer *socketio.Server, interval time.Duration, logger *log.Logger) *FireBatcher {
+func NewFireBatcher(broadcaster SocketBroadcaster, interval time.Duration, logger *log.Logger) *FireBatcher {
 	if logger == nil {
 		logger = log.Default()
 	}
 	return &FireBatcher{
-		pending:   make(map[string]FireUpdate),
-		sioServer: sioServer,
-		logger:    logger,
-		interval:  interval,
+		pending:     make(map[string]FireUpdate),
+		broadcaster: broadcaster,
+		logger:      logger,
+		interval:    interval,
 	}
 }
 
@@ -96,7 +94,7 @@ func (b *FireBatcher) flush() {
 			"activeCount": u.ActiveCount,
 			"stage":       u.Stage,
 		}
-		if _, err := b.sioServer.BroadcastToRoom("/", u.GridID, "fire:update", payload); err != nil {
+		if _, err := b.broadcaster.BroadcastToRoom("/", u.GridID, "fire:update", payload); err != nil {
 			b.logger.Printf("fire:update batch room broadcast failed for %s: %v", u.GridID, err)
 		}
 	}

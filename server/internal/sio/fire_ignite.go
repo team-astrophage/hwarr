@@ -91,6 +91,7 @@ var predefinedDemoLocations = []demoLocation{
 // Mirrors Python server/sio/events.py handle_fire_ignite.
 func RegisterFireIgniteHandler(
 	sioServer *socketio.Server,
+	broadcaster SocketBroadcaster,
 	manager *ConnectionManager,
 	redis RedisFireWriter,
 	resolver *geodata.AdminRegionResolver,
@@ -197,7 +198,7 @@ func RegisterFireIgniteHandler(
 			"timestamp":   now,
 		}
 
-		if _, err := sioServer.BroadcastToRoom("/", gridID, "fire:ignite", ignitePayload); err != nil {
+		if _, err := broadcaster.BroadcastToRoom("/", gridID, "fire:ignite", ignitePayload); err != nil {
 			logger.Printf("fire:ignite room broadcast failed for %s: %v", gridID, err)
 		}
 
@@ -225,7 +226,7 @@ func RegisterFireIgniteHandler(
 				affectedGrids[sp[1]] = struct{}{}
 			}
 			for room := range affectedGrids {
-				if _, err := sioServer.BroadcastToRoom("/", room, "fire:spread", spreadPayload); err != nil {
+				if _, err := broadcaster.BroadcastToRoom("/", room, "fire:spread", spreadPayload); err != nil {
 					logger.Printf("fire:spread room broadcast failed for %s: %v", room, err)
 				}
 			}

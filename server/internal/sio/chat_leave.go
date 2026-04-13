@@ -19,6 +19,7 @@ import (
 // Mirrors Python server/sio/chat_events.py handle_chat_leave.
 func RegisterChatLeaveHandler(
 	sioServer *socketio.Server,
+	broadcaster SocketBroadcaster,
 	manager *ConnectionManager,
 	logger *log.Logger,
 ) {
@@ -49,7 +50,7 @@ func RegisterChatLeaveHandler(
 		presencePayload := map[string]interface{}{
 			"count": count,
 		}
-		if _, err := sioServer.BroadcastToRoom("/", ChatRoom, "chat:presence", presencePayload); err != nil {
+		if _, err := broadcaster.BroadcastToRoom("/", ChatRoom, "chat:presence", presencePayload); err != nil {
 			logger.Printf("Failed to broadcast chat:presence on leave: %v", err)
 		}
 

@@ -23,6 +23,7 @@ const ChatRoom = "chat:global"
 // Mirrors Python server/main.py disconnect handler.
 func RegisterDisconnectHandler(
 	sioServer *socketio.Server,
+	broadcaster SocketBroadcaster,
 	manager *ConnectionManager,
 	logger *log.Logger,
 	onCleanup func(sid string),
@@ -52,7 +53,7 @@ func RegisterDisconnectHandler(
 		countPayload := map[string]interface{}{
 			"count": activeCount,
 		}
-		if _, err := sioServer.BroadcastToNamespace("/", "users:count", countPayload); err != nil {
+		if _, err := broadcaster.BroadcastToNamespace("/", "users:count", countPayload); err != nil {
 			logger.Printf("Failed to broadcast users:count: %v", err)
 		}
 
@@ -65,7 +66,7 @@ func RegisterDisconnectHandler(
 			presencePayload := map[string]interface{}{
 				"count": len(chatMembers),
 			}
-			if _, err := sioServer.BroadcastToRoom("/", ChatRoom, "chat:presence", presencePayload); err != nil {
+			if _, err := broadcaster.BroadcastToRoom("/", ChatRoom, "chat:presence", presencePayload); err != nil {
 				logger.Printf("Failed to rebroadcast chat presence on disconnect: %v", err)
 			}
 		}

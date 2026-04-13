@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	hredis "github.com/homepy/hwarr/server/internal/redis"
 	"github.com/homepy/hwarr/server/internal/sio"
 	engineio "github.com/homepy/hwarr/server/pkg/engineio"
+	goredis "github.com/redis/go-redis/v9"
 	socketio "github.com/homeworldio/socketio-go"
 )
 
@@ -43,6 +45,24 @@ func Run(cfg *config.Config) error {
 	// Socket.IO + Engine.IO
 	sioServer, eioServer := setupSocketServers(cfg, logger)
 
+	// Redis Pub/Sub broadcast adapter for cross-instance event delivery.
+	// Uses two separate go-redis clients: one for PUBLISH, one for SUBSCRIBE.
+	localBroadcaster := &broadcasterAdapter{sio: sioServer}
+	subRedis := goredis.NewClient(redisClientOpts(cfg))
+	var broadcaster sio.SocketBroadcaster = localBroadcaster
+
+	redisBroadcaster := sio.NewRedisBroadcastAdapter(
+		localBroadcaster,
+		redisClient.Underlying(),
+		subRedis,
+		cfg.RedisPubSubChannel,
+		cfg.InstanceID,
+		logger,
+	)
+	redisBroadcaster.Start(ctx)
+	broadcaster = redisBroadcaster
+	logger.Printf("Redis Pub/Sub adapter started (channel=%s, instance=%s)", cfg.RedisPubSubChannel, cfg.InstanceID)
+
 	// Rate limiter — created early so its cleanup callback can be passed to the
 	// disconnect handler registered inside NewHandler, avoiding the previous bug
 	// where a second OnDisconnect call overwrote the first.
@@ -51,7 +71,7 @@ func Run(cfg *config.Config) error {
 	})
 
 	// Connection manager + SIO event handlers
-	sioHandler := sio.NewHandler(sioServer, logger, tokenService, rl.Remove)
+	sioHandler := sio.NewHandler(sioServer, broadcaster, logger, tokenService, rl.Remove)
 	manager := sioHandler.Manager()
 
 	// Admin region resolver (optional — for daily ranking)
@@ -60,13 +80,13 @@ func Run(cfg *config.Config) error {
 		logger.Printf("Admin region resolver loaded: %d regions", resolver.RegionCount())
 	}
 
-	batcher := sio.NewFireBatcher(sioServer, 200*time.Millisecond, logger)
+	batcher := sio.NewFireBatcher(broadcaster, 200*time.Millisecond, logger)
 	batcher.Start()
 
-	registerSocketEvents(sioServer, manager, redisClient, resolver, logger, batcher, rl)
+	registerSocketEvents(sioServer, broadcaster, manager, redisClient, resolver, logger, batcher, rl)
 
 	// Background engines
-	progressionEngine, cleanupEngine := startBackgroundEngines(redisClient, sioServer, logger)
+	progressionEngine, cleanupEngine := startBackgroundEngines(redisClient, broadcaster, logger)
 
 	// Stale connection reaper
 	reaper := sio.NewReaper(manager, func(ns, sid string) error {
@@ -78,7 +98,7 @@ func Run(cfg *config.Config) error {
 	logger.Println("Background engines started")
 
 	// HTTP server
-	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, sioServer, eioServer, tokenService)
+	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, broadcaster, eioServer, tokenService)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	srv := &http.Server{
@@ -94,11 +114,13 @@ func Run(cfg *config.Config) error {
 
 		logger.Println("Shutting down...")
 
+		redisBroadcaster.Stop()
 		batcher.Stop()
 		reaper.Stop()
 		progressionEngine.Stop()
 		cleanupEngine.Stop()
 		eioServer.Close()
+		_ = subRedis.Close()
 		_ = redisClient.Close()
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -173,7 +195,7 @@ func setupSocketServers(cfg *config.Config, logger *log.Logger) (*socketio.Serve
 }
 
 // registerSocketEvents wires all Socket.IO event handlers.
-func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher, rl *sio.RateLimiter) {
+func registerSocketEvents(sioServer *socketio.Server, broadcaster sio.SocketBroadcaster, manager *sio.ConnectionManager, redisClient *hredis.Client, resolver *geodata.AdminRegionResolver, logger *log.Logger, batcher *sio.FireBatcher, rl *sio.RateLimiter) {
 	// Token expiry middleware — rejects events from expired sessions and
 	// disconnects them. Registered before the rate limiter so expired
 	// sessions don't consume rate-limit buckets.
@@ -187,7 +209,7 @@ func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionMan
 	sioServer.Use(sio.NewRateLimitMiddleware(rl, logger))
 
 	// Fire events
-	sio.RegisterFireIgniteHandler(sioServer, manager, redisClient, resolver, logger, batcher)
+	sio.RegisterFireIgniteHandler(sioServer, broadcaster, manager, redisClient, resolver, logger, batcher)
 	sio.RegisterFireStateHandler(sioServer, redisClient, logger)
 	sio.RegisterSubscribeViewportHandler(sioServer, manager, redisClient, logger)
 
@@ -196,16 +218,16 @@ func registerSocketEvents(sioServer *socketio.Server, manager *sio.ConnectionMan
 
 	// Chat events
 	chatWriter := redisClient.AsChatWriter()
-	sio.RegisterChatJoinHandler(sioServer, manager, chatWriter, logger)
-	sio.RegisterChatSendHandler(sioServer, manager, chatWriter, logger)
-	sio.RegisterChatLeaveHandler(sioServer, manager, logger)
+	sio.RegisterChatJoinHandler(sioServer, broadcaster, manager, chatWriter, logger)
+	sio.RegisterChatSendHandler(sioServer, broadcaster, manager, chatWriter, logger)
+	sio.RegisterChatLeaveHandler(sioServer, broadcaster, manager, logger)
 }
 
 // startBackgroundEngines creates and starts the fire progression and cleanup engines.
-func startBackgroundEngines(redisClient *hredis.Client, sioServer *socketio.Server, logger *log.Logger) (*engine.FireProgressionEngine, *engine.CleanupEngine) {
+func startBackgroundEngines(redisClient *hredis.Client, broadcaster engine.Broadcaster, logger *log.Logger) (*engine.FireProgressionEngine, *engine.CleanupEngine) {
 	progressionEngine := engine.NewFireProgressionEngine(
 		redisClient.AsProgressionReader(),
-		sioServer,
+		broadcaster,
 		2*time.Second,
 		logger,
 	)
@@ -230,7 +252,7 @@ func setupRouter(
 	progressionEngine *engine.FireProgressionEngine,
 	redisClient *hredis.Client,
 	resolver *geodata.AdminRegionResolver,
-	sioServer *socketio.Server,
+	broadcaster sio.SocketBroadcaster,
 	eioServer *engineio.Server,
 	tokenService *auth.TokenService,
 ) *gin.Engine {
@@ -250,7 +272,7 @@ func setupRouter(
 	handler.NewQRHandler().Register(r)
 	handler.NewMapConfigHandler().Register(r)
 	handler.NewDemoLocationHandler().Register(r)
-	handler.NewDemoFireHandler(redisClient, &broadcasterAdapter{sio: sioServer}, resolver).Register(r)
+	handler.NewDemoFireHandler(redisClient, &handlerBroadcasterAdapter{b: broadcaster}, resolver).Register(r)
 	handler.NewStatsHandler(redisClient, manager).Register(r)
 	handler.NewRankingHandler(redisClient.AsRankingReader()).Register(r)
 	handler.NewFeedbackHandler(redisClient.AsFeedbackRateLimiter(), handler.NewHTTPDiscordSender()).Register(r)
@@ -264,17 +286,45 @@ func setupRouter(
 	return r
 }
 
-// broadcasterAdapter bridges socketio.Server to handler.Broadcaster interface.
+// broadcasterAdapter bridges socketio.Server to sio.SocketBroadcaster interface.
+// This is the "local" broadcaster that delivers to the current process only.
 type broadcasterAdapter struct {
 	sio *socketio.Server
 }
 
-func (b *broadcasterAdapter) BroadcastToRoom(event string, data interface{}, room string) error {
-	_, err := b.sio.BroadcastToRoom("/", room, event, data)
+func (b *broadcasterAdapter) BroadcastToNamespace(namespace, event string, args ...interface{}) (int, error) {
+	return b.sio.BroadcastToNamespace(namespace, event, args...)
+}
+
+func (b *broadcasterAdapter) BroadcastToRoom(namespace, room, event string, args ...interface{}) (int, error) {
+	return b.sio.BroadcastToRoom(namespace, room, event, args...)
+}
+
+// handlerBroadcasterAdapter bridges sio.SocketBroadcaster to handler.Broadcaster
+// (simplified 2-method interface used by REST API handlers).
+type handlerBroadcasterAdapter struct {
+	b sio.SocketBroadcaster
+}
+
+func (h *handlerBroadcasterAdapter) BroadcastToRoom(event string, data interface{}, room string) error {
+	_, err := h.b.BroadcastToRoom("/", room, event, data)
 	return err
 }
 
-func (b *broadcasterAdapter) Broadcast(event string, data interface{}) error {
-	_, err := b.sio.BroadcastToNamespace("/", event, data)
+func (h *handlerBroadcasterAdapter) Broadcast(event string, data interface{}) error {
+	_, err := h.b.BroadcastToNamespace("/", event, data)
 	return err
+}
+
+// redisClientOpts builds go-redis options from config (for creating additional connections).
+func redisClientOpts(cfg *config.Config) *goredis.Options {
+	opts := &goredis.Options{
+		Addr:     cfg.RedisAddr,
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	}
+	if cfg.RedisTLS {
+		opts.TLSConfig = &tls.Config{}
+	}
+	return opts
 }
