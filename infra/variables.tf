@@ -86,10 +86,16 @@ variable "ecr_image_tag" {
 # ElastiCache (Redis)
 ############################
 
-variable "redis_max_memory_mb" {
-  description = "Max memory for ElastiCache Serverless (data storage in MB)"
-  type        = number
-  default     = 100
+variable "redis_node_type" {
+  description = "ElastiCache node type (single-node). cache.t4g.micro = 0.5GB, cache.t4g.small = 1.37GB"
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "redis_seed_snapshot_arn" {
+  description = "S3 ARN of an RDB snapshot to seed the new cluster on first create (e.g. arn:aws:s3:::bucket/dump.rdb). Leave empty for no seed."
+  type        = string
+  default     = ""
 }
 
 ############################

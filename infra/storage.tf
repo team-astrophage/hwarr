@@ -1,31 +1,57 @@
 ############################
-# ElastiCache Serverless (Redis)
+# ElastiCache Redis — single-node t4g.micro
+# (Serverless was overkill for ~30 users and cost ~$70+/mo idle)
 ############################
 
-resource "aws_elasticache_serverless_cache" "redis" {
-  engine = "redis"
-  name   = "${local.name_prefix}-redis"
+resource "aws_elasticache_subnet_group" "redis" {
+  name       = "${local.name_prefix}-redis-subnet"
+  subnet_ids = aws_subnet.private[*].id
 
-  cache_usage_limits {
-    data_storage {
-      maximum = 1 # 1 GB — more than enough for ~30 users
-      unit    = "GB"
-    }
-    ecpu_per_second {
-      maximum = 1000 # burst-capable for hackathon demo
-    }
+  tags = {
+    Name = "${local.name_prefix}-redis-subnet"
   }
+}
 
-  # Private subnets only — accessible from ECS tasks
-  subnet_ids         = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.redis.id]
+resource "aws_elasticache_replication_group" "redis" {
+  # NOTE: Serverless cache 와 동일 이름 공간을 공유하므로, 마이그레이션 중에는
+  # 옛 serverless ('${local.name_prefix}-redis') 와 충돌하지 않도록 -rg 접미사를 붙임.
+  # 옛 serverless 가 destroy 된 뒤에도 이름 변경은 destructive 라 그대로 유지.
+  replication_group_id = "${local.name_prefix}-redis-rg"
+  description          = "Redis (single-node ${var.redis_node_type}) for ${local.name_prefix}"
 
-  # Major version for Redis engine
-  major_engine_version = "7"
+  engine         = "redis"
+  engine_version = "7.1"
+  node_type      = var.redis_node_type
+  port           = 6379
 
-  # Daily snapshots for data durability (cumulative stats, etc.)
+  # Single node — no replicas, no automatic failover
+  num_cache_clusters         = 1
+  automatic_failover_enabled = false
+  multi_az_enabled           = false
+
+  parameter_group_name = "default.redis7"
+  subnet_group_name    = aws_elasticache_subnet_group.redis.name
+  security_group_ids   = [aws_security_group.redis.id]
+
+  # TLS in-transit (matches existing rediss:// scheme in REDIS_URL).
+  # No auth_token — VPC-internal only, SG locked to ECS tasks.
+  transit_encryption_enabled = true
+  at_rest_encryption_enabled = true
+
+  # Daily snapshots (cumulative stats, etc.)
   snapshot_retention_limit = 7
-  daily_snapshot_time      = "19:00" # 04:00 KST
+  snapshot_window          = "19:00-20:00" # 04:00-05:00 KST
+
+  # Seed initial data from RDB exported by the prior Serverless cache.
+  # Only consulted on first creation; safe to leave empty after migration.
+  snapshot_arns = var.redis_seed_snapshot_arn == "" ? null : [var.redis_seed_snapshot_arn]
+
+  apply_immediately = true
+
+  lifecycle {
+    # snapshot_arns is only used on initial create; ignore drift afterward
+    ignore_changes = [snapshot_arns]
+  }
 
   tags = {
     Name = "${local.name_prefix}-redis"

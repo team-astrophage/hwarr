@@ -65,8 +65,8 @@ output "ecr_repository_url" {
 ############################
 
 output "redis_endpoint" {
-  description = "ElastiCache Serverless endpoint"
-  value       = aws_elasticache_serverless_cache.redis.endpoint
+  description = "ElastiCache Redis primary endpoint"
+  value       = aws_elasticache_replication_group.redis.primary_endpoint_address
 }
 
 ############################
