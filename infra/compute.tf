@@ -256,9 +256,9 @@ resource "aws_ecs_task_definition" "backend" {
           value = var.environment
         },
         {
-          # ElastiCache Serverless enforces TLS → use rediss:// (double-s)
+          # transit_encryption_enabled=true → use rediss:// (double-s)
           name  = "REDIS_URL"
-          value = "rediss://${aws_elasticache_serverless_cache.redis.endpoint[0].address}:6379/0"
+          value = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0"
         },
         {
           name  = "ALLOWED_ORIGINS"
