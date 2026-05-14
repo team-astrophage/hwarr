@@ -152,6 +152,21 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
+# Register FARGATE / FARGATE_SPOT as available capacity providers on the
+# cluster so the service can place tasks on Spot. FARGATE stays registered
+# as a fallback for future mixed strategies even though the service is
+# currently 100 % Spot.
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name       = aws_ecs_cluster.main.name
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+
+  default_capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 1
+    base              = 0
+  }
+}
+
 ############################
 # IAM — ECS Task Execution Role
 ############################
@@ -303,6 +318,11 @@ resource "aws_ecs_task_definition" "backend" {
         retries     = 3
         startPeriod = 10
       }
+
+      # SIGTERM → graceful shutdown budget. Server reserves ~10 s for client
+      # notification and ~30 s for the shutdown chain; 60 s leaves headroom
+      # before ECS sends SIGKILL. Max on Fargate is 120 s.
+      stopTimeout = 60
     }
   ])
 
@@ -337,6 +357,12 @@ resource "aws_lb_target_group" "backend" {
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip" # required for Fargate awsvpc
+
+  # Fargate Spot interruption budget. The server flips /health to 503 on
+  # SIGTERM and broadcasts a shutdown notice; 30 s is enough for the ALB to
+  # mark this target unhealthy and stop forwarding new requests without
+  # holding the deregistration open for the default 300 s.
+  deregistration_delay = 30
 
   # WebSocket-friendly sticky sessions
   stickiness {
@@ -390,7 +416,15 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.ecs_desired_count
-  launch_type     = "FARGATE"
+
+  # 100 % Fargate Spot — accepts ~2 min SIGTERM warnings in exchange for the
+  # discount. The server has graceful shutdown wired up to broadcast a
+  # `server_shutting_down` event and let clients reconnect to a healthy task.
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 1
+    base              = 0
+  }
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
@@ -409,7 +443,10 @@ resource "aws_ecs_service" "backend" {
     ignore_changes = [task_definition, desired_count]
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [
+    aws_lb_listener.http,
+    aws_ecs_cluster_capacity_providers.main,
+  ]
 
   tags = {
     Name = "${local.name_prefix}-backend-service"

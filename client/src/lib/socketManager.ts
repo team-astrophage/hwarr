@@ -162,6 +162,16 @@ export function startSocket(): void {
     }
   })
 
+  // 서버가 graceful shutdown(Fargate Spot 회수 등) 알림을 보내면
+  // 즉시 현재 연결을 끊고 다른 태스크로 재접속한다. 서버가 곧 SIGKILL 되므로
+  // ping timeout 까지 기다리지 않는 편이 사용자 체감 끊김 시간을 줄인다.
+  socket.on('server_shutting_down', () => {
+    console.log('[Socket] server_shutting_down — reconnecting to a healthy task')
+    setStatus('reconnecting')
+    socket.disconnect()
+    socket.connect()
+  })
+
   socket.on('connect_error', (err) => {
     console.warn('[Socket] connect_error', err.message)
     if (TOKEN_ERROR_RE.test(err.message)) {

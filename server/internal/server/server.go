@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,6 +25,26 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	socketio "github.com/homeworldio/socketio-go"
 )
+
+// shutdownState exposes a boolean flag that flips to true when the server
+// starts a graceful shutdown. The /health endpoint consults it to return 503
+// so the ALB drains traffic away from this task (Fargate Spot interruption).
+type shutdownState struct {
+	flag atomic.Bool
+}
+
+func (s *shutdownState) IsShuttingDown() bool { return s.flag.Load() }
+func (s *shutdownState) markShuttingDown()    { s.flag.Store(true) }
+
+// shutdownClientGrace is the time we wait after broadcasting the shutdown
+// notice so connected clients can disconnect and reconnect to a healthy task
+// before this one tears down its Socket.IO server.
+const shutdownClientGrace = 10 * time.Second
+
+// shutdownTimeout is the overall budget for the graceful shutdown chain
+// (Socket.IO, HTTP server, Redis). Fargate Spot grants 120 s; we stay well
+// under that even with shutdownClientGrace added.
+const shutdownTimeout = 30 * time.Second
 
 // Run initializes all components and starts the HTTP server.
 // It blocks until a termination signal is received.
@@ -100,8 +121,12 @@ func Run(cfg *config.Config) error {
 
 	logger.Println("Background engines started")
 
+	// Shutdown flag — flipped on SIGTERM so /health returns 503 and the ALB
+	// stops sending new traffic to this task while we drain.
+	shutdown := &shutdownState{}
+
 	// HTTP server
-	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, broadcaster, eioServer, tokenService)
+	r := setupRouter(cfg, manager, progressionEngine, redisClient, resolver, broadcaster, eioServer, tokenService, shutdown)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	srv := &http.Server{
@@ -109,14 +134,30 @@ func Run(cfg *config.Config) error {
 		Handler: r,
 	}
 
-	// Graceful shutdown
+	// Graceful shutdown — tuned for Fargate Spot (2-minute grace from SIGTERM).
+	// Sequence: flag → broadcast notice → wait for clients to migrate →
+	// stop engines → close Socket.IO → close HTTP server → close Redis.
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 
-		logger.Println("Shutting down...")
+		logger.Println("Shutdown signal received — flipping health to 503 and notifying clients")
+		shutdown.markShuttingDown()
 
+		if _, err := broadcaster.BroadcastToNamespace("/", "server_shutting_down", gin.H{
+			"reason":     "task_terminating",
+			"grace_ms":   shutdownClientGrace.Milliseconds(),
+			"instance":   cfg.InstanceID,
+			"reconnect":  true,
+		}); err != nil {
+			logger.Printf("server_shutting_down broadcast failed: %v", err)
+		}
+
+		logger.Printf("Waiting %s for clients to disconnect", shutdownClientGrace)
+		time.Sleep(shutdownClientGrace)
+
+		logger.Println("Stopping engines and closing transports...")
 		redisBroadcaster.Stop()
 		batcher.Stop()
 		reaper.Stop()
@@ -127,7 +168,7 @@ func Run(cfg *config.Config) error {
 		_ = subRedis.Close()
 		_ = redisClient.Close()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
@@ -259,6 +300,7 @@ func setupRouter(
 	broadcaster sio.SocketBroadcaster,
 	eioServer *engineio.Server,
 	tokenService *auth.TokenService,
+	shutdown handler.ShutdownChecker,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -268,6 +310,7 @@ func setupRouter(
 	// Health
 	healthHandler := handler.NewHealthHandler(manager, progressionEngine)
 	healthHandler.SetRedis(redisClient)
+	healthHandler.SetShutdown(shutdown)
 	healthHandler.Register(r)
 
 	// REST API
