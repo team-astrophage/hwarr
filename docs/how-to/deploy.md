@@ -120,7 +120,7 @@ infra/
   main.tf           # Data sources, locals (SSM prefix 등)
   versions.tf       # Provider 설정, S3 backend
   variables.tf      # 입력 변수 정의
-  networking.tf     # VPC, Subnet, NAT Gateway, Security Groups
+  networking.tf     # VPC, Subnet, Security Groups
   compute.tf        # ECR, ECS, ALB, IAM roles
   storage.tf        # S3, CloudFront, ElastiCache (Redis Serverless)
   dns.tf            # Route53, ACM 인증서
@@ -156,9 +156,8 @@ terraform apply
 | 리소스 | 서비스 | 비고 |
 |---|---|---|
 | VPC | `10.0.0.0/16` | Public 2개 + Private 2개 subnet |
-| NAT Gateway | 단일 | 비용 절감을 위해 1개만 사용 |
 | ALB | Public subnet | WebSocket sticky session 활성화 (24h) |
-| ECS Fargate | Private subnet | 단일 task |
+| ECS Fargate | Public subnet (`assignPublicIp`) | 단일 task. NAT Gateway 제거로 월 ~$40 절감 — 보안은 SG 기반 (ALB SG → ECS SG ingress만) |
 | ECR | - | Lifecycle policy: 최근 5개 이미지만 보관 |
 | ElastiCache | Redis Serverless v7 | TLS 필수 (`rediss://`), Private subnet |
 | S3 | Frontend 정적 파일 | OAC를 통한 CloudFront 전용 접근 |

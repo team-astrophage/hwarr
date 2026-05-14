@@ -23,11 +23,19 @@ type RedisPinger interface {
 	Ping(ctx context.Context) error
 }
 
+// ShutdownChecker reports whether the server is in graceful shutdown.
+// When true, /health returns 503 so the ALB stops sending new traffic
+// to this task (used during Fargate Spot interruptions).
+type ShutdownChecker interface {
+	IsShuttingDown() bool
+}
+
 // HealthHandler serves the GET /health endpoint for ALB health checks.
 type HealthHandler struct {
 	connections ConnectionCounter
 	engine      EngineStatusChecker
 	redis       RedisPinger
+	shutdown    ShutdownChecker
 }
 
 // NewHealthHandler creates a new HealthHandler.
@@ -44,10 +52,17 @@ func (h *HealthHandler) SetRedis(r RedisPinger) {
 	h.redis = r
 }
 
+// SetShutdown attaches a shutdown checker so /health can flip to 503
+// when the server starts graceful shutdown.
+func (h *HealthHandler) SetShutdown(s ShutdownChecker) {
+	h.shutdown = s
+}
+
 // Handle responds with server health status.
 //
 //	GET /health
-//	Response: {"status": "ok", "connections": <int>, "engine_running": <bool>, "redis": "ok"|"<error>"}
+//	200 Response: {"status": "ok", "connections": <int>, "engine_running": <bool>, "redis": "ok"|"<error>"}
+//	503 Response: {"status": "shutting_down", ...} when graceful shutdown is in progress
 func (h *HealthHandler) Handle(c *gin.Context) {
 	conns := 0
 	if h.connections != nil {
@@ -70,8 +85,15 @@ func (h *HealthHandler) Handle(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":         "ok",
+	status := "ok"
+	code := http.StatusOK
+	if h.shutdown != nil && h.shutdown.IsShuttingDown() {
+		status = "shutting_down"
+		code = http.StatusServiceUnavailable
+	}
+
+	c.JSON(code, gin.H{
+		"status":         status,
 		"connections":    conns,
 		"engine_running": running,
 		"redis":          redisStatus,
